@@ -48,17 +48,18 @@ defmodule Pubky.Events do
              Http.pubky_host(opts, homeserver),
              config
            ) do
-      {frames, _} = SSE.feed(SSE.new(), body <> "\n\n")
-
-      case Enum.find_value(frames, fn f ->
-             match?({:ok, _}, Event.from_frame(f, homeserver)) && f
-           end) do
-        nil ->
-          {:ok, nil}
-
-        frame ->
-          with {:ok, %Event{cursor: c}} <- Event.from_frame(frame, homeserver), do: {:ok, c}
-      end
+      {:ok, newest_cursor(body, homeserver)}
     end
+  end
+
+  defp newest_cursor(body, homeserver) do
+    {frames, _} = SSE.feed(SSE.new(), body <> "\n\n")
+
+    Enum.find_value(frames, fn frame ->
+      case Event.from_frame(frame, homeserver) do
+        {:ok, %Event{cursor: cursor}} -> cursor
+        _ -> nil
+      end
+    end)
   end
 end

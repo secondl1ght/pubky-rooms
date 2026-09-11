@@ -2,8 +2,9 @@ defmodule Pubky.Events.StreamTest do
   use ExUnit.Case, async: true
 
   alias Pubky.Auth.LocalSigner
-  alias Pubky.Events.{Event, Stream}
+  alias Pubky.Crypto.Blake3
   alias Pubky.{Events, Keypair, Storage}
+  alias Pubky.Events.{Event, Stream}
   alias Pubky.Test.FakeHomeserver
 
   defp setup_hs(opts) do
@@ -54,7 +55,7 @@ defmodule Pubky.Events.StreamTest do
                    2_000
 
     assert user == alice.user
-    assert hash == Pubky.Crypto.Blake3.hash("hello")
+    assert hash == Blake3.hash("hello")
 
     :ok = Storage.put(bob, "/pub/app/b", "x", [], config)
     :ok = Storage.put(alice, "/pub/other/ignored", "x", [], config)

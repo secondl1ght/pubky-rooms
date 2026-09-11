@@ -28,6 +28,8 @@ defmodule Pubky.Test.FakeRelay do
 
   defmodule Plug do
     @moduledoc false
+    alias Pubky.Test.FakeRelay
+
     @behaviour Elixir.Plug
 
     @impl true
@@ -36,7 +38,7 @@ defmodule Pubky.Test.FakeRelay do
     @impl true
     def call(conn, agent) do
       relay = Agent.get(agent, & &1.relay)
-      Pubky.Test.FakeRelay.handle(conn, relay)
+      FakeRelay.handle(conn, relay)
     end
   end
 

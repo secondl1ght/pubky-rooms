@@ -41,32 +41,25 @@ defmodule Mix.Tasks.Pubky.AuthDemo do
     """)
 
     case GrantFlow.await(flow, opts[:timeout] || 300_000) do
-      {:ok, %Session{} = session} ->
-        Mix.shell().info(
-          "Signed in as #{session.user} on homeserver #{session.homeserver} (#{session.base_url})"
-        )
-
-        Mix.shell().info(
-          "Capabilities: #{Enum.map_join(session.capabilities, ", ", &to_string/1)}"
-        )
-
-        path = "/pub/pubky-ex.demo/hello.txt"
-
-        case Storage.put(
-               session,
-               path,
-               "hello from pubky_ex",
-               [content_type: "text/plain"],
-               config
-             ) do
-          :ok -> Mix.shell().info("Wrote pubky://#{session.user}#{path}")
-          {:error, reason} -> Mix.shell().error("Write failed: #{inspect(reason)}")
-        end
-
-        Mix.shell().info("Credential (keep secret): #{Session.export(session)}")
-
-      {:error, reason} ->
-        Mix.raise("Sign-in failed: #{inspect(reason)}")
+      {:ok, %Session{} = session} -> report(session, config)
+      {:error, reason} -> Mix.raise("Sign-in failed: #{inspect(reason)}")
     end
+  end
+
+  defp report(session, config) do
+    Mix.shell().info(
+      "Signed in as #{session.user} on homeserver #{session.homeserver} (#{session.base_url})"
+    )
+
+    Mix.shell().info("Capabilities: #{Enum.map_join(session.capabilities, ", ", &to_string/1)}")
+
+    path = "/pub/pubky-ex.demo/hello.txt"
+
+    case Storage.put(session, path, "hello from pubky_ex", [content_type: "text/plain"], config) do
+      :ok -> Mix.shell().info("Wrote pubky://#{session.user}#{path}")
+      {:error, reason} -> Mix.shell().error("Write failed: #{inspect(reason)}")
+    end
+
+    Mix.shell().info("Credential (keep secret): #{Session.export(session)}")
   end
 end

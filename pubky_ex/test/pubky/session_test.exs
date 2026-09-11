@@ -2,8 +2,8 @@ defmodule Pubky.SessionTest do
   use ExUnit.Case, async: true
 
   alias Pubky.Auth.{Capability, Credential, LocalSigner}
-  alias Pubky.{Keypair, Session, Storage}
   alias Pubky.Crypto.Blake3
+  alias Pubky.{Keypair, Session, Storage}
   alias Pubky.Test.FakeHomeserver
 
   setup do

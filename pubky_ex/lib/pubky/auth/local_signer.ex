@@ -7,8 +7,8 @@ defmodule Pubky.Auth.LocalSigner do
   keys never leave Pubky Ring.
   """
 
-  alias Pubky.{Config, Keypair, PublicKey, Resolver, Session}
   alias Pubky.Auth.{Capability, Exchange, Grant}
+  alias Pubky.{Config, Keypair, PublicKey, Resolver, Session}
   alias Pubky.Pkarr.{Relay, SignedPacket}
 
   @signup_client_id "pubky.signup"

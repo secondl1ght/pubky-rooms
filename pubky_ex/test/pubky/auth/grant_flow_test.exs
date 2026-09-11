@@ -1,7 +1,7 @@
 defmodule Pubky.Auth.GrantFlowTest do
   use ExUnit.Case, async: true
 
-  alias Pubky.Auth.{Capability, DeepLink, GrantFlow, LocalSigner, RelayChannel}
+  alias Pubky.Auth.{Capability, DeepLink, Grant, GrantFlow, LocalSigner, RelayChannel}
   alias Pubky.Auth.GrantFlow.Poller
   alias Pubky.Crypto.Blake3
   alias Pubky.{Keypair, Session, Storage}
@@ -138,7 +138,7 @@ defmodule Pubky.Auth.GrantFlowTest do
     other_client = Keypair.generate()
 
     grant =
-      Pubky.Auth.Grant.sign(user,
+      Grant.sign(user,
         client_id: params.client_id,
         caps: params.caps,
         cnf: Keypair.public_z32(other_client)
@@ -187,7 +187,7 @@ defmodule Pubky.Auth.GrantFlowTest do
 
     # Ring signs a signup grant (root caps, pubky.signup client id) for the new key
     grant =
-      Pubky.Auth.Grant.sign(newcomer,
+      Grant.sign(newcomer,
         client_id: "pubky.signup",
         caps: [Capability.root()],
         cnf: params.client_pk,

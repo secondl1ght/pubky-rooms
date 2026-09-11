@@ -9,8 +9,8 @@ defmodule Pubky.Auth.RelayChannel do
   relays use the same polling without acknowledgements.
   """
 
-  alias Pubky.Crypto.{B64, Blake3, Secretbox}
   alias Pubky.{Config, Http}
+  alias Pubky.Crypto.{B64, Blake3, Secretbox}
 
   # relays hold long-polls for 25 s; leave room for slow networks
   @poll_timeout 35_000

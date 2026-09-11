@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="csrf-token" content={get_csrf_token()} />
+    <meta name="theme-color" content="#05050A" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href={~p"/images/pubky-favicon.svg"} type="image/svg+xml" />
+    <.live_title default="Pubky Rooms" suffix=" · Pubky Rooms" phx-no-format>{assigns[:page_title]}</.live_title>
+    <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
+    <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
+    </script>
+  </head>
+  <body class="min-h-dvh">
+    {@inner_content}
+  </body>
+</html>

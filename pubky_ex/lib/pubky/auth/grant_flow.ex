@@ -130,12 +130,10 @@ defmodule Pubky.Auth.GrantFlow do
   """
   @spec poll_once(t()) :: {:pending, t()} | {:approved, t()} | {:error, t()}
   def poll_once(%__MODULE__{state: :polling} = flow) do
-    cond do
-      System.monotonic_time(:millisecond) > flow.deadline ->
-        {:error, fail(flow, :expired)}
-
-      true ->
-        handle_poll(flow, RelayChannel.poll_once(flow.channel_url, flow.config))
+    if System.monotonic_time(:millisecond) > flow.deadline do
+      {:error, fail(flow, :expired)}
+    else
+      handle_poll(flow, RelayChannel.poll_once(flow.channel_url, flow.config))
     end
   end
 

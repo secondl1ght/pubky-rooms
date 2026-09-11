@@ -9,8 +9,8 @@ defmodule Pubky.Auth.Credential do
   the official SDK uses, so credentials are portable.
   """
 
-  alias Pubky.{Config, Keypair, PublicKey, Session}
   alias Pubky.Auth.{Exchange, Grant}
+  alias Pubky.{Config, Keypair, PublicKey, Session}
   alias Pubky.Crypto.{B64, Ed25519}
 
   @prefix "pubky-grant-credential-v1"

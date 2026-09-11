@@ -1,0 +1,210 @@
+/* Pubky Rooms — application stylesheet (Tailwind v4, CSS-first).
+   Design tokens follow the Pubky App design system (dark theme only); see
+   docs/notes/pubky-app-design-system.md and docs/design-system.md. */
+
+@import "tailwindcss" source(none);
+@import "phoenix-colocated/pubky_rooms/colocated.css";
+@source "../css";
+@source "../js";
+@source "../../lib/pubky_rooms_web";
+/* Required for Tailwind to automatically pick up changes in colocated CSS files in dev */
+@source "../../_build/dev/phoenix-colocated/pubky_rooms/*/";
+
+/* Lucide icons as `lucide-<name>` classes (see assets/vendor/lucide.js). */
+@plugin "../vendor/lucide";
+
+/* ---------- Fonts: Inter Tight (variable, self-hosted) ---------- */
+@font-face {
+  font-family: "Inter Tight";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/inter-tight-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+    U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Inter Tight";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/inter-tight-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* ---------- Design tokens ---------- */
+@theme {
+  --font-sans: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+
+  /* Palette (dark only) */
+  --color-background: oklch(0.118 0.014 284.115); /* ≈ #05050A */
+  --color-foreground: oklch(1 0 0);
+  --color-card: oklch(0.232 0.006 285.946); /* ≈ #1D1D20 */
+  --color-card-foreground: oklch(0.951 0.011 286.195);
+  --color-popover: oklch(0.118 0.014 284.115);
+  --color-popover-foreground: oklch(0.951 0.011 286.195);
+  --color-primary: oklch(0.791 0.01 286.174);
+  --color-primary-foreground: oklch(0.232 0.006 285.946);
+  --color-secondary: #303034;
+  --color-secondary-foreground: #d4d4db;
+  --color-muted: oklch(0.311 0.007 285.98);
+  --color-muted-foreground: #89898f;
+  --color-accent: oklch(0.392 0.007 286.088);
+  --color-accent-foreground: oklch(0.951 0.011 286.195);
+  --color-destructive: oklch(0.628 0.258 29.234);
+  --color-destructive-foreground: oklch(0.971 0.013 17.38);
+  --color-border: oklch(0.311 0.007 285.98);
+  --color-input: #525252;
+  --color-ring: oklch(0.55 0.008 286.145);
+  --color-brand: oklch(0.928 0.23 123.978); /* neon lime ≈ #C8FF00 */
+  --color-brand-hover: oklch(0.835 0.23 123.978); /* brand darkened by 10% (hover on solid brand) */
+  --color-sidebar: oklch(0.232 0.006 285.946);
+  --color-sidebar-foreground: oklch(0.951 0.011 286.195);
+  --color-sidebar-primary: oklch(0.928 0.23 123.978);
+  --color-sidebar-accent: oklch(0.311 0.007 285.98);
+  --color-sidebar-border: oklch(0.311 0.007 285.98);
+  --color-chart-1: oklch(0.517 0.27 263.327);
+  --color-chart-2: oklch(0.871 0.261 146.685);
+  --color-chart-3: oklch(0.87 0.148 202.875);
+  --color-chart-4: oklch(0.697 0.321 327.72);
+  --color-chart-5: oklch(0.628 0.258 29.234);
+  --color-chart-6: oklch(0.772 0.174 64.552);
+  --color-toast-action-muted: oklch(0.218 0.006 286);
+  --color-toast-action-muted-hover-border: oklch(0.277 0.006 286);
+
+  /* Radii */
+  --radius: 0.625rem;
+  --radius-xs: 0.25rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
+  --radius-4xl: 3rem;
+
+  /* Shadows (tinted with the page background) */
+  --shadow-2xs: 0 1px 0 0 rgba(5, 5, 10, 0.2);
+  --shadow-xs: 0 1px 2px 0 rgba(5, 5, 10, 0.2);
+  --shadow-sm: 0 1px 3px 0 rgba(5, 5, 10, 0.25), 0 1px 2px 0 rgba(5, 5, 10, 0.25);
+  --shadow-md: 0 4px 6px 0 rgba(5, 5, 10, 0.25), 0 2px 4px 0 rgba(5, 5, 10, 0.25);
+  --shadow-lg: 0 10px 15px 0 rgba(5, 5, 10, 0.25), 0 4px 6px 0 rgba(5, 5, 10, 0.25);
+  --shadow-xl: 0 20px 25px 0 rgba(5, 5, 10, 0.25), 0 8px 10px 0 rgba(5, 5, 10, 0.25);
+
+  /* Breakpoints: xsm = 375px, everything else Tailwind default */
+  --breakpoint-xsm: 23.4375rem;
+
+  /* Motion */
+  --animate-fade-in: fade-in 0.2s ease-out both;
+  --animate-zoom-in: zoom-in 0.2s ease-out both;
+  --animate-slide-up: slide-up 0.25s ease-out both;
+  --animate-pulse-soft: pulse-soft 2s ease-in-out infinite;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes zoom-in {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes slide-up {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+}
+
+/* Layout variables (plain CSS custom properties, referenced as e.g. max-w-(--container-max-width)) */
+:root {
+  color-scheme: dark;
+  --container-max-width: 1200px;
+  --filter-bar-width: 180px;
+  --header-offset-main: 144px;
+  --mobile-tab-bar-height: 48px;
+  --z-sticky-header: 20;
+  --z-mobile-menu: 30;
+}
+
+/* ---------- Base ---------- */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-muted-foreground) transparent;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    min-width: 375px;
+    overflow-x: hidden;
+  }
+  ::selection {
+    @apply bg-brand/30;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-muted-foreground);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* ---------- LiveView helpers ---------- */
+@custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
+@custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
+@custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
+
+/* Make LiveView wrapper divs transparent for layout */
+[data-phx-session],
+[data-phx-teleported-src] {
+  display: contents;
+}
+
+/* Hide elements with the `hidden` attribute even when a display utility is present */
+[hidden] {
+  display: none !important;
+}
+
+/* ---------- Component utilities ---------- */
+@utility tooltip {
+  /* Small tooltip driven by a `data-tip` attribute on hover/focus. */
+  position: relative;
+  &::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 0.5rem);
+    transform: translateX(-50%) translateY(0.25rem);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    background: var(--color-secondary);
+    color: var(--color-secondary-foreground);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 0.25rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    box-shadow: var(--shadow-md);
+    z-index: 50;
+  }
+  &:hover::after,
+  &:focus-visible::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
