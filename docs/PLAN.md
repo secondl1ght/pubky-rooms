@@ -110,7 +110,7 @@ profile.json                            {v,name(1..32)}  optional local nickname
 
 **Auth in Phoenix:** `AuthLive` (`/login?return_to=`) renders QR (`EQRCode.encode(url) |> EQRCode.svg`), copy-link, `<a href={url}>Open in Pubky Ring</a>`, testnet hint linking to `simulator.pubkyring.app`; `start_async(:await, fn -> Pubky.Auth.GrantFlow.await(flow, 120_000) end)`; on success `SessionStore.put(session)` → sid → `Phoenix.Token` handoff → `GET /auth/complete` (verify ≤60 s, single-use) sets cookie session `sid` → redirect. `UserAuth` plug + `on_mount :mount_current_user` (assigns `current_user %{pubky, name, avatar_url}`, acquires own event subscription, tracks lobby presence, throttled `Directory.sync_user`) and `:require_authenticated`. Logout: `DELETE /auth/grant/session` best-effort, drop session. Cookie holds only the sid; caps requested `/pub/pubky-rooms/:rw`.
 
-**Router:** `live "/"` LobbyLive (:index, :new), `live "/r/:creator/:room_id"` RoomLive, `live "/login"` AuthLive, `get "/auth/complete"`, `delete "/logout"`.
+**Router:** `live "/"` LobbyLive (:index, :new), `live "/r/:creator/:room_id"` RoomLive, `live "/login"` AuthLive, `get "/auth/complete"`, `delete "/logout"`, `live "/me"` MeLive (identity, sign out). *(M4 done; see `docs/notes/rooms-app-design.md` → Implementation notes for deviations.)*
 
 **RoomLive (slice scope):** stream `:messages` (dom id `msg-<author>-<msg_id>`), composer, pending/confirmed/failed states, `ScrollToBottom` JS hook, `Clipboard` hook. **LobbyLive (slice scope):** create form (two PUTs: `rooms/<id>` + `members/<self>/<id>`, then `push_navigate`), "Your rooms" from Directory.
 
