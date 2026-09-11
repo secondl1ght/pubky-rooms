@@ -15,7 +15,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
 
     %{
       conn: conn,
-      alice_conn: init_test_session(conn, sid: sid),
+      alice_conn: init_test_session(conn, Fixtures.cookie(sid)),
       alice: alice,
       room: room,
       path: ~p"/r/#{alice}/#{room.id}"
@@ -75,7 +75,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
 
   test "a signed-in non-member joins and can then chat; the creator sees the join", ctx do
     {bob_sid, bob} = Fixtures.login("bob")
-    bob_conn = init_test_session(ctx.conn, sid: bob_sid)
+    bob_conn = init_test_session(ctx.conn, Fixtures.cookie(bob_sid))
 
     {:ok, creator_view, _} = live(ctx.alice_conn, ctx.path)
     {:ok, bob_view, html} = live(bob_conn, ctx.path)

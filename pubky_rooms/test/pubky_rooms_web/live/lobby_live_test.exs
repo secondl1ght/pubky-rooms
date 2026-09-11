@@ -25,7 +25,7 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
 
   test "a signed-in user creates a room and lands in it", %{conn: conn} do
     {sid, alice} = Fixtures.login("alice")
-    conn = init_test_session(conn, sid: sid)
+    conn = init_test_session(conn, Fixtures.cookie(sid))
 
     {:ok, view, html} = live(conn, ~p"/")
     assert html =~ "No rooms yet"

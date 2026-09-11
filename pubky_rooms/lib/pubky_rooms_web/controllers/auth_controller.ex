@@ -5,7 +5,8 @@ defmodule PubkyRoomsWeb.AuthController do
   `AuthLive` completes the Pubky Ring flow over the LiveView socket, where it
   cannot set cookies, so it redirects here with a short-lived, single-use
   `Phoenix.Token` naming the new session id. `complete/2` verifies it and
-  writes the sid into the (encrypted, signed) cookie session.
+  writes the session (sid, public key and the Pubky credential) into the
+  encrypted, signed, httpOnly cookie. The credential never appears in a URL.
   """
   use PubkyRoomsWeb, :controller
 
@@ -26,10 +27,10 @@ defmodule PubkyRoomsWeb.AuthController do
     with {:ok, sid} <-
            Phoenix.Token.verify(PubkyRoomsWeb.Endpoint, @salt, token, max_age: @max_age),
          :ok <- RateLimit.check({:handoff, token}, 1, @max_age * 1000),
-         user when is_binary(user) <- SessionStore.user_of(sid) do
+         %{} = values <- SessionStore.cookie_session(sid) do
       conn
       |> configure_session(renew: true)
-      |> put_session(:sid, sid)
+      |> put_cookie_session(values)
       |> put_flash(:success, "Signed in with Pubky Ring.")
       |> redirect(to: UserAuth.safe_return_to(params["return_to"]))
     else
@@ -41,11 +42,15 @@ defmodule PubkyRoomsWeb.AuthController do
   end
 
   def logout(conn, _params) do
-    if sid = get_session(conn, :sid), do: SessionStore.delete(sid)
+    if sid = get_session(conn, "sid"), do: SessionStore.delete(sid)
 
     conn
     |> configure_session(drop: true)
     |> put_flash(:info, "Signed out.")
     |> redirect(to: ~p"/")
+  end
+
+  defp put_cookie_session(conn, values) do
+    Enum.reduce(values, conn, fn {key, value}, acc -> put_session(acc, key, value) end)
   end
 end

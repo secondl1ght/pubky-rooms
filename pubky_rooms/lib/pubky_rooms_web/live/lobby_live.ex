@@ -189,6 +189,10 @@ defmodule PubkyRoomsWeb.LobbyLive do
                 <.icon name="lucide-circle-check" class="mt-0.5 size-4 shrink-0 text-brand" />
                 A check mark means your homeserver stored it
               </p>
+              <p class="flex gap-2">
+                <.icon name="lucide-globe" class="mt-0.5 size-4 shrink-0 text-brand" />
+                All rooms are public, like posts on Pubky App
+              </p>
             </.card_content>
           </.card>
         </:aside>
@@ -200,6 +204,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
         <:title>New room</:title>
         <:description>
           The room definition is written to your homeserver; you can rename or close it later.
+          All rooms are public: anyone with the link can read them. "Unlisted" only keeps a room out of discovery.
         </:description>
         <.form
           for={@form}
@@ -229,7 +234,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
             label="Visibility"
             options={[
               {"Public — listed for discovery", "public"},
-              {"Unlisted — link only", "unlisted"}
+              {"Unlisted — not listed, still readable by anyone with the link", "unlisted"}
             ]}
           />
         </.form>

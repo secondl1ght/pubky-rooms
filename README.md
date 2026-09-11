@@ -8,4 +8,12 @@ Every message is a file the author writes to their **own homeserver**. This serv
 - `pubky_rooms/` — the Phoenix application.
 - `docs/` — plan, progress, protocol notes, design notes, ADRs.
 
+## Trust model
+
+- **Your keys never leave Pubky Ring.** Signing in gives Rooms a *grant*: a Ring-signed authorization for a key this server generates, limited to `/pub/pubky-rooms/:rw` on your homeserver, valid for the period Ring chooses (currently up to two years) and revocable in Ring at any time.
+- **The grant lives in your browser.** It is stored in an encrypted, signed, httpOnly cookie. The server keeps a copy in memory while you are connected, so it can write messages on your behalf, and forgets it afterwards. Nothing is written to disk (ADR 0005).
+- **What a compromised Rooms server could do:** act inside `/pub/pubky-rooms/` as users who are connected at that moment (post or delete Rooms messages as them) until they revoke. It could not touch Pubky App data, sign in anywhere else, or change keys. This is the same trust you place in any web app that serves you code; the scoped, revocable grant is what bounds it.
+- **All rooms are public**, like posts on Pubky App: everything is written under `/pub/`, readable by any Pubky client. "Unlisted" rooms are only left out of discovery. Private rooms wait for private homeserver storage.
+- **What the server sees:** which rooms you open and when (presence), the messages of rooms it relays (already public), and your IP address. Homeservers see this server's IP, never yours. Drafts are not sent while typing.
+
 Status: in development (see `docs/PROGRESS.md`). Part of the Pubky Vibes initiative.

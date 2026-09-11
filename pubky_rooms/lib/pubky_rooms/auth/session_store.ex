@@ -1,45 +1,82 @@
 defmodule PubkyRooms.Auth.SessionStore do
   @moduledoc """
-  Login sessions: the only place credentials live.
+  Login sessions, held in memory only.
 
-  A session id (`sid`) is an opaque random string stored in the browser
-  cookie. For each sid this store keeps the durable Pubky credential (grant +
-  client secret, encrypted with a key derived from `secret_key_base`) in a DETS
-  file, and a hydrated `%Pubky.Session{}` (with its one-hour bearer token) in
-  ETS. Sessions survive restarts: the first use after boot mints a fresh
-  bearer from the credential.
+  **The credential lives in the user's browser, not on this server.** After a
+  Pubky Ring sign-in the durable credential (grant + client secret, scoped to
+  `/pub/pubky-rooms/`) is written into the encrypted, signed, httpOnly session
+  cookie. This store is a memory cache keyed by an opaque session id (`sid`):
 
-  `call/2` is the way to make authenticated requests: it runs the function
-  with a fresh session, writes back a refreshed token, and forgets the
-  session when the homeserver reports the grant as revoked.
+    * `put/1` records a fresh session right after sign-in and returns its sid;
+      `cookie_session/1` gives the map the controller writes into the cookie
+    * `ensure/1` re-seeds the cache from a cookie on any request (so sessions
+      survive restarts without anything on disk)
+    * `lookup/1` hydrates a bearer token from the credential on first use;
+      `call/2` runs authenticated requests and keeps refreshed tokens
+
+  Entries unused for `session_memory_ttl_ms` are dropped; the next request
+  from that browser re-seeds them. Nothing is persisted. The only way to
+  escalate is to compromise the running server while a user is connected, and
+  even then only within the Rooms namespace, until they revoke in Ring.
   """
   use GenServer
 
   require Logger
 
-  alias Plug.Crypto.{KeyGenerator, MessageEncryptor}
+  alias Pubky.Auth.Credential
   alias Pubky.Session
 
   @table :pubky_sessions
-  @dets :pubky_sessions_dets
-  @sweep_every :timer.hours(1)
-  @touch_every :timer.minutes(5)
+  @sweep_every :timer.minutes(5)
   @hydrate_timeout 20_000
 
   @type sid :: String.t()
+  @type cookie_session :: %{String.t() => String.t()}
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
-  @doc "Stores a session and returns its new sid."
+  @doc "Caches a freshly minted session and returns its new sid."
   @spec put(Session.t()) :: sid()
-  def put(%Session{} = session), do: GenServer.call(__MODULE__, {:put, session})
+  def put(%Session{} = session) do
+    sid = :crypto.strong_rand_bytes(24) |> Base.url_encode64(padding: false)
+    insert(sid, session.user, Session.export(session), session)
+    sid
+  end
 
-  @doc "The session for a sid, hydrating it from the credential if needed."
+  @doc "The values to store in the browser session cookie for a sid, or nil."
+  @spec cookie_session(sid()) :: cookie_session() | nil
+  def cookie_session(sid) do
+    case :ets.lookup(@table, sid) do
+      [{^sid, %{user: user, export: export}}] ->
+        %{"sid" => sid, "pubky" => user, "cred" => export}
+
+      [] ->
+        nil
+    end
+  end
+
+  @doc """
+  Re-seeds the cache from a browser session (cookie values). Returns the sid
+  when the values are well-formed, nil otherwise. Cheap: no network.
+  """
+  @spec ensure(map()) :: sid() | nil
+  def ensure(%{"sid" => sid, "pubky" => user, "cred" => export})
+      when is_binary(sid) and is_binary(user) and is_binary(export) do
+    cond do
+      :ets.member(@table, sid) -> sid
+      match?({:ok, _}, Credential.import(export)) and insert_new(sid, user, export) -> sid
+      true -> nil
+    end
+  end
+
+  def ensure(_), do: nil
+
+  @doc "The session for a sid, hydrating a bearer from the credential if needed."
   @spec lookup(term()) :: {:ok, Session.t()} | :error
   def lookup(sid) when is_binary(sid) do
     case :ets.lookup(@table, sid) do
-      [{^sid, %Session{} = session, _meta}] -> {:ok, session}
-      [{^sid, nil, _meta}] -> GenServer.call(__MODULE__, {:hydrate, sid}, @hydrate_timeout)
+      [{^sid, %{session: %Session{} = session}}] -> {:ok, session}
+      [{^sid, %{session: nil}}] -> GenServer.call(__MODULE__, {:hydrate, sid}, @hydrate_timeout)
       [] -> :error
     end
   end
@@ -50,7 +87,7 @@ defmodule PubkyRooms.Auth.SessionStore do
   @spec user_of(term()) :: String.t() | nil
   def user_of(sid) when is_binary(sid) do
     case :ets.lookup(@table, sid) do
-      [{^sid, _session, %{user: user}}] -> user
+      [{^sid, %{user: user}}] -> user
       [] -> nil
     end
   end
@@ -65,6 +102,8 @@ defmodule PubkyRooms.Auth.SessionStore do
   def call(sid, fun) when is_function(fun, 1) do
     case lookup(sid) do
       {:ok, session} ->
+        touch(sid)
+
         case Session.call(session, fun) do
           {:ok, result, fresh} ->
             keep(sid, session, fresh)
@@ -84,108 +123,75 @@ defmodule PubkyRooms.Auth.SessionStore do
     end
   end
 
-  @doc "Marks the session as recently used (throttled)."
+  @doc "Marks the session as recently used."
   @spec touch(sid()) :: :ok
-  def touch(sid) when is_binary(sid), do: GenServer.cast(__MODULE__, {:touch, sid})
+  def touch(sid) when is_binary(sid) do
+    case :ets.lookup(@table, sid) do
+      [{^sid, entry}] -> :ets.insert(@table, {sid, %{entry | last_used: now()}})
+      [] -> :ok
+    end
+
+    :ok
+  end
+
   def touch(_), do: :ok
 
   @doc "Forgets a session and revokes its bearer on the homeserver (best effort)."
   @spec delete(sid()) :: :ok
-  def delete(sid) when is_binary(sid), do: GenServer.call(__MODULE__, {:delete, sid})
-  def delete(_), do: :ok
-
-  @doc "Number of stored sessions."
-  def count, do: :ets.info(@table, :size)
-
-  defp keep(_sid, %Session{token: t}, %Session{token: t}), do: :ok
-  defp keep(sid, _old, fresh), do: GenServer.cast(__MODULE__, {:update, sid, fresh})
-
-  # ── server ─────────────────────────────────────────────────────────────────
-
-  @impl true
-  def init(opts) do
-    data_dir = Keyword.get(opts, :data_dir) || Application.fetch_env!(:pubky_rooms, :data_dir)
-    File.mkdir_p!(data_dir)
-    file = data_dir |> Path.join("sessions.dets") |> String.to_charlist()
-    {:ok, dets} = :dets.open_file(@dets, file: file, type: :set)
-    :ets.new(@table, [:named_table, :public, :set, read_concurrency: true])
-
-    :dets.foldl(
-      fn {sid, meta}, acc -> :ets.insert(@table, {sid, nil, meta}) && acc end,
-      :ok,
-      dets
-    )
-
-    Process.send_after(self(), :sweep, @sweep_every)
-    {:ok, %{dets: dets, keys: keys()}}
-  end
-
-  @impl true
-  def handle_call({:put, session}, _from, state) do
-    sid = :crypto.strong_rand_bytes(24) |> Base.url_encode64(padding: false)
-    now = System.os_time(:second)
-
-    meta = %{
-      user: session.user,
-      homeserver: session.homeserver,
-      credential: encrypt(Session.export(session), state.keys),
-      created_at: now,
-      last_seen_at: now
-    }
-
-    :ok = :dets.insert(state.dets, {sid, meta})
-    :ets.insert(@table, {sid, session, meta})
-    {:reply, sid, state}
-  end
-
-  def handle_call({:hydrate, sid}, _from, state) do
+  def delete(sid) when is_binary(sid) do
     case :ets.lookup(@table, sid) do
-      [{^sid, %Session{} = session, _}] ->
-        {:reply, {:ok, session}, state}
-
-      [{^sid, nil, meta}] ->
-        {:reply, hydrate(sid, meta, state), state}
-
-      [] ->
-        {:reply, :error, state}
-    end
-  end
-
-  def handle_call({:delete, sid}, _from, state) do
-    case :ets.lookup(@table, sid) do
-      [{^sid, session, _meta}] ->
+      [{^sid, %{session: session}}] ->
         :ets.delete(@table, sid)
-        :ok = :dets.delete(state.dets, sid)
         signout_async(session)
 
       [] ->
         :ok
     end
 
-    {:reply, :ok, state}
+    :ok
+  end
+
+  def delete(_), do: :ok
+
+  @doc "Number of cached sessions."
+  def count, do: :ets.info(@table, :size)
+
+  defp keep(_sid, %Session{token: t}, %Session{token: t}), do: :ok
+  defp keep(sid, _old, fresh), do: GenServer.cast(__MODULE__, {:update, sid, fresh})
+
+  defp insert(sid, user, export, session) do
+    :ets.insert(@table, {sid, %{user: user, export: export, session: session, last_used: now()}})
+  end
+
+  defp insert_new(sid, user, export) do
+    :ets.insert_new(@table, {sid, %{user: user, export: export, session: nil, last_used: now()}})
+  end
+
+  defp now, do: System.monotonic_time(:millisecond)
+
+  # ── server ─────────────────────────────────────────────────────────────────
+
+  @impl true
+  def init(_opts) do
+    :ets.new(@table, [:named_table, :public, :set, read_concurrency: true])
+    Process.send_after(self(), :sweep, @sweep_every)
+    {:ok, %{}}
+  end
+
+  @impl true
+  def handle_call({:hydrate, sid}, _from, state) do
+    case :ets.lookup(@table, sid) do
+      [{^sid, %{session: %Session{} = session}}] -> {:reply, {:ok, session}, state}
+      [{^sid, %{session: nil} = entry}] -> {:reply, hydrate(sid, entry), state}
+      [] -> {:reply, :error, state}
+    end
   end
 
   @impl true
   def handle_cast({:update, sid, %Session{} = session}, state) do
     case :ets.lookup(@table, sid) do
-      [{^sid, _old, meta}] -> :ets.insert(@table, {sid, session, meta})
+      [{^sid, entry}] -> :ets.insert(@table, {sid, %{entry | session: session}})
       [] -> :ok
-    end
-
-    {:noreply, state}
-  end
-
-  def handle_cast({:touch, sid}, state) do
-    now = System.os_time(:second)
-
-    case :ets.lookup(@table, sid) do
-      [{^sid, session, %{last_seen_at: seen} = meta}] when now - seen > div(@touch_every, 1000) ->
-        meta = %{meta | last_seen_at: now}
-        :ets.insert(@table, {sid, session, meta})
-        :ok = :dets.insert(state.dets, {sid, meta})
-
-      _ ->
-        :ok
     end
 
     {:noreply, state}
@@ -193,12 +199,11 @@ defmodule PubkyRooms.Auth.SessionStore do
 
   @impl true
   def handle_info(:sweep, state) do
-    max_idle = Application.get_env(:pubky_rooms, :session_max_idle_days, 30) * 86_400
-    cutoff = System.os_time(:second) - max_idle
+    ttl = Application.get_env(:pubky_rooms, :session_memory_ttl_ms, 7_200_000)
+    cutoff = now() - ttl
 
-    for {sid, _session, %{last_seen_at: seen}} <- :ets.tab2list(@table), seen < cutoff do
+    for {sid, %{last_used: used}} <- :ets.tab2list(@table), used < cutoff do
       :ets.delete(@table, sid)
-      :dets.delete(state.dets, sid)
     end
 
     Process.send_after(self(), :sweep, @sweep_every)
@@ -207,24 +212,19 @@ defmodule PubkyRooms.Auth.SessionStore do
 
   def handle_info(_msg, state), do: {:noreply, state}
 
-  @impl true
-  def terminate(_reason, %{dets: dets}), do: :dets.close(dets)
-
-  defp hydrate(sid, meta, state) do
-    with {:ok, exported} <- decrypt(meta.credential, state.keys),
-         {:ok, session} <- Session.restore(exported) do
-      :ets.insert(@table, {sid, session, meta})
+  defp hydrate(sid, %{export: export} = entry) do
+    with {:ok, credential} <- Credential.import(export),
+         {:ok, session} <- Credential.restore(credential) do
+      :ets.insert(@table, {sid, %{entry | session: session, last_used: now()}})
       {:ok, session}
     else
       {:error, reason} when reason in [:grant_revoked, :expired, :cnf_mismatch] ->
         Logger.info("session #{String.slice(sid, 0, 6)}… dropped: #{inspect(reason)}")
         :ets.delete(@table, sid)
-        :dets.delete(state.dets, sid)
         :error
 
       {:error, {:http, status, _}} when status in [401, 403] ->
         :ets.delete(@table, sid)
-        :dets.delete(state.dets, sid)
         :error
 
       other ->
@@ -241,20 +241,4 @@ defmodule PubkyRooms.Auth.SessionStore do
   end
 
   defp signout_async(_), do: :ok
-
-  defp keys do
-    secret = Application.fetch_env!(:pubky_rooms, PubkyRoomsWeb.Endpoint)[:secret_key_base]
-
-    {KeyGenerator.generate(secret, "pubky-rooms session credentials", length: 32),
-     KeyGenerator.generate(secret, "pubky-rooms session credentials signing", length: 32)}
-  end
-
-  defp encrypt(plain, {key, sign}), do: MessageEncryptor.encrypt(plain, key, sign)
-
-  defp decrypt(cipher, {key, sign}) do
-    case MessageEncryptor.decrypt(cipher, key, sign) do
-      {:ok, plain} -> {:ok, plain}
-      :error -> {:error, :undecryptable}
-    end
-  end
 end

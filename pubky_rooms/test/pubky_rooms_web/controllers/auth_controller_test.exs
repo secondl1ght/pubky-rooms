@@ -16,12 +16,13 @@ defmodule PubkyRoomsWeb.AuthControllerTest do
 
     conn = get(conn, ~p"/auth/complete?token=#{token}&return_to=/rooms/new")
     assert redirected_to(conn) == "/rooms/new"
-    assert get_session(conn, :sid) == sid
+    assert get_session(conn, "sid") == sid
+    assert get_session(conn, "cred") =~ "pubky-grant-credential-v1:"
 
     # the same token cannot be replayed
     replay = get(build_conn(), ~p"/auth/complete?token=#{token}")
     assert redirected_to(replay) == ~p"/login"
-    assert get_session(replay, :sid) == nil
+    assert get_session(replay, "sid") == nil
   end
 
   test "garbage and unknown-session tokens are rejected", %{conn: conn} do
@@ -39,7 +40,7 @@ defmodule PubkyRoomsWeb.AuthControllerTest do
 
   test "logout forgets the session", %{conn: conn} do
     {sid, _} = Fixtures.login("bye")
-    conn = conn |> init_test_session(sid: sid) |> delete(~p"/logout")
+    conn = conn |> init_test_session(Fixtures.cookie(sid)) |> delete(~p"/logout")
     assert redirected_to(conn) == "/"
     assert SessionStore.lookup(sid) == :error
   end

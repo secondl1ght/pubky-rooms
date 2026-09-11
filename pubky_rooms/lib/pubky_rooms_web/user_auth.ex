@@ -2,15 +2,17 @@ defmodule PubkyRoomsWeb.UserAuth do
   @moduledoc """
   Resolves the signed-in user from the cookie session.
 
-  The cookie holds only an opaque session id (`sid`); everything else lives in
-  `PubkyRooms.Auth.SessionStore`. Both the plug (for controllers) and the
-  `on_mount` hooks (for LiveViews) assign:
+  The encrypted cookie carries the session id, the user's public key and their
+  Pubky credential (see `PubkyRooms.Auth.SessionStore`). Both the plug (for
+  controllers) and the `on_mount` hooks (for LiveViews) re-seed the in-memory
+  session cache from it and assign:
 
     * `:current_user` — `%{pubky, name, avatar_url}` or `nil`
     * `:sid` — the session id, used for homeserver writes
 
-  Resolving a user never touches the network: credentials are only exercised
+  Resolving a user never touches the network: the credential is only exercised
   on the first write, which reports `:unauthorized` if the grant is gone.
+  The credential itself is never assigned to a socket or conn.
   """
   use PubkyRoomsWeb, :verified_routes
 
@@ -22,13 +24,11 @@ defmodule PubkyRoomsWeb.UserAuth do
 
   @doc "Plug: assigns `current_user` and `sid` from the session cookie."
   def fetch_current_user(conn, _opts) do
-    sid = get_session(conn, :sid)
-    user = current_user(sid)
-    if user, do: SessionStore.touch(sid)
+    {sid, user} = resolve(get_session(conn))
 
     conn
     |> assign(:current_user, user)
-    |> assign(:sid, if(user, do: sid))
+    |> assign(:sid, sid)
   end
 
   @doc """
@@ -65,13 +65,12 @@ defmodule PubkyRoomsWeb.UserAuth do
   end
 
   defp mount_current_user(socket, session) do
-    sid = session["sid"]
-    user = current_user(sid)
+    {sid, user} = resolve(session)
 
     socket =
       socket
       |> Phoenix.Component.assign(:current_user, user)
-      |> Phoenix.Component.assign(:sid, if(user, do: sid))
+      |> Phoenix.Component.assign(:sid, sid)
 
     if user && LiveView.connected?(socket) do
       SessionStore.touch(sid)
@@ -81,14 +80,17 @@ defmodule PubkyRoomsWeb.UserAuth do
     socket
   end
 
-  @doc "The user behind a session id, or nil."
-  @spec current_user(term()) :: Profiles.profile() | nil
-  def current_user(sid) do
-    case SessionStore.user_of(sid) do
-      nil -> nil
-      pubky -> Profiles.get(pubky)
+  # Re-seeds the session cache from cookie values and returns `{sid, user}`.
+  defp resolve(session) when is_map(session) do
+    with sid when is_binary(sid) <- SessionStore.ensure(session),
+         pubky when is_binary(pubky) <- SessionStore.user_of(sid) do
+      {sid, Profiles.get(pubky)}
+    else
+      _ -> {nil, nil}
     end
   end
+
+  defp resolve(_), do: {nil, nil}
 
   @doc "Only local paths are accepted as post-login destinations."
   @spec safe_return_to(term()) :: String.t()

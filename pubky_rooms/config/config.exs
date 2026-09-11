@@ -12,13 +12,21 @@ config :pubky_rooms,
   # Pubky Rooms application settings (see docs/notes/rooms-app-design.md)
   app_id: "pubky-rooms",
   data_dir: "priv/data",
+  # history bootstrap: list up to N entries per member, fetch only the newest M overall
   bootstrap_per_member: 50,
+  bootstrap_messages: 100,
+  fetch_concurrency: 16,
   page_size: 50,
   max_members_subscribed: 500,
-  room_idle_timeout_ms: 600_000,
+  # rooms stay warm (subscribed, cached) this long after the last viewer leaves…
+  room_idle_timeout_ms: 1_800_000,
+  # …unless more than this many rooms are alive, then idle rooms stop right away
+  max_warm_rooms: 200,
   confirm_timeout_ms: 15_000,
   profile_ttl_ms: 900_000,
-  session_max_idle_days: 30,
+  # hydrated sessions are dropped from memory after this much inactivity (the cookie re-seeds them)
+  session_memory_ttl_ms: 7_200_000,
+  secure_cookies: false,
   pubky_backend: PubkyRooms.Pubky.Live,
   nexus_url: nil,
   nexus_cdn_url: nil,

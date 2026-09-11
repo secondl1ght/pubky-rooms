@@ -1,14 +1,17 @@
 defmodule PubkyRoomsWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :pubky_rooms
 
-  # The session will be stored in the cookie and signed,
-  # this means its contents can be read but not tampered with.
-  # Set :encryption_salt if you would also like to encrypt it.
+  # The session cookie carries the user's Pubky grant credential (see
+  # PubkyRooms.Auth.SessionStore), so it is encrypted as well as signed,
+  # httpOnly (Plug default), SameSite=Lax, 30 days, and HTTPS-only in prod.
   @session_options [
     store: :cookie,
     key: "_pubky_rooms_key",
     signing_salt: "Km7PKZQ6",
-    same_site: "Lax"
+    encryption_salt: "R4x0pQ9vL2mD",
+    same_site: "Lax",
+    max_age: 60 * 60 * 24 * 30,
+    secure: Application.compile_env(:pubky_rooms, :secure_cookies, false)
   ]
 
   socket "/live", Phoenix.LiveView.Socket,

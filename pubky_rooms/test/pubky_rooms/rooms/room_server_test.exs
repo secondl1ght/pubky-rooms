@@ -58,6 +58,28 @@ defmodule PubkyRooms.Rooms.RoomServerTest do
     refute Enum.any?(RoomServer.history(table), &(&1.key == key))
   end
 
+  test "bootstrap merges listings across members and keeps only the newest messages", ctx do
+    %{alice: alice, ref: ref} = ctx
+    bob = Fixtures.z32("bob")
+    Directory.add_member(ref, bob)
+
+    for {author, n} <- [{alice, 4}, {bob, 4}], i <- 1..n do
+      {:ok, m} = Message.new(author, ref, "#{String.slice(author, 0, 4)} #{i}")
+      Fake.seed(author, Message.path(m), Message.encode(m))
+    end
+
+    {:ok, _pid} = RoomServer.ensure(ref)
+    assert_receive {:room_event, ^ref, :ready}, 2_000
+    {:ok, %{table: table}} = RoomServer.attach(ref)
+    history = RoomServer.history(table)
+
+    # test config: bootstrap_messages = 5 → the 5 newest of the 8 seeded, in order
+    assert length(history) == 5
+    assert history == Enum.sort_by(history, & &1.msg_id)
+    assert List.last(history).content =~ " 4"
+    assert Enum.map(history, & &1.author) |> Enum.uniq() |> length() == 2
+  end
+
   test "a failed write cancels the pending entry and a vanished one is reported", %{
     alice: alice,
     ref: ref,

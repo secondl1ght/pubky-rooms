@@ -47,4 +47,7 @@ defmodule PubkyRooms.Fixtures do
     user = z32(label)
     {SessionStore.put(session(user)), user}
   end
+
+  @doc "The browser session (cookie values) for a sid, for `Plug.Test.init_test_session/2`."
+  def cookie(sid), do: SessionStore.cookie_session(sid)
 end

@@ -28,8 +28,9 @@ pubky_rooms/   Phoenix 1.8 LiveView app, --no-ecto ({:pubky, path: "../pubky_ex"
 - Elixir 1.18 / OTP 27, Phoenix 1.8.x, LiveView 1.2.x, Tailwind v4 CSS-first. Use stdlib `JSON`, not Jason. HTTP via `req` (+ Finch). Crypto: `:crypto` (Ed25519), `kcl` (XSalsa20-Poly1305), pure-Elixir BLAKE3 in `Pubky.Crypto.Blake3`.
 - Clean-room UI: a small `PubkyRoomsWeb.UI.*` component library matching Pubky App's look via tokens; no code copied from `~/CODE/pubky-app`. Templates use these components (`<.button>`, `<.input>`, `<.dialog>`, `<.icon name="lucide-…">`, …), never raw daisyUI/heroicons (both removed).
 - All homeserver access goes through the `PubkyRooms.Pubky` façade (`Live` in dev/prod, `Fake` in tests). Tests touching the fake homeserver/directory use `PubkyRooms.RoomsCase` (`async: false`, `reset_state/0`). The dev server must be restarted after config or supervision-tree changes.
-- No database. ETS for hot state; DETS only for login sessions and the room directory. Source of truth is always the users' homeservers.
+- No database. ETS for hot state; DETS only for the room directory. Login sessions are memory-only: the grant credential lives in the encrypted browser cookie (ADR 0005) and is never written to disk. Source of truth is always the users' homeservers.
 - Every homeserver write is validated with the same limits the reader enforces. Author identity always comes from the path/event owner, never from JSON bodies.
+- Scale story: cost is per room (bootstrap lists every member once and fetches only the newest `bootstrap_messages`), never per viewer; homeservers throttle anonymous reads per IP by bandwidth and may add 429 count limits — honor `Retry-After`, cap concurrency per fetch, keep rooms warm.
 - Tests must stay green at every commit: `mix test` in each project. Testnet integration tests are tagged `:testnet` and excluded by default.
 - Formatting/lint: `mix format`, `mix credo --strict`. Document public functions with `@doc`; every module has a `@moduledoc` explaining its role.
 - Commit per completed step with descriptive messages. Never commit secrets, `.sess` files, or anything from `~/CODE/keys`.

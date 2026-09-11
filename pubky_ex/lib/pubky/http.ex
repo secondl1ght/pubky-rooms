@@ -4,13 +4,17 @@ defmodule Pubky.Http do
 
   Responses are returned untouched (`decode_body: false`) because homeserver
   bodies are raw files, plain-text listings, or JSON the caller decodes itself.
-  Non-2xx responses become `{:error, {:http, status, body}}`; transport
-  failures become `{:error, {:transport, reason}}`.
+  Non-2xx responses become `{:error, {:http, status, body}}`, except `429`,
+  which becomes `{:error, {:rate_limited, retry_after_ms | nil}}` (from the
+  `Retry-After` header); transport failures become `{:error, {:transport, reason}}`.
   """
 
   alias Pubky.Config
 
-  @type error :: {:http, non_neg_integer(), binary()} | {:transport, term()}
+  @type error ::
+          {:http, non_neg_integer(), binary()}
+          | {:rate_limited, non_neg_integer() | nil}
+          | {:transport, term()}
 
   @user_agent "pubky_ex/#{Mix.Project.config()[:version]}"
 
@@ -39,11 +43,29 @@ defmodule Pubky.Http do
       {:ok, %Req.Response{status: status} = resp} when status in 200..299 ->
         {:ok, resp}
 
+      {:ok, %Req.Response{status: 429} = resp} ->
+        {:error, {:rate_limited, retry_after_ms(resp)}}
+
       {:ok, %Req.Response{status: status, body: body}} ->
         {:error, {:http, status, to_binary(body)}}
 
       {:error, reason} ->
         {:error, {:transport, reason}}
+    end
+  end
+
+  @doc "The `Retry-After` header of a response in milliseconds (delay-seconds form only), or nil."
+  @spec retry_after_ms(Req.Response.t()) :: non_neg_integer() | nil
+  def retry_after_ms(%Req.Response{} = resp) do
+    case Req.Response.get_header(resp, "retry-after") do
+      [value | _] ->
+        case Integer.parse(String.trim(value)) do
+          {seconds, ""} when seconds >= 0 -> seconds * 1000
+          _ -> nil
+        end
+
+      [] ->
+        nil
     end
   end
 

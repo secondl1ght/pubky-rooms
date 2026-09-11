@@ -7,14 +7,17 @@ defmodule PubkyRooms.Rooms.RoomServer do
 
     1. **Bootstrap** — read the room definition from the creator's homeserver,
        acquire event subscriptions for every known member (this captures
-       their cursors first, so nothing is missed), then backfill the newest
-       messages of each member and become `:ready`.
+       their cursors first, so nothing is missed), list every member's message
+       folder in parallel, fetch only the newest `bootstrap_messages` overall
+       (message ids are time-ordered), and become `:ready`. Cost is
+       *members + messages shown*, not members × messages.
     2. **Live** — apply homeserver events: message `PUT`s become fetches (or
        instant confirmations when the content hash matches a pending write
        from this node), `DEL`s remove, join markers add and remove members,
        room definition changes update or close the room.
-    3. **Idle** — with no viewers attached for `room_idle_timeout_ms`, release
-       the subscriptions and stop; the next visit bootstraps again.
+    3. **Idle** — with no viewers attached for `room_idle_timeout_ms` the room
+       releases its subscriptions and stops (sooner when more than
+       `max_warm_rooms` rooms are alive); the next visit bootstraps again.
 
   Messages live in a public ETS `ordered_set` keyed by `{msg_id, author}`,
   so viewers read history directly. Changes are broadcast on the room topic as
@@ -378,35 +381,44 @@ defmodule PubkyRooms.Rooms.RoomServer do
     end)
   end
 
+  # Lists every member's folder (one request each), merges the entries by
+  # message id (time-ordered), and fetches only the newest `bootstrap_messages`.
   defp fetch_history(members, ref) do
-    per_member = Application.get_env(:pubky_rooms, :bootstrap_per_member, 50)
+    per_member = config(:bootstrap_per_member, 50)
+    total = config(:bootstrap_messages, 100)
+    concurrency = config(:fetch_concurrency, 16)
 
     members
-    |> Task.async_stream(&history_of(ref, &1, per_member),
-      max_concurrency: 8,
+    |> Task.async_stream(&list_recent(ref, &1, per_member),
+      max_concurrency: concurrency,
       timeout: 30_000,
       on_timeout: :kill_task
     )
     |> Enum.flat_map(fn
-      {:ok, msgs} -> msgs
+      {:ok, entries} -> entries
       {:exit, _} -> []
+    end)
+    |> Enum.sort_by(fn {msg_id, _member, _path} -> msg_id end, :desc)
+    |> Enum.take(total)
+    |> Task.async_stream(fn {msg_id, member, path} -> load_message(ref, member, path, msg_id) end,
+      max_concurrency: concurrency,
+      timeout: 15_000,
+      on_timeout: :kill_task
+    )
+    |> Enum.flat_map(fn
+      {:ok, {:ok, msg}} -> [msg]
+      _ -> []
     end)
   end
 
-  defp history_of(ref, member, limit) do
-    case Pubky.list(member, Paths.messages_dir(ref), reverse: true, limit: limit) do
+  defp list_recent(ref, member, limit) do
+    case retrying(fn ->
+           Pubky.list(member, Paths.messages_dir(ref), reverse: true, limit: limit)
+         end) do
       {:ok, %{entries: entries}} ->
-        entries
-        |> Enum.reverse()
-        |> Task.async_stream(&load_message(ref, member, &1.path),
-          max_concurrency: 4,
-          timeout: 15_000,
-          on_timeout: :kill_task
-        )
-        |> Enum.flat_map(fn
-          {:ok, {:ok, msg}} -> [msg]
-          _ -> []
-        end)
+        for %{path: path} <- entries,
+            {:message, _, _, msg_id} <- [Paths.parse(path)],
+            do: {msg_id, member, path}
 
       {:error, reason} ->
         Logger.debug("no history from #{String.slice(member, 0, 8)}…: #{inspect(reason)}")
@@ -414,22 +426,40 @@ defmodule PubkyRooms.Rooms.RoomServer do
     end
   end
 
-  defp load_message(ref, member, path) do
-    with {:message, _, _, msg_id} <- Paths.parse(path),
-         {:ok, bytes} <- Pubky.get(member, path) do
+  defp load_message(ref, member, path, msg_id) do
+    with {:ok, bytes} <- retrying(fn -> Pubky.get(member, path) end) do
       Message.decode(bytes, member, ref, msg_id)
     end
   end
+
+  # Homeservers answer 429 with Retry-After when we read too fast: wait once, then retry.
+  defp retrying(fun) do
+    case fun.() do
+      {:error, {:rate_limited, ms}} ->
+        Process.sleep(min(ms || 1_000, 5_000))
+        fun.()
+
+      other ->
+        other
+    end
+  end
+
+  defp config(key, default), do: Application.get_env(:pubky_rooms, key, default)
 
   # ── viewers / idle ─────────────────────────────────────────────────────────
 
   defp maybe_start_idle_timer(%{viewers: viewers, idle_timer: nil} = state)
        when map_size(viewers) == 0 do
-    timeout = Application.get_env(:pubky_rooms, :room_idle_timeout_ms, 600_000)
+    timeout = if too_many_warm_rooms?(), do: 1_000, else: config(:room_idle_timeout_ms, 1_800_000)
     %{state | idle_timer: Process.send_after(self(), :idle_stop, timeout)}
   end
 
   defp maybe_start_idle_timer(state), do: state
+
+  defp too_many_warm_rooms? do
+    %{active: active} = DynamicSupervisor.count_children(PubkyRooms.Rooms.RoomSupervisor)
+    active > config(:max_warm_rooms, 200)
+  end
 
   defp cancel_idle_timer(%{idle_timer: nil} = state), do: state
 
