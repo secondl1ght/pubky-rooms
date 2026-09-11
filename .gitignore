@@ -17,3 +17,5 @@ pubky_rooms/priv/data/
 .DS_Store
 .idea/
 .vscode/
+# local dev launcher configs
+.claude/launch.json

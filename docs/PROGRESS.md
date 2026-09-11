@@ -25,9 +25,9 @@ Legend: [ ] todo · [~] in progress · [x] done. See `docs/PLAN.md` for the full
 
 ## M3 — pubky_ex grant flow + events
 - [x] `Pubky.Auth.{DeepLink, RelayChannel, GrantFlow, GrantFlow.Poller}` with `FakeRelay` + `FakeRing` test doubles (full QR flow, mismatch/garbage/expiry, save/restore, signup flow)
-- [ ] `mix pubky.auth_demo` (manual Ring Simulator run)
-- [ ] `Pubky.Events.{SSE, Event, Stream}` + supervisor/registry
-- [ ] Testnet verification (Simulator approval; live stream put/del; reconnect with cursor)
+- [x] `mix pubky.auth_demo` verified with the Pubky Ring Simulator (JS SDK 0.11): deep link parsed, grant encrypted by the Simulator, decrypted + exchanged by pubky_ex, file written
+- [x] `Pubky.Events.{SSE, Event, Stream}` + supervisor/registry + `latest_cursor/4`; Cowboy-based `FakeHomeserver` (auth, storage, `/events-stream`, PKARR) and `FakeRelay`
+- [x] Testnet verification: live put/del events, resubscribe on `add_users`, cursors; reconnect-from-cursor covered by unit test with a dropping fake
 
 ## M4 — Pubky Rooms vertical slice
 - [ ] `mix phx.new pubky_rooms --no-ecto`, deps, presence
@@ -60,7 +60,7 @@ Legend: [ ] todo · [~] in progress · [x] done. See `docs/PLAN.md` for the full
 ---
 
 ## Handoff note (update every session)
-**Last session:** 2026-09-10/11 — M1 done and verified on mainnet; M2 done at unit level (51 tests, credo clean); M3 started.
-**State:** `pubky_ex/` has keys, PKARR/DNS, resolver, crypto, grant auth primitives, sessions, storage. **Uncommitted, untested M3 drafts in the working tree:** `lib/pubky/auth/{deep_link,relay_channel,grant_flow}.ex` (compile clean; `grant_flow/poller.ex` still to be written — the dir was missing). User asked to pause before M3.
-**Next:** (1) user starts the testnet from a terminal (`cd ~/CODE/pubky-docker && newgrp docker` then `docker compose up homeserver -d`), then run `cd pubky_ex && PUBKY_TESTNET=1 mix test --include testnet` to verify M2 end to end; (2) resume M3: write `grant_flow/poller.ex`, unit tests for DeepLink/RelayChannel/GrantFlow (Bypass relay + fake Ring that seals a grant), then SSE parser + `Pubky.Events.Stream`, then `mix pubky.auth_demo` against the Ring Simulator.
+**Last session:** 2026-09-11 — M1–M3 complete: `pubky_ex` fully implemented (67 unit tests, 3 testnet integration tests, mainnet smoke test, credo strict clean) and verified against mainnet, the pubky-docker testnet, and the Pubky Ring Simulator.
+**State:** library done for the app's needs. The Ring Simulator runs locally from `~/CODE/pubky-ring-simulator` (`npm run dev`, port 5173; the hosted one can't reach localhost from the in-app browser) — `.claude/launch.json` (gitignored) has a `ring-simulator` entry. Testnet containers: `cd ~/CODE/pubky-docker && docker compose up homeserver -d`.
+**Next:** M4 — `mix phx.new pubky_rooms --no-ecto` in a **fresh session**: 4a design system port first (see `docs/notes/pubky-app-design-system.md`, `docs/notes/figma-reference.md`), then SessionStore/AuthLive/UserAuth, events plumbing, RoomServer, Lobby/Room LiveViews, verified with two Simulator identities in two browsers.
 **Gotchas discovered so far:** mainnet `homeserver.pubky.app` has no `/info` and no `/storage/` routes yet (legacy `pubky-host` addressing only; SSE works); the Claude shell lacks the docker group until a fresh login (sandbox has no `newgrp`/`sg`); in Bash tool calls `cd X && cmd &` backgrounds the whole chain — use absolute paths; `pkarr.pubky.app` relay is limited to 10 req/min (use `pkarr.pubky.org` first, never race relays); testnet homeserver advertises ICANN target `localhost` with SvcParam key 65280 = plain-HTTP port 6286; resume cursor on `/events-stream` is exclusive; PoP `iat` must be within ±180 s of the homeserver clock; Nexus universal tags are keyed by the app namespace of the *tag file path*, not of the tagged URI.
