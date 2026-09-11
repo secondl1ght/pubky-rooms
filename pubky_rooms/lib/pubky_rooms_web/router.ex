@@ -1,6 +1,8 @@
 defmodule PubkyRoomsWeb.Router do
   use PubkyRoomsWeb, :router
 
+  import PubkyRoomsWeb.UserAuth, only: [fetch_current_user: 2]
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -8,6 +10,7 @@ defmodule PubkyRoomsWeb.Router do
     plug :put_root_layout, html: {PubkyRoomsWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug :fetch_current_user
   end
 
   pipeline :api do
@@ -17,9 +20,15 @@ defmodule PubkyRoomsWeb.Router do
   scope "/", PubkyRoomsWeb do
     pipe_through :browser
 
-    live_session :default do
+    get "/auth/complete", AuthController, :complete
+    delete "/logout", AuthController, :logout
+
+    live_session :default, on_mount: [{PubkyRoomsWeb.UserAuth, :mount_current_user}] do
       live "/", LobbyLive, :index
       live "/rooms/new", LobbyLive, :new
+      live "/r/:creator/:room_id", RoomLive, :show
+      live "/login", AuthLive, :index
+      live "/me", MeLive, :show
     end
   end
 

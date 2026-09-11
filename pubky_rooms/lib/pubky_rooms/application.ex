@@ -1,16 +1,22 @@
 defmodule PubkyRooms.Application do
-  # See https://elixir.hexdocs.pm/Application.html
-  # for more information on OTP Applications
-  @moduledoc false
+  @moduledoc """
+  The Pubky Rooms supervision tree (see docs/notes/rooms-app-design.md).
+  """
 
   use Application
 
   @impl true
   def start(_type, _args) do
+    PubkyRooms.Ids.init()
+
     children = [
       PubkyRoomsWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:pubky_rooms, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: PubkyRooms.PubSub},
+      {Task.Supervisor, name: PubkyRooms.TaskSupervisor},
+      PubkyRooms.RateLimit,
+      PubkyRooms.Events.Cursors,
+      PubkyRooms.Auth.SessionStore,
       PubkyRoomsWeb.Presence,
       # Start to serve requests, typically the last entry
       PubkyRoomsWeb.Endpoint

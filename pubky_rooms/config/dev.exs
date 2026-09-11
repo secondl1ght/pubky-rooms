@@ -42,8 +42,12 @@ config :pubky_rooms, PubkyRoomsWeb.Endpoint,
 # configured to run both http and https servers on
 # different ports.
 
-# Enable dev routes for dashboard and mailbox
+# Enable dev routes for the dashboard and the UI styleguide
 config :pubky_rooms, dev_routes: true
+
+# Develop against the local pubky-docker testnet and a local Ring Simulator
+config :pubky, network: :testnet, client_id: "localhost:4000"
+config :pubky_rooms, simulator_url: "http://localhost:5173"
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"

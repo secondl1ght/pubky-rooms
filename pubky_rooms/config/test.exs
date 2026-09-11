@@ -10,6 +10,14 @@ config :pubky_rooms, PubkyRoomsWeb.Endpoint,
 # Print only warnings and errors during test
 config :logger, level: :warning
 
+config :pubky, network: :testnet, client_id: "rooms.test"
+
+config :pubky_rooms,
+  data_dir: "tmp/test-data",
+  pubky_backend: PubkyRooms.Pubky.Fake,
+  confirm_timeout_ms: 200,
+  room_idle_timeout_ms: 100
+
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
 

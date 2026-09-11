@@ -8,7 +8,26 @@
 import Config
 
 config :pubky_rooms,
-  generators: [timestamp_type: :utc_datetime]
+  generators: [timestamp_type: :utc_datetime],
+  # Pubky Rooms application settings (see docs/notes/rooms-app-design.md)
+  app_id: "pubky-rooms",
+  data_dir: "priv/data",
+  bootstrap_per_member: 50,
+  page_size: 50,
+  max_members_subscribed: 500,
+  room_idle_timeout_ms: 600_000,
+  confirm_timeout_ms: 15_000,
+  profile_ttl_ms: 900_000,
+  session_max_idle_days: 30,
+  pubky_backend: PubkyRooms.Pubky.Live,
+  nexus_url: nil,
+  nexus_cdn_url: nil,
+  simulator_url: nil
+
+# Pubky client defaults; config/runtime.exs overrides these from the environment.
+config :pubky,
+  network: :mainnet,
+  client_id: "rooms.pubky.app"
 
 # Configure the endpoint
 config :pubky_rooms, PubkyRoomsWeb.Endpoint,

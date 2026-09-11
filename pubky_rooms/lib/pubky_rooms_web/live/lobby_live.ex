@@ -8,7 +8,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, page_title: "Rooms", current_user: nil)}
+    {:ok, assign(socket, page_title: "Rooms")}
   end
 
   @impl true

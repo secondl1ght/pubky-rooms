@@ -20,6 +20,40 @@ if System.get_env("PHX_SERVER") do
   config :pubky_rooms, PubkyRoomsWeb.Endpoint, server: true
 end
 
+# ── Pubky network ────────────────────────────────────────────────────────────
+# PUBKY_NETWORK=mainnet|testnet selects the relay/homeserver preset; the other
+# variables override individual preset values (see Pubky.Config).
+network =
+  case System.get_env("PUBKY_NETWORK") do
+    nil -> if config_env() == :prod, do: :mainnet, else: :testnet
+    "mainnet" -> :mainnet
+    "testnet" -> :testnet
+    other -> raise "PUBKY_NETWORK must be mainnet or testnet, got: #{other}"
+  end
+
+pubky_overrides =
+  [
+    network: network,
+    client_id: System.get_env("PUBKY_CLIENT_ID"),
+    pkarr_relays:
+      System.get_env("PUBKY_PKARR_RELAYS") &&
+        String.split(System.get_env("PUBKY_PKARR_RELAYS"), ","),
+    http_relay: System.get_env("PUBKY_HTTP_RELAY"),
+    homeserver_overrides:
+      System.get_env("PUBKY_TESTNET_HOMESERVER_URL") &&
+        %{Pubky.Config.testnet_homeserver() => System.get_env("PUBKY_TESTNET_HOMESERVER_URL")}
+  ]
+  |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+
+config :pubky, pubky_overrides
+
+config :pubky_rooms,
+  data_dir: System.get_env("PUBKY_DATA_DIR") || Application.get_env(:pubky_rooms, :data_dir),
+  nexus_url: System.get_env("NEXUS_URL"),
+  nexus_cdn_url: System.get_env("NEXUS_CDN_URL"),
+  simulator_url:
+    System.get_env("PUBKY_SIMULATOR_URL") || Application.get_env(:pubky_rooms, :simulator_url)
+
 config :pubky_rooms, PubkyRoomsWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
@@ -56,6 +90,8 @@ if config_env() == :prod do
   host = System.get_env("PHX_HOST") || "example.com"
 
   config :pubky_rooms, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
+
+  config :pubky, client_id: System.get_env("PUBKY_CLIENT_ID") || host
 
   config :pubky_rooms, PubkyRoomsWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
