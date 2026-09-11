@@ -4,10 +4,120 @@ defmodule PubkyRooms.Rooms do
 
   Every write goes to the acting user's homeserver through `PubkyRooms.Pubky`;
   the app's own state (directory, room caches) is updated from the resulting
-  homeserver events, exactly as it would be for any other client.
+  homeserver events, exactly as it would be for any other client. Writes are
+  rate-limited per login session.
   """
+
+  alias PubkyRooms.{Events, Pubky, RateLimit}
+  alias PubkyRooms.Events.Subscriptions
+  alias PubkyRooms.Rooms.{Directory, Membership, Message, Paths, Room, RoomServer}
+
+  @type sid :: String.t()
 
   @doc "Called when a signed-in user's LiveView connects: keeps their events flowing."
   @spec on_user_connected(String.t()) :: :ok
-  def on_user_connected(_pubky), do: :ok
+  def on_user_connected(pubky) do
+    Subscriptions.acquire([pubky], self())
+    Events.subscribe_user(pubky)
+    Directory.sync_user(pubky)
+  end
+
+  @doc """
+  Creates a room on the creator's homeserver (room definition + the creator's
+  own join marker) and records it locally.
+  """
+  @spec create_room(sid(), String.t(), map()) ::
+          {:ok, Room.t()} | {:error, keyword() | Pubky.reason()}
+  def create_room(sid, creator, attrs) do
+    with {:ok, room} <- Room.new(creator, attrs),
+         :ok <- limit({:rooms, sid}, 5, :timer.hours(1)),
+         ref = Room.ref(room),
+         :ok <- Pubky.put(sid, Paths.room(room.id), Room.encode(room)),
+         :ok <- Pubky.put(sid, Paths.member(ref), Membership.encode(ref)) do
+      Directory.put_room(room)
+      {:ok, room}
+    end
+  end
+
+  @doc "Joins a room by writing a join marker on the user's homeserver."
+  @spec join(sid(), String.t(), Paths.room_ref()) :: :ok | {:error, Pubky.reason()}
+  def join(sid, user, ref) do
+    with :ok <- limit({:joins, sid}, 20, :timer.hours(1)),
+         :ok <- Pubky.put(sid, Paths.member(ref), Membership.encode(ref)) do
+      Directory.add_member(ref, user)
+    end
+  end
+
+  @doc "Leaves a room by deleting the join marker."
+  @spec leave(sid(), String.t(), Paths.room_ref()) :: :ok | {:error, Pubky.reason()}
+  def leave(sid, user, ref) do
+    with :ok <- Pubky.delete(sid, Paths.member(ref)) do
+      Directory.remove_member(ref, user)
+    end
+  end
+
+  @doc "Whether the user may post in the room (creator or known member)."
+  @spec member?(Paths.room_ref(), String.t() | nil) :: boolean()
+  def member?(_ref, nil), do: false
+  def member?(ref, user), do: Directory.member?(ref, user)
+
+  @doc """
+  Validates and registers a new message as pending with the room server, so
+  the homeserver's PUT event can confirm it by content hash. Returns the
+  message to render optimistically; then call `publish_message/2`.
+  """
+  @spec prepare_message(sid(), String.t(), Paths.room_ref(), String.t(), keyword()) ::
+          {:ok, Message.t()} | {:error, String.t() | {:rate_limited, pos_integer()}}
+  def prepare_message(sid, author, ref, content, opts \\ []) do
+    with :ok <- limit({:messages, sid}, 5, 5_000),
+         {:ok, msg} <- Message.new(author, ref, content, opts) do
+      :ok = RoomServer.register_pending(ref, msg, RoomServer.content_hash(Message.encode(msg)))
+      {:ok, msg}
+    end
+  end
+
+  @doc "Writes a prepared message to the author's homeserver."
+  @spec publish_message(sid(), Message.t()) :: :ok | {:error, Pubky.reason()}
+  def publish_message(sid, %Message{} = msg) do
+    case Pubky.put(sid, Message.path(msg), Message.encode(msg)) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        RoomServer.cancel_pending(msg.room_ref, msg.key)
+        {:error, reason}
+    end
+  end
+
+  @doc "Retries a failed message with the same id and content."
+  @spec retry_message(sid(), Message.t()) :: {:ok, Message.t()} | {:error, Pubky.reason()}
+  def retry_message(sid, %Message{} = msg) do
+    msg = %{msg | state: :pending, fail_reason: nil}
+
+    :ok =
+      RoomServer.register_pending(msg.room_ref, msg, RoomServer.content_hash(Message.encode(msg)))
+
+    case publish_message(sid, msg) do
+      :ok -> {:ok, msg}
+      error -> error
+    end
+  end
+
+  @doc "A human explanation of a homeserver write failure."
+  @spec explain(term()) :: String.t()
+  def explain(:quota), do: "Your homeserver is out of storage."
+  def explain(:too_large), do: "That is too large for your homeserver."
+  def explain({:rate_limited, ms}), do: "Slow down — try again in #{max(div(ms, 1000), 1)} s."
+  def explain(:unauthorized), do: "Your session has expired. Please sign in again."
+  def explain(:unreachable), do: "Your homeserver could not be reached."
+  def explain({:http, status}), do: "Your homeserver answered with status #{status}."
+  def explain(reason) when is_binary(reason), do: reason
+  def explain(reason), do: "Something went wrong (#{inspect(reason)})."
+
+  defp limit(key, count, window) do
+    case RateLimit.check(key, count, window) do
+      :ok -> :ok
+      {:error, {:rate_limited, ms}} -> {:error, {:rate_limited, ms}}
+    end
+  end
 end

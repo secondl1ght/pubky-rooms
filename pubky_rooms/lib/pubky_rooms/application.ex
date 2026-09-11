@@ -17,6 +17,10 @@ defmodule PubkyRooms.Application do
       PubkyRooms.RateLimit,
       PubkyRooms.Events.Cursors,
       PubkyRooms.Auth.SessionStore,
+      PubkyRooms.Events.Subscriptions,
+      PubkyRooms.Rooms.Directory,
+      {Registry, keys: :unique, name: PubkyRooms.Rooms.Registry},
+      {DynamicSupervisor, name: PubkyRooms.Rooms.RoomSupervisor, strategy: :one_for_one},
       PubkyRoomsWeb.Presence,
       # Start to serve requests, typically the last entry
       PubkyRoomsWeb.Endpoint
