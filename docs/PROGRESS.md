@@ -17,10 +17,11 @@ Legend: [ ] todo · [~] in progress · [x] done. See `docs/PLAN.md` for the full
 - [x] Verified on mainnet (`mix test --only mainnet`): `ihaqcth…` → `8um71…` → `https://homeserver.pubky.app`; production homeserver has no `/info` and no path-addressed storage yet, legacy `pubky-host` reads work
 
 ## M2 — pubky_ex auth + storage
-- [ ] `Pubky.Crypto.Blake3` (official vectors), `Pubky.Crypto.Secretbox` (libsodium KAT)
-- [ ] `Pubky.Auth.{Jws, Grant, Pop, Capability, Exchange, Credential, LocalSigner}`, `Pubky.Session`
-- [ ] `Pubky.Storage` (+ `Addressing`, `Pubky.Resource`)
-- [ ] Testnet verification (signup, signin, put/get/list/delete, refresh, signout)
+- [x] `Pubky.Crypto.Blake3` (all 35 official vectors incl. extended output), `Pubky.Crypto.Secretbox` (libsodium KAT)
+- [x] `Pubky.Auth.{Jws, Grant, Pop, Capability, Exchange, Credential, LocalSigner}`, `Pubky.Session` (immutable; `call/3` refreshes on 401)
+- [x] `Pubky.Storage` (+ `Addressing` path-addressed vs legacy `pubky-host`, `Pubky.Resource`, `public_url/3`)
+- [x] `Pubky.Test.FakeHomeserver` (Bypass-backed in-memory homeserver + PKARR relay that verifies grants/PoPs) — 51 unit tests green, credo strict clean
+- [ ] Testnet verification: `test/integration/testnet_test.exs` written; run `PUBKY_TESTNET=1 mix test --include testnet` once pubky-docker is up
 
 ## M3 — pubky_ex grant flow + events
 - [ ] `Pubky.Auth.{DeepLink, RelayChannel, GrantFlow, GrantFlow.Poller}` + `mix pubky.auth_demo`
@@ -58,7 +59,7 @@ Legend: [ ] todo · [~] in progress · [x] done. See `docs/PLAN.md` for the full
 ---
 
 ## Handoff note (update every session)
-**Last session:** planning + repo scaffold (2026-09-10).
-**State:** no Elixir code yet. Toolchain not installed on the machine (needs the user's sudo). Plan approved; all research distilled into `docs/notes/`.
-**Next:** once `elixir`/`docker` exist → M0 remaining items → M1 starting with z-base32, DNS parser, PKARR fixtures (`docs/fixtures/pkarr`, move into `pubky_ex/test/fixtures/pkarr`).
-**Gotchas discovered so far:** `pkarr.pubky.app` relay is limited to 10 req/min (use `pkarr.pubky.org` first, never race relays); testnet homeserver advertises ICANN target `localhost` with SvcParam key 65280 = plain-HTTP port 6286; resume cursor on `/events-stream` is exclusive; PoP `iat` must be within ±180 s of the homeserver clock; Nexus universal tags are keyed by the app namespace of the *tag file path*, not of the tagged URI.
+**Last session:** 2026-09-10/11 — M1 done and verified on mainnet; M2 done at unit level (51 tests, credo clean); M3 started.
+**State:** `pubky_ex/` has keys, PKARR/DNS, resolver, crypto, grant auth primitives, sessions, storage. **Uncommitted, untested M3 drafts in the working tree:** `lib/pubky/auth/{deep_link,relay_channel,grant_flow}.ex` (compile clean; `grant_flow/poller.ex` still to be written — the dir was missing). User asked to pause before M3.
+**Next:** (1) user starts the testnet from a terminal (`cd ~/CODE/pubky-docker && newgrp docker` then `docker compose up homeserver -d`), then run `cd pubky_ex && PUBKY_TESTNET=1 mix test --include testnet` to verify M2 end to end; (2) resume M3: write `grant_flow/poller.ex`, unit tests for DeepLink/RelayChannel/GrantFlow (Bypass relay + fake Ring that seals a grant), then SSE parser + `Pubky.Events.Stream`, then `mix pubky.auth_demo` against the Ring Simulator.
+**Gotchas discovered so far:** mainnet `homeserver.pubky.app` has no `/info` and no `/storage/` routes yet (legacy `pubky-host` addressing only; SSE works); the Claude shell lacks the docker group until a fresh login (sandbox has no `newgrp`/`sg`); in Bash tool calls `cd X && cmd &` backgrounds the whole chain — use absolute paths; `pkarr.pubky.app` relay is limited to 10 req/min (use `pkarr.pubky.org` first, never race relays); testnet homeserver advertises ICANN target `localhost` with SvcParam key 65280 = plain-HTTP port 6286; resume cursor on `/events-stream` is exclusive; PoP `iat` must be within ±180 s of the homeserver clock; Nexus universal tags are keyed by the app namespace of the *tag file path*, not of the tagged URI.
