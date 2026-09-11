@@ -36,6 +36,7 @@ defmodule Pubky.MixProject do
       {:req, "~> 0.7.4"},
       {:kcl, "~> 1.5"},
       {:bypass, "~> 2.1", only: :test},
+      {:plug_cowboy, "~> 2.7", only: :test},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}

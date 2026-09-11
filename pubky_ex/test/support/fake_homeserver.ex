@@ -1,6 +1,6 @@
 defmodule Pubky.Test.FakeHomeserver do
   @moduledoc """
-  A minimal in-memory homeserver served through Bypass for unit tests.
+  A minimal in-memory homeserver served by a throwaway Cowboy listener for unit tests.
 
   Implements the grant auth endpoints (verifying grant and proof signatures the
   way a real homeserver does), `/info`, and the storage API in either
@@ -13,29 +13,65 @@ defmodule Pubky.Test.FakeHomeserver do
   alias Pubky.Crypto.Blake3
   alias Pubky.{Keypair, PublicKey}
 
-  defstruct [:bypass, :agent, :keypair, :z32, :base_url, path_addressed: true, token_ttl: 3600]
+  defstruct [
+    :ref,
+    :agent,
+    :keypair,
+    :z32,
+    :base_url,
+    path_addressed: true,
+    token_ttl: 3600,
+    drop_after: nil
+  ]
 
   @doc "Starts a fake homeserver. Options: `path_addressed: false` to emulate legacy servers, `token_ttl:` seconds."
   def start(opts \\ []) do
-    bypass = Bypass.open()
-
     {:ok, agent} =
-      Agent.start_link(fn -> %{users: MapSet.new(), tokens: %{}, files: %{}, packets: %{}} end)
+      Agent.start_link(fn ->
+        %{
+          users: MapSet.new(),
+          tokens: %{},
+          files: %{},
+          packets: %{},
+          events: [],
+          next_id: 1,
+          hs: nil
+        }
+      end)
 
+    ref = make_ref()
+    {:ok, _pid} = Plug.Cowboy.http(__MODULE__.Plug, agent, port: 0, ref: ref)
+    port = :ranch.get_port(ref)
     keypair = Keypair.generate()
 
     hs = %__MODULE__{
-      bypass: bypass,
+      ref: ref,
       agent: agent,
       keypair: keypair,
       z32: Keypair.public_z32(keypair),
-      base_url: "http://localhost:#{bypass.port}",
+      base_url: "http://localhost:#{port}",
       path_addressed: Keyword.get(opts, :path_addressed, true),
-      token_ttl: Keyword.get(opts, :token_ttl, 3600)
+      token_ttl: Keyword.get(opts, :token_ttl, 3600),
+      drop_after: Keyword.get(opts, :drop_after)
     }
 
-    Bypass.stub(bypass, :any, :any, &handle(&1, hs))
+    Agent.update(agent, &%{&1 | hs: hs})
+    ExUnit.Callbacks.on_exit(fn -> Plug.Cowboy.shutdown(ref) end)
     hs
+  end
+
+  defmodule Plug do
+    @moduledoc false
+    @behaviour Elixir.Plug
+
+    @impl true
+    def init(agent), do: agent
+
+    @impl true
+    def call(conn, agent) do
+      hs = Agent.get(agent, & &1.hs)
+      Pubky.Test.FakeHomeserver.handle(conn, hs)
+    end
   end
 
   @doc """
@@ -51,6 +87,25 @@ defmodule Pubky.Test.FakeHomeserver do
 
   def files(%__MODULE__{agent: agent}), do: Agent.get(agent, & &1.files)
   def packets(%__MODULE__{agent: agent}), do: Agent.get(agent, & &1.packets)
+  def events(%__MODULE__{agent: agent}), do: Agent.get(agent, & &1.events)
+
+  def requests(%__MODULE__{agent: agent}),
+    do: Agent.get(agent, &Map.get(&1, :stream_requests, []))
+
+  defp record_event(hs, type, owner, path, body) do
+    Agent.update(hs.agent, fn s ->
+      ev = %{
+        id: s.next_id,
+        type: type,
+        user: owner,
+        path: path,
+        content_hash: body && Blake3.hash(body)
+      }
+
+      %{s | events: s.events ++ [ev], next_id: s.next_id + 1}
+    end)
+  end
+
   def users(%__MODULE__{agent: agent}), do: Agent.get(agent, & &1.users)
   def tokens(%__MODULE__{agent: agent}), do: Agent.get(agent, & &1.tokens)
 
@@ -63,7 +118,8 @@ defmodule Pubky.Test.FakeHomeserver do
 
   # ── routing ────────────────────────────────────────────────────────────────
 
-  defp handle(conn, hs) do
+  @doc false
+  def handle(conn, hs) do
     case {conn.method, conn.request_path} do
       {"PUT", "/pkarr/" <> z32} ->
         {:ok, body, conn} = read_body(conn)
@@ -87,6 +143,9 @@ defmodule Pubky.Test.FakeHomeserver do
           :error ->
             resp(conn, 404, "")
         end
+
+      {"GET", "/events-stream"} ->
+        events_stream(conn, hs)
 
       {"GET", "/info"} ->
         features = if hs.path_addressed, do: ["path-addressed-storage"], else: []
@@ -264,11 +323,13 @@ defmodule Pubky.Test.FakeHomeserver do
             %{s | files: Map.put(s.files, {owner, path}, %{body: body, content_type: ct})}
           end)
 
+          record_event(hs, "PUT", owner, path, body)
           resp(conn, 201, "")
 
         "DELETE" ->
           if Map.has_key?(files(hs), {owner, path}) do
             Agent.update(hs.agent, fn s -> %{s | files: Map.delete(s.files, {owner, path})} end)
+            record_event(hs, "DEL", owner, path, nil)
             resp(conn, 204, "")
           else
             resp(conn, 404, "not found")
@@ -314,6 +375,127 @@ defmodule Pubky.Test.FakeHomeserver do
       {:ok, grant, client_pk}
     else
       _ -> {:error, 401, "invalid grant or proof"}
+    end
+  end
+
+  # ── events ─────────────────────────────────────────────────────────────────
+
+  defp events_stream(conn, hs) do
+    query = URI.query_decoder(conn.query_string) |> Enum.to_list()
+    Agent.update(hs.agent, fn s -> Map.update(s, :stream_requests, [query], &(&1 ++ [query])) end)
+
+    users =
+      for {"user", v} <- query, into: %{} do
+        case String.split(v, ":") do
+          [z32, cursor] -> {z32, String.to_integer(cursor)}
+          [z32] -> {z32, 0}
+        end
+      end
+
+    paths = for {"path", p} <- query, do: p
+    live? = List.keyfind(query, "live", 0) == {"live", "true"}
+    reverse? = List.keyfind(query, "reverse", 0) == {"reverse", "true"}
+
+    limit =
+      case List.keyfind(query, "limit", 0),
+        do: (
+          {"limit", l} -> String.to_integer(l)
+          _ -> nil
+        )
+
+    cond do
+      map_size(users) == 0 or map_size(users) > 50 ->
+        resp(conn, 400, "user param required (1..50)")
+
+      live? and reverse? ->
+        resp(conn, 400, "live and reverse are exclusive")
+
+      true ->
+        stream_events(conn, hs, users, paths, live?, reverse?, limit)
+    end
+  end
+
+  defp stream_events(conn, hs, users, paths, live?, reverse?, limit) do
+    conn = conn |> put_resp_header("content-type", "text/event-stream") |> send_chunked(200)
+    pending = matching_events(hs, users, paths, reverse?)
+    pending = if limit, do: Enum.take(pending, limit), else: pending
+    {conn, users, sent} = send_events(conn, pending, users, 0, hs)
+
+    cond do
+      dropped?(hs, sent) -> conn
+      live? -> live_loop(conn, hs, users, paths, sent, limit, 0)
+      true -> conn
+    end
+  end
+
+  defp matching_events(hs, users, paths, reverse?) do
+    events(hs)
+    |> Enum.filter(fn ev ->
+      case Map.fetch(users, ev.user) do
+        {:ok, cursor} -> ev.id > cursor and path_match?(paths, ev.path)
+        :error -> false
+      end
+    end)
+    |> then(&if(reverse?, do: Enum.reverse(&1), else: &1))
+  end
+
+  defp path_match?([], path), do: String.starts_with?(path, "/pub/")
+
+  defp path_match?(paths, path) do
+    Enum.any?(paths, fn
+      p when binary_part(p, byte_size(p) - 1, 1) == "/" -> String.starts_with?(path, p)
+      p -> p == path
+    end)
+  end
+
+  defp send_events(conn, [], users, sent, _hs), do: {conn, users, sent}
+
+  defp send_events(conn, [ev | rest], users, sent, hs) do
+    hash_line =
+      if ev.content_hash, do: "data: content_hash: #{Base.encode64(ev.content_hash)}\n", else: ""
+
+    frame =
+      "event: #{ev.type}\ndata: pubky://#{ev.user}#{ev.path}\ndata: cursor: #{ev.id}\n#{hash_line}\n"
+
+    case chunk(conn, frame) do
+      {:ok, conn} ->
+        users = Map.put(users, ev.user, ev.id)
+
+        if dropped?(hs, sent + 1),
+          do: {conn, users, sent + 1},
+          else: send_events(conn, rest, users, sent + 1, hs)
+
+      {:error, _} ->
+        {conn, users, sent}
+    end
+  end
+
+  defp dropped?(%{drop_after: nil}, _sent), do: false
+  defp dropped?(%{drop_after: n}, sent), do: sent >= n
+
+  defp live_loop(conn, hs, users, paths, sent, limit, ticks) do
+    cond do
+      limit && sent >= limit ->
+        conn
+
+      true ->
+        pending = matching_events(hs, users, paths, false)
+        {conn, users, sent2} = send_events(conn, pending, users, sent, hs)
+
+        cond do
+          dropped?(hs, sent2) ->
+            conn
+
+          rem(ticks, 20) == 19 ->
+            case chunk(conn, ": keep-alive\n\n") do
+              {:ok, conn} -> live_loop(conn, hs, users, paths, sent2, limit, ticks + 1)
+              {:error, _closed} -> conn
+            end
+
+          true ->
+            Process.sleep(25)
+            live_loop(conn, hs, users, paths, sent2, limit, ticks + 1)
+        end
     end
   end
 

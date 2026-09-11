@@ -1,36 +1,53 @@
 defmodule Pubky.Test.FakeRelay do
   @moduledoc """
   An in-memory HTTP relay (`/inbox/{id}` store-and-forward with ACK) served
-  through Bypass. Long-polls wait up to `poll_timeout_ms` (default 200 ms) and
+  by a throwaway Cowboy listener. Long-polls wait up to `poll_timeout_ms` (default 200 ms) and
   answer 408 when nothing arrives, like the real relay.
   """
 
   import Plug.Conn
 
-  defstruct [:bypass, :agent, :base_url, poll_timeout_ms: 200]
+  defstruct [:ref, :agent, :base_url, poll_timeout_ms: 200]
 
   def start(opts \\ []) do
-    bypass = Bypass.open()
-    {:ok, agent} = Agent.start_link(fn -> %{} end)
+    {:ok, agent} = Agent.start_link(fn -> %{messages: %{}, relay: nil} end)
+    ref = make_ref()
+    {:ok, _} = Plug.Cowboy.http(__MODULE__.Plug, agent, port: 0, ref: ref)
 
     relay = %__MODULE__{
-      bypass: bypass,
+      ref: ref,
       agent: agent,
-      base_url: "http://localhost:#{bypass.port}/inbox/",
+      base_url: "http://localhost:#{:ranch.get_port(ref)}/inbox/",
       poll_timeout_ms: Keyword.get(opts, :poll_timeout_ms, 200)
     }
 
-    Bypass.stub(bypass, :any, :any, &handle(&1, relay))
+    Agent.update(agent, &%{&1 | relay: relay})
+    ExUnit.Callbacks.on_exit(fn -> Plug.Cowboy.shutdown(ref) end)
     relay
   end
 
-  def messages(%__MODULE__{agent: agent}), do: Agent.get(agent, & &1)
+  defmodule Plug do
+    @moduledoc false
+    @behaviour Elixir.Plug
 
-  defp handle(%{request_path: "/inbox/" <> id} = conn, relay) do
+    @impl true
+    def init(agent), do: agent
+
+    @impl true
+    def call(conn, agent) do
+      relay = Agent.get(agent, & &1.relay)
+      Pubky.Test.FakeRelay.handle(conn, relay)
+    end
+  end
+
+  def messages(%__MODULE__{agent: agent}), do: Agent.get(agent, & &1.messages)
+
+  @doc false
+  def handle(%{request_path: "/inbox/" <> id} = conn, relay) do
     case {conn.method, String.split(id, "/")} do
       {"POST", [id]} ->
         {:ok, body, conn} = read_body(conn)
-        Agent.update(relay.agent, &Map.put(&1, id, body))
+        Agent.update(relay.agent, &%{&1 | messages: Map.put(&1.messages, id, body)})
         resp(conn, 200, "")
 
       {"GET", [id]} ->
@@ -43,7 +60,7 @@ defmodule Pubky.Test.FakeRelay do
         end
 
       {"DELETE", [id]} ->
-        Agent.update(relay.agent, &Map.delete(&1, id))
+        Agent.update(relay.agent, &%{&1 | messages: Map.delete(&1.messages, id)})
         resp(conn, 200, "")
 
       _ ->
@@ -51,10 +68,10 @@ defmodule Pubky.Test.FakeRelay do
     end
   end
 
-  defp handle(conn, _relay), do: resp(conn, 404, "")
+  def handle(conn, _relay), do: resp(conn, 404, "")
 
   defp wait(relay, id, remaining) do
-    case Agent.get(relay.agent, &Map.get(&1, id)) do
+    case Agent.get(relay.agent, &Map.get(&1.messages, id)) do
       nil when remaining > 0 ->
         Process.sleep(20)
         wait(relay, id, remaining - 20)

@@ -64,6 +64,72 @@ defmodule Pubky.Integration.TestnetTest do
     assert {:error, :grant_revoked} = Session.refresh(refreshed, config)
   end
 
+  test "live event streams deliver writes, resubscribe on membership changes, and expose cursors",
+       %{config: config, homeserver: hs} do
+    alice = Keypair.generate()
+    bob = Keypair.generate()
+    :ok = LocalSigner.signup(alice, hs, [], config)
+    :ok = LocalSigner.signup(bob, hs, [], config)
+    {:ok, alice_s} = LocalSigner.signin(alice, hs, [], config)
+    {:ok, bob_s} = LocalSigner.signin(bob, hs, [], config)
+
+    assert Pubky.Events.latest_cursor(hs, alice_s.user, "/pub/pubky-ex.test/", config) ==
+             {:ok, nil}
+
+    {:ok, pid} =
+      Pubky.Events.start_stream(
+        homeserver: hs,
+        name: make_ref(),
+        users: [{alice_s.user, nil}],
+        paths: ["/pub/pubky-ex.test/"],
+        subscriber: self(),
+        config: config
+      )
+
+    assert_receive {:pubky_stream, _, :connected}, 5_000
+
+    :ok =
+      Storage.put(alice_s, "/pub/pubky-ex.test/ev1", "one", [content_type: "text/plain"], config)
+
+    assert_receive {:pubky_event,
+                    %Pubky.Events.Event{
+                      type: :put,
+                      path: "/pub/pubky-ex.test/ev1",
+                      content_hash: h,
+                      cursor: c1
+                    }},
+                   5_000
+
+    assert h == Blake3.hash("one")
+
+    assert Pubky.Events.latest_cursor(hs, alice_s.user, "/pub/pubky-ex.test/", config) ==
+             {:ok, c1}
+
+    :ok = Storage.delete(alice_s, "/pub/pubky-ex.test/ev1", config)
+
+    assert_receive {:pubky_event,
+                    %Pubky.Events.Event{type: :del, path: "/pub/pubky-ex.test/ev1", cursor: c2}},
+                   5_000
+
+    assert c2 > c1
+
+    :ok = Pubky.Events.Stream.add_users(pid, [{bob_s.user, nil}])
+    assert_receive {:pubky_stream, _, :connected}, 5_000
+
+    :ok =
+      Storage.put(bob_s, "/pub/pubky-ex.test/from-bob", "b", [content_type: "text/plain"], config)
+
+    assert_receive {:pubky_event,
+                    %Pubky.Events.Event{type: :put, path: "/pub/pubky-ex.test/from-bob"}},
+                   5_000
+
+    refute_receive {:pubky_event, %Pubky.Events.Event{cursor: ^c1}}, 200
+
+    assert %{} = cursors = Pubky.Events.Stream.cursors(pid)
+    assert cursors[alice_s.user] == c2
+    Pubky.Events.Stream.stop(pid)
+  end
+
   test "the resolver does not need the override to find the testnet homeserver", %{homeserver: hs} do
     config = Config.testnet(homeserver_overrides: %{})
     Resolver.invalidate(hs)
