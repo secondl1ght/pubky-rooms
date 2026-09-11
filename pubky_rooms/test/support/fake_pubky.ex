@@ -43,6 +43,10 @@ defmodule PubkyRooms.Pubky.Fake do
   def fail_next(path, reason),
     do: Agent.update(__MODULE__, &put_in(&1, [:failures, path], reason))
 
+  @doc "Makes the next directory listing for `user` fail with `reason`."
+  def fail_list(user, reason),
+    do: Agent.update(__MODULE__, &put_in(&1, [:failures, {:list, user}], reason))
+
   @doc "Makes the next write under `prefix` fail with `reason` (when the exact path is not known)."
   def fail_next_under(prefix, reason),
     do: Agent.update(__MODULE__, &put_in(&1, [:failures, {:prefix, prefix}], reason))
@@ -64,6 +68,13 @@ defmodule PubkyRooms.Pubky.Fake do
 
   @impl true
   def list(user, dir, opts) do
+    case maybe_fail({:list, user}) do
+      :ok -> do_list(user, dir, opts)
+      error -> error
+    end
+  end
+
+  defp do_list(user, dir, opts) do
     limit = Keyword.get(opts, :limit, 100)
     reverse = Keyword.get(opts, :reverse, false)
     shallow = Keyword.get(opts, :shallow, false)
@@ -171,7 +182,7 @@ defmodule PubkyRooms.Pubky.Fake do
       key =
         Enum.find(Map.keys(s.failures), fn
           ^path -> true
-          {:prefix, prefix} -> String.starts_with?(path, prefix)
+          {:prefix, prefix} when is_binary(path) -> String.starts_with?(path, prefix)
           _ -> false
         end)
 

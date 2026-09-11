@@ -39,6 +39,28 @@ defmodule PubkyRooms.Auth.SessionStoreTest do
     SessionStore.delete(sid)
   end
 
+  test "sessions are dropped shortly after the last attached process leaves" do
+    user = Fixtures.z32("attach")
+    sid = SessionStore.put(Fixtures.session(user))
+
+    {:ok, pid} = Agent.start_link(fn -> nil end)
+    SessionStore.attach(sid, pid)
+    Process.sleep(20)
+    # the sweep never removes an attached session, however old
+    [{^sid, entry}] = :ets.lookup(:pubky_sessions, sid)
+    :ets.insert(:pubky_sessions, {sid, %{entry | last_used: -1_000_000_000_000}})
+    send(SessionStore, :sweep)
+    Process.sleep(20)
+    assert SessionStore.user_of(sid) == user
+
+    # after the last process leaves, the entry expires (60 s grace in production; forced here)
+    Agent.stop(pid)
+    Process.sleep(20)
+    send(SessionStore, {:expire, sid})
+    Process.sleep(20)
+    assert SessionStore.user_of(sid) == nil
+  end
+
   test "malformed cookies are rejected" do
     assert SessionStore.ensure(%{}) == nil
     assert SessionStore.ensure(%{"sid" => "x", "pubky" => "y", "cred" => "garbage"}) == nil

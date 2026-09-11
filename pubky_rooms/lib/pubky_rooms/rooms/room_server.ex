@@ -17,7 +17,10 @@ defmodule PubkyRooms.Rooms.RoomServer do
        room definition changes update or close the room.
     3. **Idle** — with no viewers attached for `room_idle_timeout_ms` the room
        releases its subscriptions and stops (sooner when more than
-       `max_warm_rooms` rooms are alive); the next visit bootstraps again.
+       `max_idle_rooms` rooms are alive); the next visit bootstraps again.
+    4. **Unreachable history** — members whose folder could not be listed are
+       reported as `{:unreachable, [z32]}` (and in the snapshot) and retried
+       every minute while viewers are attached, or on `retry_history/1`.
 
   Messages live in a public ETS `ordered_set` keyed by `{msg_id, author}`,
   so viewers read history directly. Changes are broadcast on the room topic as
@@ -34,6 +37,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
 
   @sweep_every 5_000
   @stop_after_error 30_000
+  @retry_history_every 60_000
 
   @type ref :: Paths.room_ref()
   @type status :: :bootstrapping | :ready | :not_found | :closed | {:error, term()}
@@ -87,6 +91,10 @@ defmodule PubkyRooms.Rooms.RoomServer do
   def register_pending(ref, %Message{} = msg, hash),
     do: GenServer.call(via(ref), {:register_pending, msg, hash})
 
+  @doc "Retries loading history for members whose homeserver could not be reached."
+  @spec retry_history(ref()) :: :ok
+  def retry_history(ref), do: GenServer.cast(via(ref), :retry_history)
+
   @doc "Forgets a pending message whose write failed."
   @spec cancel_pending(ref(), Message.key()) :: :ok
   def cancel_pending(ref, key), do: GenServer.call(via(ref), {:cancel_pending, key})
@@ -108,7 +116,9 @@ defmodule PubkyRooms.Rooms.RoomServer do
       members: MapSet.new([creator]),
       pending: %{},
       viewers: %{},
-      idle_timer: nil
+      idle_timer: nil,
+      unreachable: MapSet.new(),
+      retry_timer: nil
     }
 
     {:ok, state, {:continue, :bootstrap}}
@@ -174,6 +184,9 @@ defmodule PubkyRooms.Rooms.RoomServer do
   end
 
   @impl true
+  def handle_cast(:retry_history, state), do: {:noreply, retry_unreachable(state)}
+
+  @impl true
   def handle_info({:pubky_event, %{user: user, path: path, type: type} = ev}, state) do
     state =
       case Paths.parse(path) do
@@ -213,6 +226,25 @@ defmodule PubkyRooms.Rooms.RoomServer do
 
   def handle_info({:fetched, key, result}, state) do
     {:noreply, apply_fetch(state, key, result)}
+  end
+
+  def handle_info({:backfilled, members, {msgs, failed}}, state) do
+    state = Enum.reduce(msgs, state, fn msg, acc -> upsert(acc, msg) end)
+
+    unreachable =
+      state.unreachable
+      |> MapSet.difference(MapSet.new(members))
+      |> MapSet.union(MapSet.new(failed))
+
+    {:noreply, set_unreachable(state, unreachable)}
+  end
+
+  def handle_info(:retry_history, state) do
+    state = %{state | retry_timer: nil}
+
+    if map_size(state.viewers) > 0,
+      do: {:noreply, retry_unreachable(state)},
+      else: {:noreply, state}
   end
 
   def handle_info(:sweep_pending, state) do
@@ -366,49 +398,82 @@ defmodule PubkyRooms.Rooms.RoomServer do
 
   # Bootstrap: fetch every member's newest messages before announcing :ready.
   defp backfill_sync(state, members) do
-    members
-    |> fetch_history(state.ref)
-    |> Enum.reduce(state, fn msg, acc -> upsert(acc, msg) end)
+    {msgs, failed} = fetch_history(members, state.ref)
+    state = Enum.reduce(msgs, state, fn msg, acc -> upsert(acc, msg) end)
+    set_unreachable(state, MapSet.new(failed))
   end
 
-  # Joins: fetch in the background and feed messages through the normal path.
+  # Joins and retries: fetch in the background; the result comes back as `{:backfilled, …}`.
   defp backfill_async(ref, members) do
     server = self()
 
     Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn ->
-      for msg <- fetch_history(members, ref),
-          do: send(server, {:fetched, msg.key, {:backfill, {:ok, msg}}})
+      send(server, {:backfilled, members, fetch_history(members, ref)})
     end)
   end
 
+  defp retry_unreachable(%{unreachable: unreachable} = state) do
+    if MapSet.size(unreachable) > 0, do: backfill_async(state.ref, MapSet.to_list(unreachable))
+    state
+  end
+
+  defp set_unreachable(state, unreachable) do
+    state =
+      if MapSet.equal?(unreachable, state.unreachable) do
+        state
+      else
+        broadcast(state, {:unreachable, MapSet.to_list(unreachable)})
+        %{state | unreachable: unreachable}
+      end
+
+    schedule_retry(state)
+  end
+
+  defp schedule_retry(%{unreachable: unreachable, retry_timer: nil} = state) do
+    if MapSet.size(unreachable) > 0,
+      do: %{state | retry_timer: Process.send_after(self(), :retry_history, @retry_history_every)},
+      else: state
+  end
+
+  defp schedule_retry(state), do: state
+
   # Lists every member's folder (one request each), merges the entries by
   # message id (time-ordered), and fetches only the newest `bootstrap_messages`.
+  # Returns `{messages, members_whose_listing_failed}`.
   defp fetch_history(members, ref) do
     per_member = config(:bootstrap_per_member, 50)
     total = config(:bootstrap_messages, 100)
     concurrency = config(:fetch_concurrency, 16)
 
-    members
-    |> Task.async_stream(&list_recent(ref, &1, per_member),
-      max_concurrency: concurrency,
-      timeout: 30_000,
-      on_timeout: :kill_task
-    )
-    |> Enum.flat_map(fn
-      {:ok, entries} -> entries
-      {:exit, _} -> []
-    end)
-    |> Enum.sort_by(fn {msg_id, _member, _path} -> msg_id end, :desc)
-    |> Enum.take(total)
-    |> Task.async_stream(fn {msg_id, member, path} -> load_message(ref, member, path, msg_id) end,
-      max_concurrency: concurrency,
-      timeout: 15_000,
-      on_timeout: :kill_task
-    )
-    |> Enum.flat_map(fn
-      {:ok, {:ok, msg}} -> [msg]
-      _ -> []
-    end)
+    {entries, failed} =
+      members
+      |> Task.async_stream(&list_recent(ref, &1, per_member),
+        max_concurrency: concurrency,
+        timeout: 30_000,
+        on_timeout: :kill_task
+      )
+      |> Enum.zip(members)
+      |> Enum.reduce({[], []}, fn
+        {{:ok, {:ok, entries}}, _member}, {acc, failed} -> {entries ++ acc, failed}
+        {_error_or_exit, member}, {acc, failed} -> {acc, [member | failed]}
+      end)
+
+    msgs =
+      entries
+      |> Enum.sort_by(fn {msg_id, _member, _path} -> msg_id end, :desc)
+      |> Enum.take(total)
+      |> Task.async_stream(
+        fn {msg_id, member, path} -> load_message(ref, member, path, msg_id) end,
+        max_concurrency: concurrency,
+        timeout: 15_000,
+        on_timeout: :kill_task
+      )
+      |> Enum.flat_map(fn
+        {:ok, {:ok, msg}} -> [msg]
+        _ -> []
+      end)
+
+    {msgs, failed}
   end
 
   defp list_recent(ref, member, limit) do
@@ -416,13 +481,16 @@ defmodule PubkyRooms.Rooms.RoomServer do
            Pubky.list(member, Paths.messages_dir(ref), reverse: true, limit: limit)
          end) do
       {:ok, %{entries: entries}} ->
-        for %{path: path} <- entries,
-            {:message, _, _, msg_id} <- [Paths.parse(path)],
-            do: {msg_id, member, path}
+        {:ok,
+         for(
+           %{path: path} <- entries,
+           {:message, _, _, msg_id} <- [Paths.parse(path)],
+           do: {msg_id, member, path}
+         )}
 
       {:error, reason} ->
-        Logger.debug("no history from #{String.slice(member, 0, 8)}…: #{inspect(reason)}")
-        []
+        Logger.info("history of #{String.slice(member, 0, 8)}… unavailable: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
@@ -458,7 +526,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
 
   defp too_many_warm_rooms? do
     %{active: active} = DynamicSupervisor.count_children(PubkyRooms.Rooms.RoomSupervisor)
-    active > config(:max_warm_rooms, 200)
+    active > config(:max_idle_rooms, 200)
   end
 
   defp cancel_idle_timer(%{idle_timer: nil} = state), do: state
@@ -473,7 +541,8 @@ defmodule PubkyRooms.Rooms.RoomServer do
       status: state.status,
       room: state.room,
       table: state.table,
-      members: MapSet.to_list(state.members)
+      members: MapSet.to_list(state.members),
+      unreachable: MapSet.to_list(state.unreachable)
     }
   end
 

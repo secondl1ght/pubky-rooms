@@ -14,10 +14,14 @@ defmodule PubkyRooms.Auth.SessionStore do
     * `lookup/1` hydrates a bearer token from the credential on first use;
       `call/2` runs authenticated requests and keeps refreshed tokens
 
-  Entries unused for `session_memory_ttl_ms` are dropped; the next request
-  from that browser re-seeds them. Nothing is persisted. The only way to
-  escalate is to compromise the running server while a user is connected, and
-  even then only within the Rooms namespace, until they revoke in Ring.
+  Connected LiveViews `attach/1` to their session; the entry is dropped 60 s
+  after the last one disconnects (the grace covers reloads and navigation).
+  Entries that never had a LiveView expire after `session_memory_ttl_ms`. The
+  next request from that browser re-seeds them from the cookie. Nothing is
+  persisted, and `%Pubky.Auth.Credential{}` redacts its secrets from `inspect`,
+  so they cannot leak into logs. The only way to escalate is to compromise the
+  running server while a user is connected, and even then only within the
+  Rooms namespace, until they revoke in Ring.
   """
   use GenServer
 
@@ -29,6 +33,7 @@ defmodule PubkyRooms.Auth.SessionStore do
   @table :pubky_sessions
   @sweep_every :timer.minutes(5)
   @hydrate_timeout 20_000
+  @disconnect_grace 60_000
 
   @type sid :: String.t()
   @type cookie_session :: %{String.t() => String.t()}
@@ -70,6 +75,11 @@ defmodule PubkyRooms.Auth.SessionStore do
   end
 
   def ensure(_), do: nil
+
+  @doc "Ties the calling LiveView to the session so it is dropped shortly after the last one leaves."
+  @spec attach(sid(), pid()) :: :ok
+  def attach(sid, pid \\ self()) when is_binary(sid),
+    do: GenServer.cast(__MODULE__, {:attach, sid, pid})
 
   @doc "The session for a sid, hydrating a bearer from the credential if needed."
   @spec lookup(term()) :: {:ok, Session.t()} | :error
@@ -175,7 +185,7 @@ defmodule PubkyRooms.Auth.SessionStore do
   def init(_opts) do
     :ets.new(@table, [:named_table, :public, :set, read_concurrency: true])
     Process.send_after(self(), :sweep, @sweep_every)
-    {:ok, %{}}
+    {:ok, %{pids: %{}, sids: %{}, timers: %{}}}
   end
 
   @impl true
@@ -188,6 +198,18 @@ defmodule PubkyRooms.Auth.SessionStore do
   end
 
   @impl true
+  def handle_cast({:attach, sid, pid}, state) do
+    if Map.has_key?(state.pids, pid) do
+      {:noreply, state}
+    else
+      Process.monitor(pid)
+      state = cancel_expiry(state, sid)
+      pids = Map.put(state.pids, pid, sid)
+      sids = Map.update(state.sids, sid, MapSet.new([pid]), &MapSet.put(&1, pid))
+      {:noreply, %{state | pids: pids, sids: sids}}
+    end
+  end
+
   def handle_cast({:update, sid, %Session{} = session}, state) do
     case :ets.lookup(@table, sid) do
       [{^sid, entry}] -> :ets.insert(@table, {sid, %{entry | session: session}})
@@ -199,10 +221,12 @@ defmodule PubkyRooms.Auth.SessionStore do
 
   @impl true
   def handle_info(:sweep, state) do
-    ttl = Application.get_env(:pubky_rooms, :session_memory_ttl_ms, 7_200_000)
+    ttl = Application.get_env(:pubky_rooms, :session_memory_ttl_ms, 900_000)
     cutoff = now() - ttl
 
-    for {sid, %{last_used: used}} <- :ets.tab2list(@table), used < cutoff do
+    for {sid, %{last_used: used}} <- :ets.tab2list(@table),
+        used < cutoff,
+        not Map.has_key?(state.sids, sid) do
       :ets.delete(@table, sid)
     end
 
@@ -210,7 +234,43 @@ defmodule PubkyRooms.Auth.SessionStore do
     {:noreply, state}
   end
 
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+    case Map.pop(state.pids, pid) do
+      {nil, _} ->
+        {:noreply, state}
+
+      {sid, pids} ->
+        remaining = state.sids |> Map.get(sid, MapSet.new()) |> MapSet.delete(pid)
+        state = %{state | pids: pids}
+
+        if MapSet.size(remaining) == 0 do
+          timer = Process.send_after(self(), {:expire, sid}, @disconnect_grace)
+          sids = Map.delete(state.sids, sid)
+          {:noreply, %{state | sids: sids, timers: Map.put(state.timers, sid, timer)}}
+        else
+          {:noreply, %{state | sids: Map.put(state.sids, sid, remaining)}}
+        end
+    end
+  end
+
+  def handle_info({:expire, sid}, state) do
+    state = %{state | timers: Map.delete(state.timers, sid)}
+    unless Map.has_key?(state.sids, sid), do: :ets.delete(@table, sid)
+    {:noreply, state}
+  end
+
   def handle_info(_msg, state), do: {:noreply, state}
+
+  defp cancel_expiry(state, sid) do
+    case Map.pop(state.timers, sid) do
+      {nil, _} ->
+        state
+
+      {timer, timers} ->
+        Process.cancel_timer(timer)
+        %{state | timers: timers}
+    end
+  end
 
   defp hydrate(sid, %{export: export} = entry) do
     with {:ok, credential} <- Credential.import(export),

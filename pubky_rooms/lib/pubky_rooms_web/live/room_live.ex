@@ -33,6 +33,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           is_member: false,
           failed: %{},
           sent: %{},
+          unreachable: [],
           composer: composer_form(),
           joining: false
         )
@@ -69,13 +70,14 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   defp apply_snapshot(socket, snapshot), do: assign_room(socket, snapshot)
 
-  defp assign_room(socket, %{status: status, room: room, members: members}) do
+  defp assign_room(socket, %{status: status, room: room, members: members} = snapshot) do
     user = socket.assigns.current_user
 
     socket
     |> assign(status: status, room: room, page_title: (room && room.name) || "Room")
     |> assign_members(members)
     |> assign(is_member: user != nil and user.pubky in members)
+    |> assign(unreachable: Map.get(snapshot, :unreachable, []))
   end
 
   defp assign_members(socket, members) do
@@ -143,6 +145,11 @@ defmodule PubkyRoomsWeb.RoomLive do
       :error ->
         {:noreply, socket}
     end
+  end
+
+  def handle_event("retry_history", _params, socket) do
+    RoomServer.retry_history(socket.assigns.ref)
+    {:noreply, socket}
   end
 
   def handle_event("join", _params, %{assigns: %{current_user: nil}} = socket) do
@@ -264,6 +271,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   defp apply_room_event(socket, {:unavailable, status}), do: assign(socket, status: status)
+  defp apply_room_event(socket, {:unreachable, members}), do: assign(socket, unreachable: members)
   defp apply_room_event(socket, _other), do: socket
 
   defp maybe_set_member(%{assigns: %{current_user: %{pubky: z32}}} = socket, z32, value),
@@ -327,6 +335,20 @@ defmodule PubkyRoomsWeb.RoomLive do
 
         <div class="flex min-h-0 flex-1 gap-6">
           <div class="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-card">
+            <div
+              :if={@unreachable != []}
+              class="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-destructive/10 px-4 py-2 text-sm text-secondary-foreground"
+              role="status"
+            >
+              <span class="flex items-center gap-2">
+                <.icon name="lucide-cloud-off" class="size-4 text-destructive" />
+                History from {length(@unreachable)}
+                {if length(@unreachable) == 1, do: "member", else: "members"} could not be loaded from their homeserver.
+              </span>
+              <.button variant="ghost" size="sm" phx-click="retry_history">
+                <.icon name="lucide-refresh-cw" class="size-4" /> Retry
+              </.button>
+            </div>
             <div
               id="messages"
               phx-update="stream"
@@ -423,6 +445,14 @@ defmodule PubkyRoomsWeb.RoomLive do
                   <.avatar name={@profiles[z32].name} pubky={z32} size="md" />
                   <span class="min-w-0 flex-1 truncate text-sm font-semibold">{@profiles[z32].name}</span>
                   <.badge :if={z32 == @creator} variant="brand-soft">creator</.badge>
+                  <span
+                    :if={z32 in @unreachable}
+                    class="tooltip text-destructive"
+                    data-tip="Homeserver unreachable"
+                    aria-label="Homeserver unreachable"
+                  >
+                    <.icon name="lucide-cloud-off" class="size-4" />
+                  </span>
                 </div>
               </.card_content>
             </.card>

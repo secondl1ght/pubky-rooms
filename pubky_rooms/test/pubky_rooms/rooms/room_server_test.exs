@@ -80,6 +80,29 @@ defmodule PubkyRooms.Rooms.RoomServerTest do
     assert Enum.map(history, & &1.author) |> Enum.uniq() |> length() == 2
   end
 
+  test "members whose homeserver cannot be listed are reported and retried", ctx do
+    %{ref: ref} = ctx
+    bob = Fixtures.z32("bob")
+    Directory.add_member(ref, bob)
+    {:ok, m} = Message.new(bob, ref, "bob history")
+    Fake.seed(bob, Message.path(m), Message.encode(m))
+    Fake.fail_list(bob, :unreachable)
+
+    {:ok, _pid} = RoomServer.ensure(ref)
+    assert_receive {:room_event, ^ref, :ready}, 2_000
+    {:ok, snapshot} = RoomServer.attach(ref)
+    assert snapshot.unreachable == [bob]
+    assert RoomServer.history(snapshot.table) == []
+    assert_received {:room_event, ^ref, {:unreachable, [^bob]}}
+
+    RoomServer.retry_history(ref)
+
+    assert_receive {:room_event, ^ref, {:message_upserted, %Message{content: "bob history"}}},
+                   2_000
+
+    assert_receive {:room_event, ^ref, {:unreachable, []}}, 2_000
+  end
+
   test "a failed write cancels the pending entry and a vanished one is reported", %{
     alice: alice,
     ref: ref,

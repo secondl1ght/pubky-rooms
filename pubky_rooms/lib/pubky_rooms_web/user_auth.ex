@@ -74,6 +74,7 @@ defmodule PubkyRoomsWeb.UserAuth do
 
     if user && LiveView.connected?(socket) do
       SessionStore.touch(sid)
+      SessionStore.attach(sid)
       PubkyRooms.Rooms.on_user_connected(user.pubky)
     end
 

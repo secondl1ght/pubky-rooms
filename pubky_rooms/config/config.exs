@@ -20,12 +20,14 @@ config :pubky_rooms,
   max_members_subscribed: 500,
   # rooms stay warm (subscribed, cached) this long after the last viewer leaves…
   room_idle_timeout_ms: 1_800_000,
-  # …unless more than this many rooms are alive, then idle rooms stop right away
-  max_warm_rooms: 200,
+  # …unless more than this many room processes are alive, then rooms *without viewers*
+  # stop right away (never a limit on rooms that exist or have viewers)
+  max_idle_rooms: 200,
   confirm_timeout_ms: 15_000,
   profile_ttl_ms: 900_000,
-  # hydrated sessions are dropped from memory after this much inactivity (the cookie re-seeds them)
-  session_memory_ttl_ms: 7_200_000,
+  # sessions are dropped from memory 60 s after the last connected LiveView leaves; entries that
+  # never had one (plain HTTP requests) expire after this much inactivity (the cookie re-seeds them)
+  session_memory_ttl_ms: 900_000,
   secure_cookies: false,
   pubky_backend: PubkyRooms.Pubky.Live,
   nexus_url: nil,
