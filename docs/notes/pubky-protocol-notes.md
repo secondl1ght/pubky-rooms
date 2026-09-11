@@ -1,0 +1,56 @@
+# Pubky protocol — verified wire facts (Sept 2026)
+
+Verified against pubky.org docs, the `pubky-homeserver` (v0.11.0) source, the Rust SDK source, and live mainnet relays. Extend this file when new facts are verified; do not re-research.
+
+## Identity, keys, encodings
+- Ed25519 keypair. A "pubky" is the 52-char **z-base32** of the 32-byte public key (alphabet `ybndrfg8ejkmcpqxot1uwisza345h769`, 5-bit groups MSB-first, no padding; 32 bytes → 52 chars, last char carries 1 data bit). Wire/JSON/deep-link values use the raw 52 chars; the Rust `Display` adds a `pubky` prefix which parsers must accept and strip.
+- Vectors: `"hello"` → `pb1sa5dx`; `<<0xff>>` → `9h`; `<<0>>` → `yy`; `ihaqcthsdbk751sxctk849bdr7yz7a934qen5gmpcbwcur49i97y` = hex `af30e647961855ddcacf64547d7c2327417ee3f9d3902d996d6068c9935faffa`; `8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty` = hex `3cd7d94ed92829ee1e8163c3bc1324a4ec0963d3d7ffbf5557824d93328390e2`.
+- base64url without padding is used for secrets, JWS segments, random ids (22 chars from 16 random bytes).
+- pubky-app-specs IDs: Timestamp ID = 13-char Crockford base32 of the microsecond Unix timestamp (big-endian u64); Hash ID = Crockford base32 of the first 16 bytes of blake3(input) (26 chars). Tag id input = `"{uri}:{label}"`.
+
+## PKARR (discovery)
+- Signed packet published to Mainline DHT (BEP44). Relay HTTP API (`pkarr/design/relays.md`): `GET {relay}/{z32}` → 200 body = `sig(64) || timestamp_us(8, big-endian) || dns_packet(≤1000)`, `Content-Type: application/pkarr.org/relays#payload`, `Cache-Control: public, max-age=…`; 404 = no record; 400 = bad key. `PUT {relay}/{z32}` same body → 204 (409 if timestamp older than known; 413 > 1072 B).
+- Signature = Ed25519 over ASCII `3:seqi<timestamp>e1:v<len>:` ‖ packet (bencode of BEP44 seq+v). Verified on the two fixtures in `docs/fixtures/pkarr`.
+- Public relays: `https://pkarr.pubky.org` (120 req/min), `https://pkarr.pubky.app` (**10 req/min** — never race relays; sequential fallback + caching). Testnet: `http://localhost:15411`.
+- DNS packet: RFC 1035, header `id=0 flags=0x8000 qd=0 an=N`, answers only; names FQDN with the z32 key as apex; later names use compression pointers (`0xC00C`). RR types used: A (1), AAAA (28), TXT (16), SVCB (64), HTTPS (65). HTTPS/SVCB rdata = `priority(2) ‖ target name ‖ SvcParams(key(2) len(2) value…)`; key 3 = port (u16), 4 = ipv4hint, 6 = ipv6hint, **65280 = pubky-reserved plain-HTTP port** (present when the ICANN domain is `localhost`, i.e. testnet: value `<<6286::16>>`).
+- User record: `_pubky.<user> HTTPS 0 <homeserver z32>` (TTL 3600). Homeserver record (mainnet): `<hs> HTTPS 1 . port=6287 ipv4hint=34.65.156.171` (PubkyTLS direct, RFC 7250 raw public key TLS — unreachable from Erlang `ssl`), `<hs> HTTPS 10 homeserver.pubky.app` (ICANN, https 443), `<hs> A 34.65.156.171`.
+- Endpoint choice for Elixir: lowest-priority HTTPS/SVCB record whose target is a real domain (not `.`/`""`, not a z32 key); scheme `http` if target is `localhost`/`127.0.0.1` or key-65280 present (port from it), else `https` (+port when ≠ 443).
+
+## Homeserver HTTP API (v0.11.0 routes)
+- `GET /info` → `{"features":["path-addressed-storage"]}` (`Cache-Control: no-store`; SDK caches 60 s, treats failure as no features).
+- Storage, path-addressed: `PUT/GET/HEAD/DELETE {base}/storage/{user-z32}/pub/...`. Legacy: `{base}/pub/...` + header `pubky-host: <user-z32>` (or `?pubky-host=`). PUT → **201**, DELETE → **204**, GET → 200 with `Content-Type`, `Content-Length`, `ETag: "<base64 blake3>"`, `Last-Modified`; 304 with `If-None-Match`; 404 missing. Public reads need no auth. `/priv/...` needs a session (401 anonymous). Error bodies are plain text.
+- Directory listing: GET a path ending in `/` with `?limit=&cursor=&reverse=&shallow=` → `text/plain`, one `pubky://<user>/pub/...` per line; next cursor = last entry URL; default limit 100, max 1000.
+- Events: `GET {base}/events-stream?user=<z32>[:cursor]&user=…&limit=N&live=true&path=/pub/app/` (path repeatable; default `/pub/` only; ≤ 50 users per request; `live` and `reverse` mutually exclusive; 400 on bad params; `/priv/` paths need auth and exactly one user). SSE frames: `event: PUT|DEL`, `data: pubky://…`, `data: cursor: <u64>`, `data: content_hash: <std base64 32-byte blake3>` (PUT only); no `id:`; keep-alive comment line (`:`) every 15 s; stream closes when `limit` reached or history exhausted without `live`. **Resume cursor is exclusive** (server sends events with cursor > given). Path filter: trailing slash = directory + descendants; no slash = exact file.
+- `GET /events/?cursor=&limit=1000` — paginated feed of all users on the homeserver (indexer style).
+- Auth (grant, recommended): `POST /auth/grant/session` JSON `{"grant": <jws>, "pop": <jws>}` → `{"token": "<opaque bearer>", "session": {"homeserver","pubky","client_id","capabilities":[...],"grant_id","token_expires_at","grant_expires_at","created_at"}}` (Unix seconds; token lives 1 h). `Authorization: Bearer <token>`. `GET /auth/grant/session` → session info; `DELETE /auth/grant/session` → 200 (idempotent); `GET /auth/grant/sessions` (root cap) → `[{grant_id, client_id, capabilities, issued_at, expires_at}]`; `DELETE /auth/grant/session/{gid}` (root cap). `POST /auth/grant/signup[?signup_token=…]` same body → 204; signup grant must have `client_id == "pubky.signup"`, caps `["/:rw"]`, lifetime ≤ 300 s, `iat` not in the future.
+- Auth (cookie, deprecated, not used): `POST /signup`, `POST /session` with binary AuthToken; `GET/DELETE /session`.
+- Capabilities: `"<scope>:<actions>"`, scope starts with `/`, actions `r`/`w`; comma-separated list. Trailing slash is significant: `/pub/app/:rw` covers the directory; `/pub/app:rw` only the file. Root = `/:rw`.
+- Rate limiting: 429 with `Retry-After`; quota exceeded 507; payload too large 413.
+
+## Grant auth flow (what an app implements)
+1. App generates `client_secret` (32 random bytes) and a **PoP client keypair** (Ed25519).
+2. Deep link (QR): `pubkyauth://signin_grant?caps=<comma caps>&relay=<inbox base with trailing />&secret=<b64url(secret)>&cid=<client id, domain-like ≤253>&cpk=<client pk z32>`; `signup_grant` variant adds `hs=<homeserver z32>` and optional `st=<signup token>`. Query is form-urlencoded (`/`→`%2F`, `:`→`%3A`). Optional `x-source`, `x-success`, `x-error`, `x-cancel` (percent-encoded once, `%20` not `+`).
+3. HTTP relay channel id = `b64url_nopad(blake3(client_secret))` (43 chars). `GET {relay}/inbox/{id}` long-polls 25 s → 200 body or 408 (retry); `DELETE` = ACK (best effort); messages kept 5 min; max body 2 KB. Default mainnet relay `https://httprelay.pubky.app/inbox/`; testnet `http://localhost:15412/inbox/`. Legacy `/link/` channels: plain long-poll, no ACK (detect by URL suffix).
+4. Ring (or Simulator) posts `nonce(24) ‖ XSalsa20-Poly1305 secretbox` (libsodium `crypto_secretbox_easy` layout: `tag(16) ‖ ciphertext`; same as `Kcl.secretbox/3` output) of the **grant JWS** encrypted with `client_secret`.
+5. Grant JWS: header exactly `{"alg":"EdDSA","typ":"pubky-grant"}` (= `eyJhbGciOiJFZERTQSIsInR5cCI6InB1Ymt5LWdyYW50In0`), claims `{"iss":<user z32>,"client_id":…,"caps":[…],"cnf":<client pk z32>,"jti":<22-char id>,"iat":<s>,"exp":<s>}` (default lifetime 2 years). Signature = Ed25519 over ASCII `b64url(header).b64url(payload)`. Client decodes claims (no signature check needed) and verifies `cnf` == its client pk.
+6. Resolve `iss` → homeserver (PKARR) → ICANN base URL.
+7. PoP JWS: header `{"alg":"EdDSA","typ":"pubky-pop"}` (= `eyJhbGciOiJFZERTQSIsInR5cCI6InB1Ymt5LXBvcCJ9`), claims `{"aud":<hs z32>,"gid":<grant jti>,"nonce":<22-char random>,"iat":<s>}` signed by the client key. Homeserver checks `aud`, `gid`, `|iat − now| ≤ 180 s`, nonce replay.
+8. `POST /auth/grant/session` → bearer. Refresh = re-POST with a fresh PoP when < 300 s remain. 401/403 on refresh ⇒ grant revoked/expired ⇒ re-run QR flow.
+- Durable credential (SDK-compatible): `pubky-grant-credential-v1:<hs z32>:<b64url client secret 32B>:<grant jws>`; restoring re-exchanges for a fresh bearer. Treat as a bearer-equivalent secret.
+
+## pubky-app-specs v0.7 (only for interop with pubky.app)
+- All under `/pub/pubky.app/`: `profile.json` `{name(3..50), bio(≤160), image(url ≤300), links[≤5]{title,url}, status(≤50)}`; `posts/<ts id>` `{content, kind: short|long|image|video|link|file|collection, parent, embed{kind,uri}, attachments[], lock}`; `tags/<hash id>` `{uri, label(trim+lowercase ≤20), created_at}`; `bookmarks/<hash id>`; `follows/<z32>`; `mutes/<z32>`; `files/<ts id>` `{name, created_at, src, content_type, size}`; `blobs/<hash id>` raw bytes; `feeds/<hash id>`; `last_read`.
+- Link posts: kind `link`, URL lives in `content`; `embed` is only for reposts/quotes.
+- **Universal tags (Nexus ≥ 0.4):** any app may write a `PubkyAppTag` at `/pub/<app>/tags/<hash id>`; Nexus indexes the tagged URI as a *Resource* under that app namespace (`ExtendedParsedUri::UniversalTag`; the namespace comes from the tag file's path, not from the tagged URI). Resource id = hex(blake3(normalized uri)[0..16]).
+
+## Nexus v0.4.1 (mainnet `https://nexus.pubky.app`, swagger `/swagger-ui/`, spec `/api-docs/v0/openapi.json`)
+- Resources: `GET /v0/stream/resources?app=&tags=<≤5, OR>&sorting=timeline|taggers_count&skip&limit(≤100)&viewer_id` → `[ResourceView{details{id,uri,scheme,indexed_at}, tags[{label,taggers[],taggers_count,relationship}], taggers_count}]`; `GET /v0/resource/by-uri?uri=…`; `GET /v0/resource/{id}/tags`; `GET /v0/resource/{id}/tags/{label}/taggers`.
+- Users: `GET /v0/user/{id}` (`viewer_id`, `depth`), `/details`, `/counts`, `/followers`, `/following`, `/friends`, `/tags`, `/relationship/{viewer}`.
+- Posts: `GET /v0/stream/posts?source=all|following|followers|friends|bookmarks|post_replies|author|author_replies|collection|wot|wot_domain&tags=&kind=&sorting=timeline|total_engagement…`; `GET /v0/post/{author}/{id}`; search endpoints under `/v0/search/…`; hot tags `/v0/tags/hot`.
+- Avatars via CDN: `{nexus}/static/avatar/<pubky>`; files `{nexus}/static/files/<pubky>/<file_id>/<variant>`.
+- Nexus only indexes homeservers it is configured to watch.
+
+## Local testnet (pubky-docker)
+- `git clone https://github.com/pubky/pubky-docker && cd pubky-docker && cp .env-sample .env && docker compose up homeserver -d` (adds `nexusd`/`pubky-app` with `--profile backend` / `pubky-app`).
+- Ports: 15411 PKARR relay, 15412 HTTP relay, 6286 homeserver ICANN HTTP, 6287 PubkyTLS, 6288 admin (password `admin`; `GET /generate_signup_token` with `X-Admin-Password`), 6881 DHT bootstrap. Homeserver pubky `8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo`, signup mode open. State is ephemeral across container restarts.
+- Pubky Ring Simulator (https://simulator.pubkyring.app): browser stand-in for Ring, testnet only, supports grant sign-in; identities are in-memory only.

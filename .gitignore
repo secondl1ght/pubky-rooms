@@ -1,0 +1,19 @@
+# Elixir / Mix
+_build/
+deps/
+*.ez
+erl_crash.dump
+.elixir_ls/
+.lexical/
+# Phoenix assets
+pubky_rooms/priv/static/assets/
+pubky_rooms/assets/node_modules/
+pubky_rooms/priv/data/
+# Env / secrets
+.env
+*.secret
+*.sess
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/

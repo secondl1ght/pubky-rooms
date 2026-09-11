@@ -1,0 +1,45 @@
+# Pubky Rooms — project memory (read this first every session)
+
+Sovereign live chat rooms on the Pubky protocol, built with Phoenix/Elixir. Part of the Pubky "Vibes" initiative; production-quality target, to be hosted at rooms.pubky.app and integrated into Pubky App. **Not a hack project.**
+
+## Where things are
+- `docs/PLAN.md` — the approved plan (milestones M0–M8, data model, architecture). Keep it current.
+- `docs/PROGRESS.md` — milestone checklist + **handoff note** (done / next / half-finished / gotchas). Update at every checkpoint. Start every session by reading it.
+- `docs/notes/pubky-protocol-notes.md` — verified Pubky wire facts (PKARR, homeserver API, grant auth, SSE). Do not re-research; extend when something new is verified.
+- `docs/notes/pubky-ex-design.md` — design of the `pubky_ex` library (modules, APIs, algorithms, tests).
+- `docs/notes/rooms-app-design.md` — design of the Phoenix app (data model, processes, PubSub, LiveViews).
+- `docs/notes/pubky-app-design-system.md` — Pubky App design tokens/specs (reference data only; never copy their code).
+- `docs/adr/` — architecture decision records.
+- `docs/fixtures/` — captured protocol payloads used by tests.
+
+## Repo layout
+```
+pubky_ex/      Elixir library, OTP app :pubky (pure Elixir Pubky client; no NIFs)
+pubky_rooms/   Phoenix 1.8 LiveView app, --no-ecto ({:pubky, path: "../pubky_ex"})
+```
+
+## Conventions
+- Elixir 1.18 / OTP 27, Phoenix 1.8.x, LiveView 1.2.x, Tailwind v4 CSS-first. Use stdlib `JSON`, not Jason. HTTP via `req` (+ Finch). Crypto: `:crypto` (Ed25519), `kcl` (XSalsa20-Poly1305), pure-Elixir BLAKE3 in `Pubky.Crypto.Blake3`.
+- Clean-room UI: a small `PubkyRoomsWeb.UI.*` component library matching Pubky App's look via tokens; no code copied from `~/CODE/pubky-app`.
+- No database. ETS for hot state; DETS only for login sessions and the room directory. Source of truth is always the users' homeservers.
+- Every homeserver write is validated with the same limits the reader enforces. Author identity always comes from the path/event owner, never from JSON bodies.
+- Tests must stay green at every commit: `mix test` in each project. Testnet integration tests are tagged `:testnet` and excluded by default.
+- Formatting/lint: `mix format`, `mix credo --strict`. Document public functions with `@doc`; every module has a `@moduledoc` explaining its role.
+- Commit per completed step with descriptive messages. Never commit secrets, `.sess` files, or anything from `~/CODE/keys`.
+
+## Commands
+```bash
+# toolchain (once): sudo apt install -y elixir erlang inotify-tools docker.io docker-compose-v2
+# local Pubky testnet: (cd ~/CODE/pubky-docker && docker compose up homeserver -d)   # homeserver + relays on localhost
+cd pubky_ex && mix deps.get && mix test                 # library
+cd pubky_rooms && mix setup && mix phx.server           # app at http://localhost:4000
+PUBKY_TESTNET=1 mix test --include testnet              # integration tests against pubky-docker
+```
+
+## Testnet constants
+Homeserver `8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo` at `http://localhost:6286` (admin `:6288`, password `admin`), PKARR relay `http://localhost:15411`, HTTP relay `http://localhost:15412/inbox/`. Identities via Pubky Ring Simulator (https://simulator.pubkyring.app) or `Pubky.Auth.LocalSigner` in tests.
+
+## Session protocol
+1. Read `docs/PROGRESS.md`; `git log --oneline -20`; run tests to confirm baseline.
+2. Work in small committed steps.
+3. Before ending: update `docs/PROGRESS.md` handoff note, refresh this file if commands/conventions changed, commit.
