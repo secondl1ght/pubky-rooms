@@ -18,6 +18,12 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     refute has_element?(view, "#new-room")
   end
 
+  test "signed-in users are sent home from the sign-in page", %{conn: conn} do
+    {sid, _} = Fixtures.login("already")
+    conn = init_test_session(conn, Fixtures.cookie(sid))
+    assert {:error, {:redirect, %{to: "/"}}} = live(conn, ~p"/login")
+  end
+
   test "creating a room requires sign-in", %{conn: conn} do
     assert {:error, {:redirect, %{to: "/login?return_to=/rooms/new"}}} =
              live(conn, ~p"/rooms/new")

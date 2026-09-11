@@ -13,6 +13,8 @@ defmodule PubkyRoomsWeb.AuthLive do
   alias PubkyRooms.RateLimit
   alias PubkyRoomsWeb.{AuthController, UserAuth}
 
+  on_mount {PubkyRoomsWeb.UserAuth, :redirect_if_authenticated}
+
   @approval_timeout 180_000
 
   @impl true

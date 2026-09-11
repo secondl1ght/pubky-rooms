@@ -54,8 +54,9 @@ defmodule PubkyRoomsWeb.MeLive do
                 while you are signed in, and nothing else.
               </p>
               <p>
-                The grant is stored only in this browser's encrypted cookie. The server holds it in memory
-                while you use the app and forgets it afterwards. Revoke it any time in Pubky Ring, or sign out here.
+                The grant is stored only in this browser's encrypted cookie (30 days, or until you sign out).
+                The server holds it in memory while you have Rooms open and forgets it about a minute after
+                your last tab closes. Revoke it any time in Pubky Ring, or sign out here.
               </p>
               <p>All rooms are public: anyone with a link can read them.</p>
             </div>
