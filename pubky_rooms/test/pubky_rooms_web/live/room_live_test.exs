@@ -6,7 +6,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
 
   alias PubkyRooms.{Fixtures, Rooms}
   alias PubkyRooms.Pubky.Fake
-  alias PubkyRooms.Rooms.{Message, Paths, Room}
+  alias PubkyRooms.Rooms.{Message, Paths, Room, RoomServer}
 
   setup %{conn: conn} do
     reset_state()
@@ -99,14 +99,14 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     render_async(view)
     wait_for(fn -> render(view) end, &(&1 =~ "Stored on your homeserver"))
 
-    old_pid = PubkyRooms.Rooms.RoomServer.whereis(Room.ref(ctx.room))
+    old_pid = RoomServer.whereis(Room.ref(ctx.room))
     Process.exit(old_pid, :kill)
 
     html = wait_for(fn -> render(view) end, &(&1 =~ "before the crash"))
 
     new_pid =
       wait_for(
-        fn -> PubkyRooms.Rooms.RoomServer.whereis(Room.ref(ctx.room)) end,
+        fn -> RoomServer.whereis(Room.ref(ctx.room)) end,
         &(&1 != nil and &1 != old_pid)
       )
 
