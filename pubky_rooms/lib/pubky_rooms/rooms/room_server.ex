@@ -489,7 +489,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
          )}
 
       {:error, reason} ->
-        Logger.info("history of #{String.slice(member, 0, 8)}… unavailable: #{inspect(reason)}")
+        Logger.debug("history of #{String.slice(member, 0, 8)}… unavailable: #{inspect(reason)}")
         {:error, reason}
     end
   end

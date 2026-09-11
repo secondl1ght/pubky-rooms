@@ -266,9 +266,11 @@ defmodule PubkyRooms.Events.Subscriptions do
   end
 
   defp attach(state, user, entry, {:error, reason}) do
-    Logger.warning(
+    Logger.debug(
       "events for #{String.slice(user, 0, 8)}… unavailable: #{inspect(reason)}; retrying"
     )
+
+    Logger.warning("a member's homeserver events are unavailable (#{inspect(reason)}); retrying")
 
     Process.send_after(self(), {:retry, user}, @retry_delay)
     put_in(state.users[user], %{entry | status: {:error, reason}})

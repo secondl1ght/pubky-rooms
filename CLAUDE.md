@@ -30,6 +30,7 @@ pubky_rooms/   Phoenix 1.8 LiveView app, --no-ecto ({:pubky, path: "../pubky_ex"
 - All homeserver access goes through the `PubkyRooms.Pubky` façade (`Live` in dev/prod, `Fake` in tests). Tests touching the fake homeserver/directory use `PubkyRooms.RoomsCase` (`async: false`, `reset_state/0`). The dev server must be restarted after config or supervision-tree changes.
 - No database. ETS for hot state; DETS only for the room directory. Login sessions are memory-only: the grant credential lives in the encrypted browser cookie (ADR 0005) and is never written to disk. Source of truth is always the users' homeservers.
 - Every homeserver write is validated with the same limits the reader enforces. Author identity always comes from the path/event owner, never from JSON bodies.
+- Telemetry/logging (ADR 0006): aggregate counts and durations only, no identifiers in metric tags, nothing exported to third parties, no client-side analytics; logs at info+ carry no public keys, IPs or message content (truncated pubkeys at debug only).
 - Scale story: cost is per room (bootstrap lists every member once and fetches only the newest `bootstrap_messages`), never per viewer; homeservers throttle anonymous reads per IP by bandwidth and may add 429 count limits — honor `Retry-After`, cap concurrency per fetch, keep rooms warm.
 - Tests must stay green at every commit: `mix test` in each project. Testnet integration tests are tagged `:testnet` and excluded by default.
 - Formatting/lint: `mix format`, `mix credo --strict`. Document public functions with `@doc`; every module has a `@moduledoc` explaining its role.
@@ -52,4 +53,5 @@ Homeserver `8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo` at `http://loc
 ## Session protocol
 1. Read `docs/PROGRESS.md`; `git log --oneline -20`; run tests to confirm baseline.
 2. Work in small committed steps.
-3. Before ending: update `docs/PROGRESS.md` handoff note, refresh this file if commands/conventions changed, commit.
+3. Before ending a milestone: run the **conformance pass** — walk `docs/notes/rooms-app-design.md` (and the plan's milestone list) for every module touched and mark each item in the *Design backlog* table of `docs/PROGRESS.md` as done / deferred → Mx / changed-with-reason. Nothing may be silently skipped. Then update the handoff note, refresh this file if commands/conventions changed, commit.
+4. Whenever session or credential handling changes, re-check the trust-model text in the sign-in page, `/me`, `README.md` and ADR 0005 so it stays exact.

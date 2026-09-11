@@ -60,6 +60,40 @@ Legend: [ ] todo · [~] in progress · [x] done. See `docs/PLAN.md` for the full
 
 ---
 
+## Design backlog (every design item not yet built, with its target; consume it, never let items live only in prose)
+Source of truth for scope: `docs/PLAN.md` + `docs/notes/rooms-app-design.md`. At the end of each milestone run the **conformance pass** (CLAUDE.md, session protocol step 3): walk the design note sections for the modules touched and mark each item here as done ✓ / deferred → Mx / changed (with the reason in the notes).
+
+| Item (design note / plan) | Target | Status |
+|---|---|---|
+| Room presence `presence:room:<ref>` + "N online", anonymous viewers untracked | M5 | open |
+| Typing indicators (`room:<ref>:typing`, 2 s throttle, 1 s prune) | M5 | open |
+| `Profiles` cache: pubky.app `profile.json` names, local nickname fallback, Nexus CDN avatars on mainnet, image resolution, `{:profile_updated}` broadcast | M5 | open |
+| Lobby online count (`presence:lobby`) | M5 | open |
+| `on_mount` tracks lobby presence | M5 | open |
+| `older/3` + infinite scroll (`phx-viewport-top`), per-member listing cursors | M6 | open |
+| Edit (PUT overwrite, `edited_at`) and delete, optimistic | M6 | open |
+| Replies (`reply_to`, quote with 140-char truncation) | M6 | open |
+| Reactions (`reactions/…` markers, palette, 20/10 s limit, bootstrap listing) | M6 | open |
+| Bans (creator only, from creator's homeserver), banned composer disabled; local mute | M6 | open |
+| Lobby "Public rooms" (visibility public, sorted by activity), live via `directory` topic | M6 | open |
+| Room settings: rename/topic/close (room DEL → `:room_closed`) | M6 | open |
+| Universal tags (`tags/<id>` PubkyAppTag) on public rooms + Nexus resources stream; tags in room header; add tags from Rooms | M6 | open |
+| Detached per-room message cache (re-bootstrap "since last id") and incremental first paint for huge rooms | M6 | open |
+| Message `:unconfirmed` state | — | changed: not needed (pending/confirmed/failed suffice) |
+| `Subscriptions` own homeserver cache (`:user_homeservers`) | — | changed: uses `Pubky.Resolver`'s ETS cache |
+| RoomServer `status/1`, `room/1`, `members/1`, `bans/1`, `verify/2` API | — | changed: `attach/2`/`snapshot/1` return one map; verification runs in the pending sweep |
+| Telemetry events (streams, lag, bootstrap, send→confirm) per ADR 0006; `/healthz`; structured logs | M7 | open |
+| CSP + secure headers; CORS for the API | M7/M8 | open |
+| `mix phx.gen.release --docker`, Fly deploy, `PUBKY_DATA_DIR`, secrets, mainnet test with real Ring | M7 | open |
+| PWA: manifest, minimal service worker, icons, theme color (push-ready) | M7 | open |
+| `PUBKY_SERVICE_CREDENTIAL` authenticated reads (operator: whitelist first, service account if bandwidth throttle bites) | M7 | open |
+| Full test suites + CI (GitHub Actions), dialyzer | M7 | open |
+| README: architecture, credible exit, restart semantics, run locally, deploy | M7 | open (trust model section done) |
+| `GET /api/rooms` summary API + `/api/rooms/featured` | M8 | open |
+| `?from=pubky.app` back link, Open Graph tags per room, share to Pubky App | M8 | open |
+| Pubky App fork: routes, nav items, `/rooms` page, Nexus resources service, runtime config | M8 | open |
+| Trust-model text (sign-in, `/me`, README, ADR 0005) re-checked whenever session/credential handling changes | every session | rule |
+
 ## Handoff note (update every session)
 **Last session:** 2026-09-11 (second session) — M4 complete: the Phoenix app `pubky_rooms` exists with the clean-room design system and the full vertical slice (sign in → create room → send → confirmed → second browser sees it live → restart keeps everything), verified on the testnet. `pubky_ex` also got the full credo suite enabled (it previously ran a single check) and the resulting cleanups.
 **State:** `cd pubky_rooms && mix test` (43 tests) and `mix credo --strict` are green in both projects. Dev server: `.claude/launch.json` (gitignored) has `pubky-rooms` (`mix phx.server` in `pubky_rooms`, port 4000) and `ring-simulator` (port 5173) entries; the styleguide is at `/dev/ui`. Testnet containers: `cd ~/CODE/pubky-docker && docker compose up homeserver -d`. Two test identities exist only in the Simulators' memory (they vanish on reload); the room created during verification lives on the testnet homeserver (`/r/qj7kp5b3…ffp7o/0035PERXNDXFE`) until the containers are recreated. Local DETS state is in `pubky_rooms/priv/data/` (gitignored).
