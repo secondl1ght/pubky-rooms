@@ -13,7 +13,8 @@ defmodule Pubky.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
       name: "pubky_ex",
-      description: "Pure-Elixir client for the Pubky protocol: identity, PKARR discovery, grant auth, homeserver storage, and event streams.",
+      description:
+        "Pure-Elixir client for the Pubky protocol: identity, PKARR discovery, grant auth, homeserver storage, and event streams.",
       source_url: @source_url,
       docs: [main: "Pubky", extras: ["README.md"]],
       dialyzer: [plt_add_apps: [:mix]]

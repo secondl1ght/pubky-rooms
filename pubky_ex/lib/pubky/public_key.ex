@@ -45,7 +45,9 @@ defmodule Pubky.PublicKey do
   @doc "Decodes a pubky to its 32 raw bytes."
   @spec to_bytes(z32()) :: {:ok, <<_::256>>} | :error
   def to_bytes(str) do
-    with {:ok, z32} <- parse(str), {:ok, <<_::256>> = bytes} <- ZBase32.decode(z32), do: {:ok, bytes}
+    with {:ok, z32} <- parse(str),
+         {:ok, <<_::256>> = bytes} <- ZBase32.decode(z32),
+         do: {:ok, bytes}
   end
 
   @doc "Encodes 32 raw bytes as a bare pubky."

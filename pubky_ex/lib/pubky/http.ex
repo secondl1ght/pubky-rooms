@@ -27,7 +27,7 @@ defmodule Pubky.Http do
       Req.new(
         method: method,
         url: url,
-        finch: config.finch,
+        finch: [name: config.finch],
         receive_timeout: config.request_timeout,
         retry: false,
         decode_body: false,
@@ -36,9 +36,14 @@ defmodule Pubky.Http do
       |> Req.merge(opts)
 
     case Req.request(req) do
-      {:ok, %Req.Response{status: status} = resp} when status in 200..299 -> {:ok, resp}
-      {:ok, %Req.Response{status: status, body: body}} -> {:error, {:http, status, to_binary(body)}}
-      {:error, reason} -> {:error, {:transport, reason}}
+      {:ok, %Req.Response{status: status} = resp} when status in 200..299 ->
+        {:ok, resp}
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:error, {:http, status, to_binary(body)}}
+
+      {:error, reason} ->
+        {:error, {:transport, reason}}
     end
   end
 

@@ -5,16 +5,16 @@ Legend: [ ] todo · [~] in progress · [x] done. See `docs/PLAN.md` for the full
 ## M0 — prerequisites
 - [x] Git repo, `.gitignore`, `CLAUDE.md`, `docs/` (plan, notes, ADRs, fixtures)
 - [x] GitHub remote `secondl1ght/pubky-rooms` created and first push (private)
-- [ ] User installs Elixir/Erlang/Docker (`sudo apt install -y elixir erlang inotify-tools docker.io docker-compose-v2`; `sudo usermod -aG docker $USER`)
-- [ ] `mix local.hex`, `mix local.rebar`, `mix archive.install hex phx_new`
-- [ ] Clone `pubky-docker` to `~/CODE/pubky-docker`, `docker compose up homeserver -d`, verify `curl http://localhost:6286/info`
+- [x] User installed Elixir/Erlang/Docker; docker group added (needs a fresh login before Claude's shell can use it)
+- [x] `mix local.hex`, `mix local.rebar`, `mix archive.install hex phx_new` (Elixir 1.18.3 / OTP 27 / Phoenix 1.8.13)
+- [~] `~/CODE/pubky-docker` cloned with `.env`; user must run `docker compose up homeserver -d` from a terminal with the docker group; verify `curl http://localhost:6286/info`
 
 ## M1 — pubky_ex core (keys, PKARR, resolver)
-- [ ] `mix new pubky_ex --sup`, deps (req, kcl; bypass for tests), `Pubky.Config`, `Pubky.Application`, `Pubky.Http`
-- [ ] `Pubky.Crypto.{Ed25519, ZBase32, B64}`, `Pubky.Keypair`, `Pubky.PublicKey`
-- [ ] `Pubky.Pkarr.Dns` decode/encode + fixtures; `Pubky.Pkarr.SignedPacket` verify/build; `Pubky.Pkarr.Relay`; `Pubky.Pkarr.Endpoint`
-- [ ] `Pubky.Resolver` (ETS cache, TTLs, dedupe, `/info` features)
-- [ ] Verify: `Pubky.Resolver.base_url_for_user("ihaqcth…")` → `{"8um71…", "https://homeserver.pubky.app", ["path-addressed-storage"]}`
+- [x] `mix new pubky_ex --sup`, deps (req, kcl; bypass for tests), `Pubky.Config`, `Pubky.Application`, `Pubky.Http`
+- [x] `Pubky.Crypto.{Ed25519, ZBase32, B64}`, `Pubky.Keypair`, `Pubky.PublicKey`
+- [x] `Pubky.Pkarr.Dns` decode/encode + fixtures; `Pubky.Pkarr.SignedPacket` verify/build; `Pubky.Pkarr.Relay`; `Pubky.Pkarr.Endpoint`
+- [x] `Pubky.Resolver` (ETS cache, TTLs, dedupe, `/info` features)
+- [x] Verified on mainnet (`mix test --only mainnet`): `ihaqcth…` → `8um71…` → `https://homeserver.pubky.app`; production homeserver has no `/info` and no path-addressed storage yet, legacy `pubky-host` reads work
 
 ## M2 — pubky_ex auth + storage
 - [ ] `Pubky.Crypto.Blake3` (official vectors), `Pubky.Crypto.Secretbox` (libsodium KAT)

@@ -32,7 +32,7 @@ defmodule Pubky.Crypto.ZBase32 do
     |> String.to_charlist()
     |> Enum.reduce_while({<<>>, 0, 0}, fn c, {acc, buf, nbits} ->
       case Map.fetch(@decode_map, c) do
-        {:ok, v} -> {:cont, push_bits(acc, (buf <<< 5) ||| v, nbits + 5)}
+        {:ok, v} -> {:cont, push_bits(acc, buf <<< 5 ||| v, nbits + 5)}
         :error -> {:halt, :error}
       end
     end)

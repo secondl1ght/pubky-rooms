@@ -10,7 +10,7 @@ defmodule Pubky.Application do
       # ordinary request traffic.
       {Finch, name: Pubky.Finch.Streams, pools: %{default: [size: 100, count: 1]}},
       {Task.Supervisor, name: Pubky.TaskSupervisor},
-      # Pubky.Resolver is added once implemented (Milestone 1).
+      Pubky.Resolver,
       {Registry, keys: :unique, name: Pubky.Events.Registry},
       {DynamicSupervisor, name: Pubky.Events.Supervisor, strategy: :one_for_one}
     ]

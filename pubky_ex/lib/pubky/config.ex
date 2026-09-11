@@ -25,7 +25,8 @@ defmodule Pubky.Config do
     * `:client_id` — the application's client id shown to the user in Pubky Ring
     * `:finch` / `:stream_finch` — Finch pool names for regular and long-lived (SSE) requests
     * `:request_timeout` — receive timeout for regular requests (ms)
-    * `:resolver_ttl`, `:negative_ttl`, `:features_ttl` — resolver cache TTLs (ms)
+    * `:resolver_ttl` — how long resolved homeservers/endpoints are cached (ms)
+    * `:negative_ttl` — how long failed resolutions are cached (ms)
     * `:flow_deadline` — overall deadline for a QR sign-in flow (ms)
   """
 
@@ -41,7 +42,6 @@ defmodule Pubky.Config do
           request_timeout: pos_integer(),
           resolver_ttl: pos_integer(),
           negative_ttl: pos_integer(),
-          features_ttl: pos_integer(),
           flow_deadline: pos_integer()
         }
 
@@ -56,7 +56,6 @@ defmodule Pubky.Config do
             request_timeout: 10_000,
             resolver_ttl: 300_000,
             negative_ttl: 30_000,
-            features_ttl: 60_000,
             flow_deadline: 600_000
 
   @testnet_homeserver "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo"
