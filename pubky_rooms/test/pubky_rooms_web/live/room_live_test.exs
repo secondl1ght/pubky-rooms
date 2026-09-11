@@ -93,6 +93,31 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert wait_for(fn -> render(creator_view) end, &(&1 =~ "bob here"))
   end
 
+  test "a crashed room server is restarted and the view re-attaches", ctx do
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    view |> form("#composer", message: %{content: "before the crash"}) |> render_submit()
+    render_async(view)
+    wait_for(fn -> render(view) end, &(&1 =~ "Stored on your homeserver"))
+
+    old_pid = PubkyRooms.Rooms.RoomServer.whereis(Room.ref(ctx.room))
+    Process.exit(old_pid, :kill)
+
+    html = wait_for(fn -> render(view) end, &(&1 =~ "before the crash"))
+
+    new_pid =
+      wait_for(
+        fn -> PubkyRooms.Rooms.RoomServer.whereis(Room.ref(ctx.room)) end,
+        &(&1 != nil and &1 != old_pid)
+      )
+
+    assert Process.alive?(new_pid)
+    assert html =~ "Stored on your homeserver"
+
+    view |> form("#composer", message: %{content: "after the crash"}) |> render_submit()
+    render_async(view)
+    assert wait_for(fn -> render(view) end, &(&1 =~ "after the crash"))
+  end
+
   defp has_composer?(html), do: html =~ ~s(id="composer")
 
   defp messages_on_homeserver(user, room) do

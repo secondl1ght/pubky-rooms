@@ -34,6 +34,8 @@ defmodule PubkyRoomsWeb.RoomLive do
           failed: %{},
           sent: %{},
           unreachable: [],
+          room_pid: nil,
+          room_monitor: nil,
           composer: composer_form(),
           joining: false
         )
@@ -51,14 +53,28 @@ defmodule PubkyRoomsWeb.RoomLive do
     end
   end
 
+  # Starts the room server if needed, attaches as a viewer and monitors it: if
+  # the server crashes, `{:DOWN, …}` below re-attaches (which restarts it).
   defp attach(%{assigns: %{ref: ref}} = socket) do
     case RoomServer.ensure(ref) do
-      {:ok, _pid} ->
+      {:ok, pid} ->
         {:ok, snapshot} = RoomServer.attach(ref)
-        apply_snapshot(socket, snapshot)
+
+        socket
+        |> monitor_room(pid)
+        |> apply_snapshot(snapshot)
 
       {:error, reason} ->
         assign(socket, status: {:error, reason})
+    end
+  end
+
+  defp monitor_room(socket, pid) do
+    if socket.assigns[:room_pid] == pid do
+      socket
+    else
+      if ref = socket.assigns[:room_monitor], do: Process.demonitor(ref, [:flush])
+      assign(socket, room_pid: pid, room_monitor: Process.monitor(pid))
     end
   end
 
@@ -228,6 +244,13 @@ defmodule PubkyRoomsWeb.RoomLive do
   @impl true
   def handle_info({:room_event, ref, event}, %{assigns: %{ref: ref}} = socket) do
     {:noreply, apply_room_event(socket, event)}
+  end
+
+  def handle_info(
+        {:DOWN, ref, :process, _pid, _reason},
+        %{assigns: %{room_monitor: ref}} = socket
+      ) do
+    {:noreply, socket |> assign(room_pid: nil, room_monitor: nil, status: :loading) |> attach()}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}

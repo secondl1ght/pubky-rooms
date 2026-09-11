@@ -440,10 +440,22 @@ defmodule PubkyRooms.Rooms.RoomServer do
   # Lists every member's folder (one request each), merges the entries by
   # message id (time-ordered), and fetches only the newest `bootstrap_messages`.
   # Returns `{messages, members_whose_listing_failed}`.
+  #
+  # Cursors are captured before anything is listed: a message written after
+  # the listing then always arrives through the event stream, and one written
+  # before is in the listing. Overlap is idempotent.
   defp fetch_history(members, ref) do
     per_member = config(:bootstrap_per_member, 50)
     total = config(:bootstrap_messages, 100)
     concurrency = config(:fetch_concurrency, 16)
+
+    members
+    |> Task.async_stream(&Subscriptions.capture_cursor/1,
+      max_concurrency: concurrency,
+      timeout: 15_000,
+      on_timeout: :kill_task
+    )
+    |> Stream.run()
 
     {entries, failed} =
       members

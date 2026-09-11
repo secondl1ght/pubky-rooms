@@ -234,7 +234,15 @@ defmodule PubkyRooms.Events.Subscriptions do
     put_in(state.users[user], %{entry | status: :resolving})
   end
 
-  defp capture_cursor(user) do
+  @doc """
+  Records the user's current event cursor if none is known yet. Room servers
+  call this **before** listing history so that anything written after the
+  listing is guaranteed to arrive through the stream (cursors are exclusive);
+  overlap between the listing and the stream is harmless because upserts are
+  idempotent.
+  """
+  @spec capture_cursor(String.t()) :: {:ok, non_neg_integer() | nil} | {:error, term()}
+  def capture_cursor(user) do
     case Cursors.get(user) do
       nil ->
         with {:ok, cursor} <- Pubky.latest_cursor(user, Paths.namespace()) do
