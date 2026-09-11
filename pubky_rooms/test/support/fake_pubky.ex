@@ -43,6 +43,10 @@ defmodule PubkyRooms.Pubky.Fake do
   def fail_next(path, reason),
     do: Agent.update(__MODULE__, &put_in(&1, [:failures, path], reason))
 
+  @doc "Makes the next write under `prefix` fail with `reason` (when the exact path is not known)."
+  def fail_next_under(prefix, reason),
+    do: Agent.update(__MODULE__, &put_in(&1, [:failures, {:prefix, prefix}], reason))
+
   @doc "All files of a user."
   def files(user) do
     Agent.get(__MODULE__, fn s -> for {{^user, p}, b} <- s.files, into: %{}, do: {p, b} end)
@@ -164,7 +168,14 @@ defmodule PubkyRooms.Pubky.Fake do
 
   defp maybe_fail(path) do
     Agent.get_and_update(__MODULE__, fn s ->
-      {reason, failures} = Map.pop(s.failures, path)
+      key =
+        Enum.find(Map.keys(s.failures), fn
+          ^path -> true
+          {:prefix, prefix} -> String.starts_with?(path, prefix)
+          _ -> false
+        end)
+
+      {reason, failures} = Map.pop(s.failures, key)
       {reason, %{s | failures: failures}}
     end)
     |> case do

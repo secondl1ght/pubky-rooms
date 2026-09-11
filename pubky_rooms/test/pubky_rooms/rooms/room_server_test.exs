@@ -1,21 +1,18 @@
 defmodule PubkyRooms.Rooms.RoomServerTest do
-  use ExUnit.Case, async: false
+  use PubkyRooms.RoomsCase, async: false
 
   alias PubkyRooms.{Fixtures, Rooms}
   alias PubkyRooms.Pubky.Fake
-  alias PubkyRooms.Rooms.{Directory, Message, Paths, RoomServer}
+  alias PubkyRooms.Rooms.{Directory, Membership, Message, Paths, Room, RoomServer}
 
   setup do
-    Fake.reset()
-    Directory.reset()
-    PubkyRooms.Events.Cursors.reset()
-    PubkyRooms.RateLimit.reset()
+    reset_state()
     {sid, alice} = Fixtures.login("alice")
 
     {:ok, room} =
       Rooms.create_room(sid, alice, %{"name" => "Test room", "visibility" => "public"})
 
-    ref = Rooms.Room.ref(room)
+    ref = Room.ref(room)
     Phoenix.PubSub.subscribe(PubkyRooms.PubSub, RoomServer.topic(ref))
     %{sid: sid, alice: alice, room: room, ref: ref}
   end
@@ -88,7 +85,7 @@ defmodule PubkyRooms.Rooms.RoomServerTest do
     bob = Fixtures.z32("bob")
     {:ok, old} = Message.new(bob, ref, "bob was here")
     Fake.seed(bob, Message.path(old), Message.encode(old))
-    Fake.write_as(bob, Paths.member(ref), PubkyRooms.Rooms.Membership.encode(ref))
+    Fake.write_as(bob, Paths.member(ref), Membership.encode(ref))
 
     assert_receive {:room_event, ^ref, {:member_joined, ^bob}}, 1_000
 

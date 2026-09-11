@@ -9,6 +9,7 @@ Sovereign live chat rooms on the Pubky protocol, built with Phoenix/Elixir. Part
 - `docs/notes/pubky-ex-design.md` — design of the `pubky_ex` library (modules, APIs, algorithms, tests).
 - `docs/notes/rooms-app-design.md` — design of the Phoenix app (data model, processes, PubSub, LiveViews).
 - `docs/notes/pubky-app-design-system.md` — Pubky App design tokens/specs (reference data only; never copy their code).
+- `docs/design-system.md` — our clean-room component library (`PubkyRoomsWeb.UI.*`), tokens, and rules; gallery at `/dev/ui` in dev.
 - `docs/adr/` — architecture decision records.
 - `docs/fixtures/` — captured protocol payloads used by tests.
 
@@ -25,7 +26,8 @@ pubky_rooms/   Phoenix 1.8 LiveView app, --no-ecto ({:pubky, path: "../pubky_ex"
 
 ## Conventions
 - Elixir 1.18 / OTP 27, Phoenix 1.8.x, LiveView 1.2.x, Tailwind v4 CSS-first. Use stdlib `JSON`, not Jason. HTTP via `req` (+ Finch). Crypto: `:crypto` (Ed25519), `kcl` (XSalsa20-Poly1305), pure-Elixir BLAKE3 in `Pubky.Crypto.Blake3`.
-- Clean-room UI: a small `PubkyRoomsWeb.UI.*` component library matching Pubky App's look via tokens; no code copied from `~/CODE/pubky-app`.
+- Clean-room UI: a small `PubkyRoomsWeb.UI.*` component library matching Pubky App's look via tokens; no code copied from `~/CODE/pubky-app`. Templates use these components (`<.button>`, `<.input>`, `<.dialog>`, `<.icon name="lucide-…">`, …), never raw daisyUI/heroicons (both removed).
+- All homeserver access goes through the `PubkyRooms.Pubky` façade (`Live` in dev/prod, `Fake` in tests). Tests touching the fake homeserver/directory use `PubkyRooms.RoomsCase` (`async: false`, `reset_state/0`). The dev server must be restarted after config or supervision-tree changes.
 - No database. ETS for hot state; DETS only for login sessions and the room directory. Source of truth is always the users' homeservers.
 - Every homeserver write is validated with the same limits the reader enforces. Author identity always comes from the path/event owner, never from JSON bodies.
 - Tests must stay green at every commit: `mix test` in each project. Testnet integration tests are tagged `:testnet` and excluded by default.
@@ -37,12 +39,14 @@ pubky_rooms/   Phoenix 1.8 LiveView app, --no-ecto ({:pubky, path: "../pubky_ex"
 # toolchain (once): sudo apt install -y elixir erlang inotify-tools docker.io docker-compose-v2
 # local Pubky testnet: (cd ~/CODE/pubky-docker && docker compose up homeserver -d)   # homeserver + relays on localhost
 cd pubky_ex && mix deps.get && mix test                 # library
-cd pubky_rooms && mix setup && mix phx.server           # app at http://localhost:4000
-PUBKY_TESTNET=1 mix test --include testnet              # integration tests against pubky-docker
+cd pubky_rooms && mix setup && mix phx.server           # app at http://localhost:4000 (styleguide: /dev/ui)
+cd pubky_rooms && mix test && mix credo --strict        # app tests + lint
+PUBKY_TESTNET=1 mix test --include testnet              # pubky_ex integration tests against pubky-docker
+# in-app browser dev servers: .claude/launch.json (gitignored) → "pubky-rooms" (4000), "ring-simulator" (5173)
 ```
 
 ## Testnet constants
-Homeserver `8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo` at `http://localhost:6286` (admin `:6288`, password `admin`), PKARR relay `http://localhost:15411`, HTTP relay `http://localhost:15412/inbox/`. Identities via Pubky Ring Simulator (https://simulator.pubkyring.app) or `Pubky.Auth.LocalSigner` in tests.
+Homeserver `8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo` at `http://localhost:6286` (admin `:6288`, password `admin`), PKARR relay `http://localhost:15411`, HTTP relay `http://localhost:15412/inbox/`. Identities via the Pubky Ring Simulator run locally (`~/CODE/pubky-ring-simulator`, `npm run dev`, port 5173; Shortcut mode + paste the auth link) or `Pubky.Auth.LocalSigner` in tests. For two-identity checks use the in-app browser plus the connected Chrome (separate cookies).
 
 ## Session protocol
 1. Read `docs/PROGRESS.md`; `git log --oneline -20`; run tests to confirm baseline.

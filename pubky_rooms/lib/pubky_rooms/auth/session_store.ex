@@ -17,6 +17,7 @@ defmodule PubkyRooms.Auth.SessionStore do
 
   require Logger
 
+  alias Plug.Crypto.{KeyGenerator, MessageEncryptor}
   alias Pubky.Session
 
   @table :pubky_sessions
@@ -244,16 +245,14 @@ defmodule PubkyRooms.Auth.SessionStore do
   defp keys do
     secret = Application.fetch_env!(:pubky_rooms, PubkyRoomsWeb.Endpoint)[:secret_key_base]
 
-    {Plug.Crypto.KeyGenerator.generate(secret, "pubky-rooms session credentials", length: 32),
-     Plug.Crypto.KeyGenerator.generate(secret, "pubky-rooms session credentials signing",
-       length: 32
-     )}
+    {KeyGenerator.generate(secret, "pubky-rooms session credentials", length: 32),
+     KeyGenerator.generate(secret, "pubky-rooms session credentials signing", length: 32)}
   end
 
-  defp encrypt(plain, {key, sign}), do: Plug.Crypto.MessageEncryptor.encrypt(plain, key, sign)
+  defp encrypt(plain, {key, sign}), do: MessageEncryptor.encrypt(plain, key, sign)
 
   defp decrypt(cipher, {key, sign}) do
-    case Plug.Crypto.MessageEncryptor.decrypt(cipher, key, sign) do
+    case MessageEncryptor.decrypt(cipher, key, sign) do
       {:ok, plain} -> {:ok, plain}
       :error -> {:error, :undecryptable}
     end

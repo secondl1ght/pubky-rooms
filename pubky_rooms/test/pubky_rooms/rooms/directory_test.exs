@@ -1,15 +1,12 @@
 defmodule PubkyRooms.Rooms.DirectoryTest do
-  use ExUnit.Case, async: false
+  use PubkyRooms.RoomsCase, async: false
 
   alias PubkyRooms.{Fixtures, Rooms}
   alias PubkyRooms.Pubky.Fake
   alias PubkyRooms.Rooms.{Directory, Membership, Paths, Room}
 
   setup do
-    Fake.reset()
-    Directory.reset()
-    PubkyRooms.Events.Cursors.reset()
-    PubkyRooms.RateLimit.reset()
+    reset_state()
     Directory.subscribe()
     :ok
   end

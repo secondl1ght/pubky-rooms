@@ -88,10 +88,12 @@ defmodule PubkyRooms.Events.Subscriptions do
   @impl true
   def handle_info({:resolved, user, result}, state) do
     case Map.fetch(state.users, user) do
-      {:ok, %User{owners: owners} = entry} when map_size(owners.map) > 0 ->
-        {:noreply, attach(state, user, entry, result)}
+      {:ok, %User{owners: owners} = entry} ->
+        if MapSet.size(owners) > 0,
+          do: {:noreply, attach(state, user, entry, result)},
+          else: {:noreply, state}
 
-      _ ->
+      :error ->
         {:noreply, state}
     end
   end
@@ -108,21 +110,27 @@ defmodule PubkyRooms.Events.Subscriptions do
 
   def handle_info({:maybe_detach, user}, state) do
     case Map.fetch(state.users, user) do
-      {:ok, %User{owners: owners} = entry} when map_size(owners.map) == 0 ->
-        {:noreply, detach(state, user, entry)}
+      {:ok, %User{owners: owners} = entry} ->
+        if MapSet.size(owners) == 0,
+          do: {:noreply, detach(state, user, entry)},
+          else: {:noreply, state}
 
-      _ ->
+      :error ->
         {:noreply, state}
     end
   end
 
   def handle_info({:maybe_stop_stream, key}, state) do
     case Map.fetch(state.streams, key) do
-      {:ok, %{users: users, pid: pid}} when map_size(users.map) == 0 ->
-        Pubky.stop_stream(pid)
-        {:noreply, %{state | streams: Map.delete(state.streams, key)}}
+      {:ok, %{users: users, pid: pid}} ->
+        if MapSet.size(users) == 0 do
+          Pubky.stop_stream(pid)
+          {:noreply, %{state | streams: Map.delete(state.streams, key)}}
+        else
+          {:noreply, state}
+        end
 
-      _ ->
+      :error ->
         {:noreply, state}
     end
   end

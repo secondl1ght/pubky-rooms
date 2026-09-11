@@ -304,12 +304,7 @@ defmodule PubkyRooms.Rooms.Directory do
 
   defp do_sync_user(z32) do
     with {:ok, %{entries: rooms}} <- Pubky.list(z32, Paths.rooms_dir(), limit: 200) do
-      for %{path: path} <- rooms, {:room, id} <- [Paths.parse(path)] do
-        case fetch_room({z32, id}) do
-          {:ok, room} -> put_room(room)
-          _ -> :ok
-        end
-      end
+      for %{path: path} <- rooms, {:room, id} <- [Paths.parse(path)], do: learn_room({z32, id})
     end
 
     with {:ok, %{entries: markers}} <- Pubky.list(z32, Paths.members_dir(), limit: 500) do
@@ -324,14 +319,16 @@ defmodule PubkyRooms.Rooms.Directory do
   defp sync_membership(z32, ref, path) do
     with {:ok, bytes} <- Pubky.get(z32, path),
          {:ok, _} <- Membership.decode(bytes, ref) do
-      unless get(ref) do
-        case fetch_room(ref) do
-          {:ok, room} -> put_room(room)
-          _ -> :ok
-        end
-      end
-
+      unless get(ref), do: learn_room(ref)
       add_member(ref, z32)
+    end
+  end
+
+  # Fetches and records a room definition; unreachable or invalid rooms are skipped.
+  defp learn_room(ref) do
+    case fetch_room(ref) do
+      {:ok, room} -> put_room(room)
+      _ -> :ok
     end
   end
 
