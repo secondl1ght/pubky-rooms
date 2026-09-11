@@ -4,7 +4,7 @@ Legend: [ ] todo · [~] in progress · [x] done. See `docs/PLAN.md` for the full
 
 ## M0 — prerequisites
 - [x] Git repo, `.gitignore`, `CLAUDE.md`, `docs/` (plan, notes, ADRs, fixtures)
-- [ ] GitHub remote `secondl1ght/pubky-rooms` created and first push
+- [x] GitHub remote `secondl1ght/pubky-rooms` created and first push (private)
 - [ ] User installs Elixir/Erlang/Docker (`sudo apt install -y elixir erlang inotify-tools docker.io docker-compose-v2`; `sudo usermod -aG docker $USER`)
 - [ ] `mix local.hex`, `mix local.rebar`, `mix archive.install hex phx_new`
 - [ ] Clone `pubky-docker` to `~/CODE/pubky-docker`, `docker compose up homeserver -d`, verify `curl http://localhost:6286/info`
