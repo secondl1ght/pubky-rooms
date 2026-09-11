@@ -2,7 +2,7 @@ defmodule Pubky.Pkarr.RelayTest do
   use ExUnit.Case, async: true
 
   alias Pubky.Config
-  alias Pubky.Pkarr.Relay
+  alias Pubky.Pkarr.{Relay, SignedPacket}
   alias Pubky.Test.Fixtures
 
   setup do
@@ -82,7 +82,7 @@ defmodule Pubky.Pkarr.RelayTest do
     config: config
   } do
     {:ok, sp} =
-      Pubky.Pkarr.SignedPacket.decode_relay_payload(Fixtures.user_z32(), Fixtures.user_payload())
+      SignedPacket.decode_relay_payload(Fixtures.user_z32(), Fixtures.user_payload())
 
     Bypass.expect_once(primary, "PUT", "/" <> Fixtures.user_z32(), &Plug.Conn.resp(&1, 500, ""))
 

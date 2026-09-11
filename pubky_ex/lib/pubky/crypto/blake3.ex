@@ -10,7 +10,8 @@ defmodule Pubky.Crypto.Blake3 do
 
   import Bitwise
 
-  @iv {0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19}
+  @iv {0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB,
+       0x5BE0CD19}
   @permutation {2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8}
 
   @block_len 64
@@ -44,7 +45,9 @@ defmodule Pubky.Crypto.Blake3 do
     <<left::binary-size(left_len), right::binary>> = input
     left_cv = chaining_value(hash_subtree(left, chunk_counter))
     right_cv = chaining_value(hash_subtree(right, chunk_counter + div(left_len, @chunk_len)))
-    {@iv, List.to_tuple(Tuple.to_list(left_cv) ++ Tuple.to_list(right_cv)), 0, @block_len, @parent}
+
+    {@iv, List.to_tuple(Tuple.to_list(left_cv) ++ Tuple.to_list(right_cv)), 0, @block_len,
+     @parent}
   end
 
   # The left subtree gets the largest power-of-two number of full chunks that
@@ -69,7 +72,7 @@ defmodule Pubky.Crypto.Blake3 do
         {first8(compress(cv, words(block), chunk_counter, @block_len, flags)), false}
       end)
 
-    flags = (if first?, do: @chunk_start, else: 0) ||| @chunk_end
+    flags = if(first?, do: @chunk_start, else: 0) ||| @chunk_end
     {cv, words(pad(last)), chunk_counter, byte_size(last), flags}
   end
 
@@ -95,7 +98,9 @@ defmodule Pubky.Crypto.Blake3 do
   defp root_output_bytes({cv, block_words, _counter, block_len, flags}, out_len) do
     0
     |> Stream.iterate(&(&1 + 1))
-    |> Stream.map(fn counter -> compress(cv, block_words, counter, block_len, flags ||| @root) |> words_to_binary() end)
+    |> Stream.map(fn counter ->
+      compress(cv, block_words, counter, block_len, flags ||| @root) |> words_to_binary()
+    end)
     |> Enum.reduce_while(<<>>, fn chunk, acc ->
       acc = acc <> chunk
       if byte_size(acc) >= out_len, do: {:halt, binary_part(acc, 0, out_len)}, else: {:cont, acc}
@@ -115,8 +120,8 @@ defmodule Pubky.Crypto.Blake3 do
     {i0, i1, i2, i3, _, _, _, _} = @iv
 
     state =
-      {c0, c1, c2, c3, c4, c5, c6, c7, i0, i1, i2, i3, counter &&& @mask, counter >>> 32 &&& @mask, block_len,
-       flags}
+      {c0, c1, c2, c3, c4, c5, c6, c7, i0, i1, i2, i3, counter &&& @mask,
+       counter >>> 32 &&& @mask, block_len, flags}
 
     {state, _m} =
       Enum.reduce(1..7, {state, m}, fn round_no, {s, m} ->

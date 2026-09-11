@@ -65,11 +65,10 @@ defmodule Pubky.Pkarr.Endpoint do
   defp domain_target?(%{target: target}), do: not PublicKey.valid?(target)
 
   defp base_url(%{target: host, http_port: http_port, port: port}, config) do
-    plain? = http_port != nil or host in config.plain_http_domains
-
-    cond do
-      plain? -> with_port("http://" <> host, http_port || port, 80)
-      true -> with_port("https://" <> host, port, 443)
+    if http_port != nil or host in config.plain_http_domains do
+      with_port("http://" <> host, http_port || port, 80)
+    else
+      with_port("https://" <> host, port, 443)
     end
   end
 

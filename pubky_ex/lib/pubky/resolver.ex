@@ -113,11 +113,13 @@ defmodule Pubky.Resolver do
   end
 
   defp fetch_endpoint(hs_z32, config) do
-    with {:ok, base_url} <- base_url(hs_z32, config) do
-      {{:ok, %{base_url: base_url, features: fetch_features(base_url, config)}},
-       config.resolver_ttl}
-    else
-      {:error, reason} -> {{:error, reason}, config.negative_ttl}
+    case base_url(hs_z32, config) do
+      {:ok, base_url} ->
+        {{:ok, %{base_url: base_url, features: fetch_features(base_url, config)}},
+         config.resolver_ttl}
+
+      {:error, reason} ->
+        {{:error, reason}, config.negative_ttl}
     end
   end
 
@@ -177,18 +179,20 @@ defmodule Pubky.Resolver do
         {:reply, value, state}
 
       _ ->
-        case Map.fetch(in_flight, key) do
-          {:ok, {ref, waiters}} ->
-            {:noreply, %{state | in_flight: Map.put(in_flight, key, {ref, [from | waiters]})}}
+        {:noreply, %{state | in_flight: enqueue(in_flight, key, from, fetch, config)}}
+    end
+  end
 
-          :error ->
-            task =
-              Task.Supervisor.async_nolink(Pubky.TaskSupervisor, fn ->
-                safe_fetch(fetch, config)
-              end)
+  defp enqueue(in_flight, key, from, fetch, config) do
+    case Map.fetch(in_flight, key) do
+      {:ok, {ref, waiters}} ->
+        Map.put(in_flight, key, {ref, [from | waiters]})
 
-            {:noreply, %{state | in_flight: Map.put(in_flight, key, {task.ref, [from]})}}
-        end
+      :error ->
+        task =
+          Task.Supervisor.async_nolink(Pubky.TaskSupervisor, fn -> safe_fetch(fetch, config) end)
+
+        Map.put(in_flight, key, {task.ref, [from]})
     end
   end
 

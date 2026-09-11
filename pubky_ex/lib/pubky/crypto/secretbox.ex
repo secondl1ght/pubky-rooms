@@ -20,7 +20,8 @@ defmodule Pubky.Crypto.Secretbox do
 
   @doc "Decrypts a `nonce || box` message; `:error` on tampering or a wrong key."
   @spec decrypt(binary(), <<_::256>>) :: {:ok, binary()} | :error
-  def decrypt(<<nonce::binary-size(@nonce_len), box::binary>>, <<_::256>> = key) when byte_size(box) >= 16 do
+  def decrypt(<<nonce::binary-size(@nonce_len), box::binary>>, <<_::256>> = key)
+      when byte_size(box) >= 16 do
     case Kcl.secretunbox(box, nonce, key) do
       plaintext when is_binary(plaintext) -> {:ok, plaintext}
       _ -> :error

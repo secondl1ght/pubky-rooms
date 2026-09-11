@@ -22,27 +22,33 @@ defmodule Pubky.Pkarr.Relay do
           {:ok, SignedPacket.t()} | {:error, :not_found | :no_relays | {:relay, term()}}
   def resolve(z32, %Config{} = config \\ Config.get()) do
     Enum.reduce_while(config.pkarr_relays, {:error, :no_relays}, fn relay, _acc ->
-      case Http.request(:get, url(relay, z32), [receive_timeout: @receive_timeout], config) do
-        {:ok, %Req.Response{body: body}} ->
-          case SignedPacket.decode_relay_payload(z32, body) do
-            {:ok, packet} ->
-              {:halt, {:ok, packet}}
-
-            {:error, reason} ->
-              Logger.warning(
-                "pkarr relay #{relay} returned an invalid payload for #{z32}: #{inspect(reason)}"
-              )
-
-              {:cont, {:error, {:relay, {relay, reason}}}}
-          end
-
-        {:error, {:http, 404, _}} ->
-          {:cont, {:error, :not_found}}
-
-        {:error, reason} ->
-          {:cont, {:error, {:relay, {relay, reason}}}}
+      case resolve_at(relay, z32, config) do
+        {:ok, packet} -> {:halt, {:ok, packet}}
+        {:error, reason} -> {:cont, {:error, reason}}
       end
     end)
+  end
+
+  defp resolve_at(relay, z32, config) do
+    case Http.request(:get, url(relay, z32), [receive_timeout: @receive_timeout], config) do
+      {:ok, %Req.Response{body: body}} -> decode(relay, z32, body)
+      {:error, {:http, 404, _}} -> {:error, :not_found}
+      {:error, reason} -> {:error, {:relay, {relay, reason}}}
+    end
+  end
+
+  defp decode(relay, z32, body) do
+    case SignedPacket.decode_relay_payload(z32, body) do
+      {:ok, packet} ->
+        {:ok, packet}
+
+      {:error, reason} ->
+        Logger.warning(
+          "pkarr relay #{relay} returned an invalid payload for #{z32}: #{inspect(reason)}"
+        )
+
+        {:error, {:relay, {relay, reason}}}
+    end
   end
 
   @doc "Publishes a signed packet to every configured relay; succeeds if any accepts it."

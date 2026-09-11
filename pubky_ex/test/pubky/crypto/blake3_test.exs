@@ -20,7 +20,8 @@ defmodule Pubky.Crypto.Blake3Test do
 
   test "extended output matches the full 131-byte vectors" do
     for %{"input_len" => len, "hash" => expected} <- Enum.take(@vectors["cases"], 14) do
-      assert Blake3.hex(input(len), div(String.length(expected), 2)) == expected, "input_len=#{len}"
+      assert Blake3.hex(input(len), div(String.length(expected), 2)) == expected,
+             "input_len=#{len}"
     end
   end
 

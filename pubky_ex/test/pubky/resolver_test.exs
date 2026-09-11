@@ -4,6 +4,7 @@ defmodule Pubky.ResolverTest do
   alias Pubky.{Config, Keypair, Resolver}
   alias Pubky.Pkarr.Dns.RR
   alias Pubky.Pkarr.SignedPacket
+  alias Pubky.Test.Fixtures
 
   setup do
     relay = Bypass.open()
@@ -152,12 +153,12 @@ defmodule Pubky.ResolverTest do
   test "mainnet: the official Pubky profile resolves to homeserver.pubky.app and is readable" do
     Resolver.clear()
     config = Config.mainnet()
-    user = Pubky.Test.Fixtures.user_z32()
+    user = Fixtures.user_z32()
 
     assert {:ok, {hs, "https://homeserver.pubky.app", features}} =
              Resolver.base_url_for_user(user, config)
 
-    assert hs == Pubky.Test.Fixtures.homeserver_z32()
+    assert hs == Fixtures.homeserver_z32()
     # As of 2026-09 the production homeserver predates /info and path-addressed storage,
     # so features are empty and reads must use the legacy `pubky-host` addressing.
     assert is_list(features)
