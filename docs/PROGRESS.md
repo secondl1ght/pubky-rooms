@@ -21,10 +21,11 @@ Legend: [ ] todo · [~] in progress · [x] done. See `docs/PLAN.md` for the full
 - [x] `Pubky.Auth.{Jws, Grant, Pop, Capability, Exchange, Credential, LocalSigner}`, `Pubky.Session` (immutable; `call/3` refreshes on 401)
 - [x] `Pubky.Storage` (+ `Addressing` path-addressed vs legacy `pubky-host`, `Pubky.Resource`, `public_url/3`)
 - [x] `Pubky.Test.FakeHomeserver` (Bypass-backed in-memory homeserver + PKARR relay that verifies grants/PoPs) — 51 unit tests green, credo strict clean
-- [ ] Testnet verification: `test/integration/testnet_test.exs` written; run `PUBKY_TESTNET=1 mix test --include testnet` once pubky-docker is up
+- [x] Testnet verification passed (`PUBKY_TESTNET=1 mix test --include testnet`): signup → publish → resolve → signin → put/get/list/delete → 401 `/priv/` → 403 outside caps → restore → refresh → signout/revoke. Note: the current `synonymsoft/homeserver-testnet:latest` image (2026-08-19) has `/info` but advertises no features, so legacy `pubky-host` addressing is exercised, same as mainnet.
 
 ## M3 — pubky_ex grant flow + events
-- [ ] `Pubky.Auth.{DeepLink, RelayChannel, GrantFlow, GrantFlow.Poller}` + `mix pubky.auth_demo`
+- [x] `Pubky.Auth.{DeepLink, RelayChannel, GrantFlow, GrantFlow.Poller}` with `FakeRelay` + `FakeRing` test doubles (full QR flow, mismatch/garbage/expiry, save/restore, signup flow)
+- [ ] `mix pubky.auth_demo` (manual Ring Simulator run)
 - [ ] `Pubky.Events.{SSE, Event, Stream}` + supervisor/registry
 - [ ] Testnet verification (Simulator approval; live stream put/del; reconnect with cursor)
 

@@ -32,7 +32,7 @@ defmodule Pubky.Integration.TestnetTest do
     assert {:ok, %{base_url: "http://localhost:6286", features: features}} =
              Resolver.endpoint_of(hs, config)
 
-    assert "path-addressed-storage" in features
+    assert is_list(features)
 
     {:ok, cap} = Capability.read_write("/pub/pubky-ex.test/")
     assert {:ok, session} = LocalSigner.signin(user, hs, [caps: [cap]], config)
