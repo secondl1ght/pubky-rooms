@@ -4,6 +4,7 @@ Legend: [ ] todo · [~] in progress · [x] done. See `docs/PLAN.md` for the full
 
 ## M0 — prerequisites
 - [x] Git repo, `.gitignore`, `CLAUDE.md`, `docs/` (plan, notes, ADRs, fixtures)
+- [ ] GitHub remote `secondl1ght/pubky-rooms` created and first push
 - [ ] User installs Elixir/Erlang/Docker (`sudo apt install -y elixir erlang inotify-tools docker.io docker-compose-v2`; `sudo usermod -aG docker $USER`)
 - [ ] `mix local.hex`, `mix local.rebar`, `mix archive.install hex phx_new`
 - [ ] Clone `pubky-docker` to `~/CODE/pubky-docker`, `docker compose up homeserver -d`, verify `curl http://localhost:6286/info`
@@ -51,7 +52,8 @@ Legend: [ ] todo · [~] in progress · [x] done. See `docs/PLAN.md` for the full
 
 ## M8 — Pubky App integration
 - [ ] summary API (`/api/rooms`), `?from=pubky.app`, OG tags
-- [ ] pubky-app PR: routes, nav items, `/rooms` page, Nexus resources service, runtime config
+- [ ] on the fork `secondl1ght/pubky-app` (branch `rooms-integration`): routes, nav items, `/rooms` page, Nexus resources service, runtime config; user deploys the fork
+- [ ] (later, at migration) upstream PR to `pubky/pubky-app`, repo transfer to the pubky org, `rooms.pubky.app` DNS
 
 ---
 

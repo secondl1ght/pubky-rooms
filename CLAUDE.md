@@ -18,6 +18,11 @@ pubky_ex/      Elixir library, OTP app :pubky (pure Elixir Pubky client; no NIFs
 pubky_rooms/   Phoenix 1.8 LiveView app, --no-ecto ({:pubky, path: "../pubky_ex"})
 ```
 
+## Remotes and release path
+- This repo → `github.com/secondl1ght/pubky-rooms` (user's account). Pubky App integration work → the user's fork `secondl1ght/pubky-app` on branch `rooms-integration`, checked out at `~/CODE/pubky-app`.
+- Migration to the `pubky` org, the `rooms.pubky.app` domain, and the upstream `pubky/pubky-app` PR come **later**, after the project has been live on our own deployment and accepted into the ecosystem. Do not open upstream PRs.
+- Push only when the user asks. Commit small and often locally.
+
 ## Conventions
 - Elixir 1.18 / OTP 27, Phoenix 1.8.x, LiveView 1.2.x, Tailwind v4 CSS-first. Use stdlib `JSON`, not Jason. HTTP via `req` (+ Finch). Crypto: `:crypto` (Ed25519), `kcl` (XSalsa20-Poly1305), pure-Elixir BLAKE3 in `Pubky.Crypto.Blake3`.
 - Clean-room UI: a small `PubkyRoomsWeb.UI.*` component library matching Pubky App's look via tokens; no code copied from `~/CODE/pubky-app`.
