@@ -23,6 +23,14 @@ const Composer = {
       this.resize()
       this.el.focus()
     })
+    this.handleEvent("composer:focus", () => this.el.focus())
+    // editing: the server puts the message's text back into the box
+    this.handleEvent("composer:set", ({value}) => {
+      this.el.value = value
+      this.resize()
+      this.el.focus()
+      this.el.setSelectionRange(this.el.value.length, this.el.value.length)
+    })
     this.resize()
   },
   reportTyping() {

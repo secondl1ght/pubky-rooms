@@ -140,6 +140,45 @@ defmodule PubkyRooms.Rooms do
     end
   end
 
+  @doc """
+  Prepares an edit of the author's own message: same id and path, new content,
+  `edited_at` set. Registered as pending so the PUT event confirms it; then
+  call `publish_message/2`.
+  """
+  @spec prepare_edit(sid(), Message.t(), String.t()) ::
+          {:ok, Message.t()} | {:error, String.t() | {:rate_limited, pos_integer()}}
+  def prepare_edit(sid, %Message{} = msg, content) do
+    with :ok <- limit({:messages, sid}, 5, 5_000),
+         {:ok, content} <- Message.validate_content(content) do
+      edited = %{
+        msg
+        | content: content,
+          edited_at: System.os_time(:millisecond),
+          state: :pending,
+          fail_reason: nil
+      }
+
+      :ok =
+        RoomServer.register_pending(
+          msg.room_ref,
+          edited,
+          RoomServer.content_hash(Message.encode(edited))
+        )
+
+      {:ok, edited}
+    end
+  end
+
+  @doc "Deletes the author's own message from their homeserver (already gone counts as done)."
+  @spec delete_message(sid(), Message.t()) :: :ok | {:error, Pubky.reason()}
+  def delete_message(sid, %Message{} = msg) do
+    case Pubky.delete(sid, Message.path(msg)) do
+      :ok -> :ok
+      {:error, :not_found} -> :ok
+      error -> error
+    end
+  end
+
   @doc "Writes a prepared message to the author's homeserver."
   @spec publish_message(sid(), Message.t()) :: :ok | {:error, Pubky.reason()}
   def publish_message(sid, %Message{} = msg) do

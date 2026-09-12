@@ -18,6 +18,16 @@ defmodule PubkyRoomsWeb.Format do
     end
   end
 
+  @doc "Cuts text to at most `max` characters (on a single line), adding an ellipsis when cut."
+  @spec truncate(String.t(), pos_integer()) :: String.t()
+  def truncate(text, max) when is_binary(text) do
+    flat = text |> String.split(~r/\s+/) |> Enum.join(" ")
+
+    if String.length(flat) > max,
+      do: String.slice(flat, 0, max - 1) <> "…",
+      else: flat
+  end
+
   @doc "Time of day (`14:05`) for a Unix-ms timestamp, in UTC."
   @spec clock(non_neg_integer()) :: String.t()
   def clock(ms), do: ms |> DateTime.from_unix!(:millisecond) |> Calendar.strftime("%H:%M")

@@ -11,7 +11,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   use PubkyRoomsWeb, :live_view
 
   alias PubkyRooms.{Ids, Profiles, Rooms}
-  alias PubkyRooms.Rooms.{Message, RoomServer}
+  alias PubkyRooms.Rooms.{Message, Paths, RoomServer}
   alias PubkyRoomsWeb.{Format, Presence}
 
   # a viewer is shown as typing for this long after their last keystroke event
@@ -44,6 +44,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           room_pid: nil,
           room_monitor: nil,
           composer: composer_form(),
+          composer_mode: :new,
           joining: false,
           online: %{},
           viewers: 0,
@@ -155,7 +156,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         {:noreply, put_flash(socket, :error, "Join the room to chat.")}
 
       true ->
-        case Rooms.prepare_message(sid, user.pubky, ref, content) do
+        case prepare(socket.assigns.composer_mode, sid, user.pubky, ref, content) do
           {:ok, msg} ->
             {:noreply,
              socket
@@ -163,6 +164,7 @@ defmodule PubkyRoomsWeb.RoomLive do
              |> stream_insert(:messages, msg)
              |> assign(
                composer: composer_form(),
+               composer_mode: :new,
                sent: Map.put(socket.assigns.sent, msg.key, msg)
              )
              |> push_event("composer:clear", %{})
@@ -172,6 +174,63 @@ defmodule PubkyRoomsWeb.RoomLive do
             {:noreply, assign(socket, composer: composer_form(content, Rooms.explain(reason)))}
         end
     end
+  end
+
+  # Message actions: reply quotes the message, edit puts its text back into
+  # the composer, delete removes the file from the author's homeserver (shown
+  # optimistically; the DEL event confirms, a failure restores the row).
+  def handle_event("reply", %{"id" => id}, socket) do
+    case lookup_message(socket, id) do
+      %Message{} = msg ->
+        {:noreply,
+         socket
+         |> assign(composer_mode: {:reply, msg})
+         |> push_event("composer:focus", %{})}
+
+      nil ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("edit", %{"id" => id}, %{assigns: %{current_user: %{pubky: me}}} = socket) do
+    case lookup_message(socket, id) do
+      %Message{author: ^me} = msg ->
+        {:noreply,
+         socket
+         |> assign(composer_mode: {:edit, msg}, composer: composer_form(msg.content))
+         |> push_event("composer:set", %{value: msg.content})}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("cancel_compose", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(composer_mode: :new, composer: composer_form())
+     |> push_event("composer:clear", %{})}
+  end
+
+  def handle_event(
+        "delete",
+        %{"id" => id},
+        %{assigns: %{current_user: %{pubky: me}, sid: sid}} = socket
+      ) do
+    case lookup_message(socket, id) do
+      %Message{author: ^me} = msg ->
+        {:noreply,
+         socket
+         |> stream_delete(:messages, msg)
+         |> start_async({:delete, msg.key}, fn -> Rooms.delete_message(sid, msg) end)}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event(event, _params, socket) when event in ~w(edit delete) do
+    {:noreply, socket}
   end
 
   def handle_event("retry", %{"id" => id}, %{assigns: %{failed: failed, sid: sid}} = socket) do
@@ -267,6 +326,19 @@ defmodule PubkyRoomsWeb.RoomLive do
      |> start_async(:leave, fn -> Rooms.leave(sid, user.pubky, ref) end)}
   end
 
+  # Which write the composer performs in its current mode.
+  defp prepare(:new, sid, author, ref, content),
+    do: Rooms.prepare_message(sid, author, ref, content)
+
+  defp prepare({:reply, %Message{uri: uri}}, sid, author, ref, content),
+    do: Rooms.prepare_message(sid, author, ref, content, reply_to: uri)
+
+  defp prepare({:edit, %Message{author: author} = msg}, sid, author, _ref, content),
+    do: Rooms.prepare_edit(sid, msg, content)
+
+  defp prepare({:edit, _msg}, _sid, _author, _ref, _content),
+    do: {:error, "You can only edit your own messages."}
+
   # ── async results ──────────────────────────────────────────────────────────
 
   @impl true
@@ -287,6 +359,14 @@ defmodule PubkyRoomsWeb.RoomLive do
   def handle_async({:publish, key}, {:exit, reason}, socket) do
     {:noreply, fail_message(socket, key, {:unexpected, reason})}
   end
+
+  def handle_async({:delete, _key}, {:ok, :ok}, socket), do: {:noreply, socket}
+
+  def handle_async({:delete, key}, {:ok, {:error, reason}}, socket),
+    do: {:noreply, restore_message(socket, key, reason)}
+
+  def handle_async({:delete, key}, {:exit, reason}, socket),
+    do: {:noreply, restore_message(socket, key, {:unexpected, reason})}
 
   def handle_async(:older, {:ok, {:ok, msgs, more?}}, socket) do
     socket = assign(socket, loading_older: false, has_more: more?)
@@ -489,21 +569,81 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   # Stream items cannot be read back, so messages sent from this LiveView are
-  # kept in `sent` until confirmed; a failure re-renders them from there.
+  # kept in `sent` until confirmed; a failure re-renders them from there. A
+  # failed *edit* puts the stored version back instead.
   defp fail_message(socket, key, reason) do
     case Map.get(socket.assigns.sent, key) do
       nil ->
         socket
 
-      msg ->
-        msg = %{msg | state: :failed, fail_reason: reason}
+      %Message{edited_at: edited_at} = msg ->
+        socket = assign(socket, sent: Map.delete(socket.assigns.sent, key))
 
-        socket
-        |> assign(
-          failed: Map.put(socket.assigns.failed, dom_id(key), msg),
-          sent: Map.delete(socket.assigns.sent, key)
-        )
-        |> stream_insert(:messages, msg)
+        case {edited_at, stored_message(socket, key)} do
+          {nil, _} ->
+            msg = %{msg | state: :failed, fail_reason: reason}
+
+            socket
+            |> assign(failed: Map.put(socket.assigns.failed, dom_id(key), msg))
+            |> stream_insert(:messages, msg)
+
+          {_edited, %Message{} = original} ->
+            socket
+            |> stream_insert(:messages, original)
+            |> put_flash(:error, "Edit not stored: " <> Rooms.explain(reason))
+
+          {_edited, nil} ->
+            msg = %{msg | state: :failed, fail_reason: reason}
+
+            socket
+            |> assign(failed: Map.put(socket.assigns.failed, dom_id(key), msg))
+            |> stream_insert(:messages, msg)
+        end
+    end
+  end
+
+  # A delete that did not land: show the message again.
+  defp restore_message(socket, key, reason) do
+    socket = put_flash(socket, :error, "Not deleted: " <> Rooms.explain(reason))
+
+    case stored_message(socket, key) do
+      %Message{} = msg -> stream_insert(socket, :messages, msg)
+      nil -> socket
+    end
+  end
+
+  # Works on the socket (handlers) or on assigns (render).
+  defp stored_message(%{assigns: assigns}, key), do: stored_message(assigns, key)
+  defp stored_message(%{table: nil}, _key), do: nil
+
+  defp stored_message(%{table: table}, key) do
+    case :ets.info(table) != :undefined and :ets.lookup(table, key) do
+      [{^key, msg}] -> msg
+      _ -> nil
+    end
+  end
+
+  # DOM id → stored message (`msg-<author z32>-<msg_id>`).
+  defp lookup_message(socket, "msg-" <> rest) when byte_size(rest) > 53 do
+    <<author::binary-size(52), "-", msg_id::binary>> = rest
+    stored_message(socket, {msg_id, author})
+  end
+
+  defp lookup_message(_socket, _id), do: nil
+
+  # What a reply quotes: the original's author and text, if we hold it.
+  defp quote_of(_socket, %Message{reply_to: nil}), do: nil
+
+  defp quote_of(assigns, %Message{reply_to: uri}) do
+    with {:ok, {author, _ref, msg_id}} <- Paths.parse_message_uri(uri),
+         %Message{} = original <- stored_message(assigns, {msg_id, author}) do
+      %{
+        id: dom_id(original),
+        name: profile_of(assigns.profiles, author).name,
+        content: Format.truncate(original.content, 140)
+      }
+    else
+      _ -> :unavailable
     end
   end
 
@@ -615,6 +755,8 @@ defmodule PubkyRoomsWeb.RoomLive do
                 msg={msg}
                 profile={Map.get(@profiles, msg.author) || Profiles.get(msg.author)}
                 own={@current_user != nil && @current_user.pubky == msg.author}
+                can_reply={@is_member and @status == :ready}
+                quote={quote_of(assigns, msg)}
               />
             </div>
 
@@ -639,6 +781,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                   </div>
                 <% true -> %>
                   <.form for={@composer} id="composer" phx-submit="send" class="flex flex-col gap-2">
+                    <.composer_context mode={@composer_mode} profiles={@profiles} />
                     <div class="flex items-end gap-3 rounded-md border border-dashed border-input px-4 py-3 focus-within:border-ring">
                       <.avatar
                         src={@current_user.avatar_url}
@@ -911,17 +1054,101 @@ defmodule PubkyRoomsWeb.RoomLive do
     """
   end
 
+  attr :mode, :any, required: true, doc: ":new | {:reply, msg} | {:edit, msg}"
+  attr :profiles, :map, required: true
+
+  defp composer_context(%{mode: :new} = assigns), do: ~H""
+
+  defp composer_context(assigns) do
+    {verb, msg} =
+      case assigns.mode do
+        {:reply, msg} -> {"Replying to", msg}
+        {:edit, msg} -> {"Editing your message", msg}
+      end
+
+    assigns =
+      assign(assigns,
+        verb: verb,
+        name: profile_of(assigns.profiles, msg.author).name,
+        excerpt: Format.truncate(msg.content, 100),
+        editing?: match?({:edit, _}, assigns.mode)
+      )
+
+    ~H"""
+    <div
+      id="composer-context"
+      class="flex items-center gap-2 rounded-md bg-white/[0.04] px-3 py-1.5 text-xs text-muted-foreground"
+    >
+      <.icon name={if @editing?, do: "lucide-pencil", else: "lucide-reply"} class="size-3.5 shrink-0" />
+      <span class="min-w-0 flex-1 truncate">
+        <span class="font-semibold text-secondary-foreground">{@verb}</span>
+        <span :if={!@editing?} class="font-semibold text-secondary-foreground">{@name}:</span>
+        {@excerpt}
+      </span>
+      <button
+        type="button"
+        phx-click="cancel_compose"
+        class="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full hover:bg-white/10 hover:text-foreground"
+        aria-label="Cancel"
+      >
+        <.icon name="lucide-x" class="size-3.5" />
+      </button>
+    </div>
+    """
+  end
+
   attr :id, :string, required: true
   attr :msg, Message, required: true
   attr :profile, :map, required: true
   attr :own, :boolean, default: false
+  attr :can_reply, :boolean, default: false
+  attr :quote, :any, default: nil, doc: "nil | :unavailable | %{id, name, content}"
 
   defp message_row(assigns) do
     ~H"""
     <article
       id={@id}
-      class="group flex gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-white/[0.03]"
+      class="group relative flex gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-white/[0.03]"
     >
+      <div
+        :if={@msg.state == :confirmed and (@can_reply or @own)}
+        class="absolute -top-3 right-2 flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5 shadow-xs sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+      >
+        <button
+          :if={@can_reply}
+          type="button"
+          phx-click="reply"
+          phx-value-id={@id}
+          class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
+          aria-label="Reply"
+          title="Reply"
+        >
+          <.icon name="lucide-reply" class="size-4" />
+        </button>
+        <button
+          :if={@own}
+          type="button"
+          phx-click="edit"
+          phx-value-id={@id}
+          class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
+          aria-label="Edit"
+          title="Edit"
+        >
+          <.icon name="lucide-pencil" class="size-4" />
+        </button>
+        <button
+          :if={@own}
+          type="button"
+          phx-click="delete"
+          phx-value-id={@id}
+          data-confirm="Delete this message from your homeserver?"
+          class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/20 hover:text-destructive"
+          aria-label="Delete"
+          title="Delete"
+        >
+          <.icon name="lucide-trash-2" class="size-4" />
+        </button>
+      </div>
       <.avatar
         src={@profile.avatar_url}
         name={@profile.name}
@@ -941,6 +1168,20 @@ defmodule PubkyRoomsWeb.RoomLive do
           </time>
           <span :if={@msg.edited_at} class="text-xs text-muted-foreground">(edited)</span>
         </div>
+        <a
+          :if={is_map(@quote)}
+          href={"#" <> @quote.id}
+          class="mb-0.5 flex min-w-0 flex-col gap-0.5 border-l-2 border-brand/60 pl-2 text-xs text-muted-foreground hover:text-secondary-foreground"
+        >
+          <span class="font-semibold">{@quote.name}</span>
+          <span class="truncate">{@quote.content}</span>
+        </a>
+        <span
+          :if={@quote == :unavailable}
+          class="mb-0.5 border-l-2 border-border pl-2 text-xs italic text-muted-foreground"
+        >
+          Replying to a message that is no longer available
+        </span>
         <p class={[
           "whitespace-pre-wrap break-words text-base text-secondary-foreground",
           @msg.state == :pending && "opacity-60"

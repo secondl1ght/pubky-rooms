@@ -196,6 +196,100 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     positions == Enum.sort(positions)
   end
 
+  test "own messages can be edited and deleted; others see the change", ctx do
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    {:ok, anon, _} = live(ctx.conn, ctx.path)
+
+    view |> form("#composer", message: %{content: "typo herre"}) |> render_submit()
+    render_async(view)
+    wait_for(fn -> render(view) end, &(&1 =~ "Stored on your homeserver"))
+    [%Message{} = stored] = messages_on_homeserver(ctx.alice, ctx.room)
+    id = "msg-#{ctx.alice}-#{stored.msg_id}"
+
+    # edit: the composer switches to edit mode with the text, the same file is overwritten
+    view |> element("##{id} button[aria-label=Edit]") |> render_click()
+    assert render(view) =~ "Editing your message"
+    view |> form("#composer", message: %{content: "typo fixed"}) |> render_submit()
+    render_async(view)
+    html = wait_for(fn -> render(view) end, &(&1 =~ "typo fixed"))
+    assert html =~ "(edited)"
+    refute html =~ "typo herre"
+    refute html =~ "Editing your message"
+
+    stored_id = stored.msg_id
+
+    assert [%Message{msg_id: ^stored_id, content: "typo fixed", edited_at: edited}] =
+             messages_on_homeserver(ctx.alice, ctx.room)
+
+    assert is_integer(edited)
+    assert wait_for(fn -> render(anon) end, &(&1 =~ "typo fixed"))
+
+    # cancelling an edit puts the composer back
+    view |> element("##{id} button[aria-label=Edit]") |> render_click()
+    view |> element("#composer-context button[aria-label=Cancel]") |> render_click()
+    refute render(view) =~ "Editing your message"
+
+    # delete: gone locally at once, gone on the homeserver, gone for others
+    view |> element("##{id} button[aria-label=Delete]") |> render_click()
+    refute render(view) =~ "typo fixed"
+    render_async(view)
+    assert wait_for(fn -> messages_on_homeserver(ctx.alice, ctx.room) end, &(&1 == []))
+    assert wait_for(fn -> render(anon) end, &(not (&1 =~ "typo fixed")))
+  end
+
+  test "a failed edit restores the stored message", ctx do
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    view |> form("#composer", message: %{content: "keep me"}) |> render_submit()
+    render_async(view)
+    wait_for(fn -> render(view) end, &(&1 =~ "Stored on your homeserver"))
+    [stored] = messages_on_homeserver(ctx.alice, ctx.room)
+    id = "msg-#{ctx.alice}-#{stored.msg_id}"
+
+    view |> element("##{id} button[aria-label=Edit]") |> render_click()
+    Fake.fail_next(Message.path(stored), :quota)
+    view |> form("#composer", message: %{content: "lost edit"}) |> render_submit()
+    render_async(view)
+    html = wait_for(fn -> render(view) end, &(&1 =~ "Edit not stored"))
+    assert html =~ "keep me"
+    refute html =~ "lost edit"
+    assert [%Message{content: "keep me"}] = messages_on_homeserver(ctx.alice, ctx.room)
+  end
+
+  test "replies quote the original and are stored with reply_to", ctx do
+    {bob_sid, bob} = Fixtures.login("bob")
+    Rooms.join(bob_sid, bob, Room.ref(ctx.room))
+    bob_conn = init_test_session(ctx.conn, Fixtures.cookie(bob_sid))
+
+    {:ok, alice_view, _} = live(ctx.alice_conn, ctx.path)
+    alice_view |> form("#composer", message: %{content: "original question?"}) |> render_submit()
+    render_async(alice_view)
+    [original] = messages_on_homeserver(ctx.alice, ctx.room)
+    id = "msg-#{ctx.alice}-#{original.msg_id}"
+
+    {:ok, bob_view, _} = live(bob_conn, ctx.path)
+    wait_for(fn -> render(bob_view) end, &(&1 =~ "original question?"))
+    # bob cannot edit or delete alice's message
+    refute has_element?(bob_view, "##{id} button[aria-label=Edit]")
+    refute has_element?(bob_view, "##{id} button[aria-label=Delete]")
+
+    bob_view |> element("##{id} button[aria-label=Reply]") |> render_click()
+    assert render(bob_view) =~ "Replying to"
+    bob_view |> form("#composer", message: %{content: "the answer"}) |> render_submit()
+    render_async(bob_view)
+
+    html = wait_for(fn -> render(alice_view) end, &(&1 =~ "the answer"))
+    # the quote links to the original and shows its text
+    assert html =~ ~s(href="##{id}")
+    assert html =~ ~r/the answer/
+    assert [%Message{reply_to: reply_to}] = messages_on_homeserver(bob, ctx.room)
+    assert reply_to == original.uri
+
+    # an anonymous visitor has no actions at all
+    {:ok, anon, _} = live(ctx.conn, ctx.path)
+    wait_for(fn -> render(anon) end, &(&1 =~ "the answer"))
+    refute has_element?(anon, "button[aria-label=Reply]")
+  end
+
   test "anonymous viewers are counted, never identified", ctx do
     {:ok, alice_view, _} = live(ctx.alice_conn, ctx.path)
     assert wait_for(fn -> render(alice_view) end, &(&1 =~ "1 online"))
