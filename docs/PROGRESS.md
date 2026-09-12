@@ -93,7 +93,7 @@ Source of truth for scope: `docs/PLAN.md` + `docs/notes/rooms-app-design.md`. At
 | `?from=pubky.app` back link, Open Graph tags per room, share to Pubky App | M8 | open |
 | Pubky App fork: routes, nav items, `/rooms` page, Nexus resources service, runtime config | M8 | open |
 | Auto-link URLs in message text safely (text rendering stays HTML-free) | M6 | open |
-| Enforce/document `max_members_subscribed` (500) per room | M5 | open |
+| Member subscription budget per room: `max_members_subscribed` was a placeholder (500). Real cost is 1/50 of a stream connection per member (streams shard at 50 per homeserver) + one listing at bootstrap; the `Pubky.Finch.Streams` pool (100 per homeserver) bounds it at ~5 000 subscribed members per homeserver per node. M5: make the pool size config, default the cap to 5 000, and degrade gracefully beyond it (poll unsubscribed members' folders every 60 s + a room notice) instead of dropping anyone. Never a cap on viewers. | M5 | open |
 | `Subscriptions` unit tests (sharding at 50, refcount, owner DOWN, detach grace, retry) | M7 | open |
 | `AuthLive` test with a fake grant flow (Mox or `PubkyRooms.Pubky`-style behaviour) | M7 | open |
 | `@tag :testnet` end-to-end app test (sign-in via LocalSigner, create, send, confirm, restart) | M7 | open |
