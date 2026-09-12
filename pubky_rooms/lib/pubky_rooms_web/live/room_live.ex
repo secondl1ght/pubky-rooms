@@ -13,7 +13,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   alias PubkyRooms.{Ids, Profiles, Rooms}
   alias PubkyRooms.Rooms.{Ban, Directory, Message, Paths, Reaction, Room, RoomServer}
   alias PubkyRooms.Tags.Tag
-  alias PubkyRoomsWeb.{Format, Presence}
+  alias PubkyRoomsWeb.{Format, Linkify, Presence}
 
   # a viewer is shown as typing for this long after their last keystroke event
   @typing_ttl 4_000
@@ -1766,7 +1766,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           "whitespace-pre-wrap break-words text-base text-secondary-foreground",
           @msg.state == :pending && "opacity-60"
         ]}>
-          {@msg.content}
+          <Linkify.linkify text={@msg.content} />
         </p>
         <div
           :if={@can_reply}

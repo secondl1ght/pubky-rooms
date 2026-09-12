@@ -4,9 +4,10 @@ defmodule PubkyRoomsWeb.Presence do
 
   Signed-in viewers are tracked per room (`presence:room:<creator>/<id>`) and
   across the app (`presence:lobby`), keyed by public key with one meta per
-  open tab. Anonymous viewers are never tracked. Nothing here is written
-  anywhere: presence lives in the tracker's memory and vanishes with the
-  LiveView.
+  open tab (`%{joined_at}` only; names come from the profiles cache).
+  Anonymous viewers are never tracked, only counted by the room server.
+  Nothing here is written anywhere: presence lives in the tracker's memory
+  and vanishes with the LiveView.
 
   Instead of the raw `presence_diff` message, subscribers of a topic (see
   `subscribe/1`) receive `{:presence, {:join | :leave, %{key, metas}}}` per
@@ -35,13 +36,8 @@ defmodule PubkyRoomsWeb.Presence do
   @spec track_lobby(map()) :: {:ok, binary()} | {:error, term()}
   def track_lobby(user), do: track_user(lobby_topic(), user)
 
-  defp track_user(topic, %{pubky: z32} = user) do
-    track(self(), topic, z32, %{
-      name: user.name,
-      avatar_url: user.avatar_url,
-      joined_at: System.os_time(:millisecond)
-    })
-  end
+  defp track_user(topic, %{pubky: z32}),
+    do: track(self(), topic, z32, %{joined_at: System.os_time(:millisecond)})
 
   @doc "Subscribes the caller to `{:presence, …}` messages for the topic."
   @spec subscribe(String.t()) :: :ok | {:error, term()}
