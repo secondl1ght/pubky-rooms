@@ -600,6 +600,10 @@ defmodule PubkyRooms.Rooms.RoomServer do
            do: {msg_id, member, path}
          )}
 
+      # a member who never wrote in this room has no folder yet: nothing to load
+      {:error, :not_found} ->
+        {:ok, []}
+
       {:error, reason} ->
         Logger.debug("history of #{String.slice(member, 0, 8)}… unavailable: #{inspect(reason)}")
         {:error, reason}

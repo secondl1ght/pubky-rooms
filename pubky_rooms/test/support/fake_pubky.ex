@@ -104,7 +104,17 @@ defmodule PubkyRooms.Pubky.Fake do
 
     entries = Enum.map(paths, &Resource.new(user, &1))
     next = if length(entries) >= limit, do: entries |> List.last() |> Resource.to_uri(), else: nil
-    {:ok, %{entries: entries, next_cursor: next}}
+
+    # like a real homeserver: a directory that holds no files does not exist
+    if entries == [] and is_nil(cursor) and not exists_under?(user, dir),
+      do: {:error, :not_found},
+      else: {:ok, %{entries: entries, next_cursor: next}}
+  end
+
+  defp exists_under?(user, dir) do
+    Agent.get(__MODULE__, fn s ->
+      Enum.any?(s.files, fn {{u, p}, _} -> u == user and String.starts_with?(p, dir) end)
+    end)
   end
 
   defp shallow_entry(path, dir) do

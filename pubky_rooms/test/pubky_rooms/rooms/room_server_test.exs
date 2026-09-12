@@ -212,6 +212,23 @@ defmodule PubkyRooms.Rooms.RoomServerTest do
     assert_receive {:room_event, ^ref, {:polled, [^bob]}}, 1_000
   end
 
+  test "a member without a message folder yet is not reported as unreachable", ctx do
+    %{ref: ref} = ctx
+    newcomer = Fixtures.z32("newcomer")
+    Directory.add_member(ref, newcomer)
+
+    {:ok, _pid} = RoomServer.ensure(ref)
+    assert_receive {:room_event, ^ref, :ready}, 2_000
+    {:ok, %{unreachable: [], members: members}} = RoomServer.attach(ref)
+    assert newcomer in members
+
+    # …and neither is one who joins live
+    later = Fixtures.z32("later")
+    Directory.add_member(ref, later)
+    assert_receive {:room_event, ^ref, {:member_joined, ^later}}, 1_000
+    refute_receive {:room_event, ^ref, {:unreachable, _}}, 300
+  end
+
   test "members whose live stream is down are reported and cleared when it recovers", ctx do
     %{alice: alice, ref: ref} = ctx
     {:ok, _pid} = RoomServer.ensure(ref)
