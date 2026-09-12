@@ -19,7 +19,8 @@ config :pubky_rooms,
   room_idle_timeout_ms: 100,
   bootstrap_per_member: 10,
   bootstrap_messages: 5,
-  member_poll_ms: 100
+  member_poll_ms: 100,
+  viewers_debounce_ms: 50
 
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime

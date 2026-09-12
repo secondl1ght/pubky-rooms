@@ -159,6 +159,21 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert wait_for(fn -> render(alice_view) end, &(&1 =~ "1 online"))
   end
 
+  test "anonymous viewers are counted, never identified", ctx do
+    {:ok, alice_view, _} = live(ctx.alice_conn, ctx.path)
+    assert wait_for(fn -> render(alice_view) end, &(&1 =~ "1 online"))
+    refute render(alice_view) =~ "anonymous"
+
+    {:ok, anon, _} = live(ctx.conn, ctx.path)
+    html = wait_for(fn -> render(alice_view) end, &(&1 =~ "1 anonymous"))
+    assert html =~ "1 online"
+    # the anonymous viewer sees the same totals
+    assert wait_for(fn -> render(anon) end, &(&1 =~ "1 anonymous"))
+
+    GenServer.stop(anon.pid)
+    refute wait_for(fn -> render(alice_view) end, &(not (&1 =~ "anonymous"))) =~ "anonymous"
+  end
+
   test "names update in place when a profile changes, including on existing messages", ctx do
     {:ok, view, _} = live(ctx.alice_conn, ctx.path)
     view |> form("#composer", message: %{content: "who am I"}) |> render_submit()

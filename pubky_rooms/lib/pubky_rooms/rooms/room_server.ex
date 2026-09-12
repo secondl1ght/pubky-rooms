@@ -28,6 +28,11 @@ defmodule PubkyRooms.Rooms.RoomServer do
        reported as `{:live_unavailable, [z32]}` from `Subscriptions` status
        broadcasts. Nobody is ever dropped from a room.
 
+    6. **Viewers** — every attached viewer (signed in or not) is monitored;
+       the total is announced as `{:room_stats, ref, %{viewers: n}}` on
+       `stats_topic/1`, debounced to at most one broadcast per
+       `viewers_debounce_ms`. Only a count, never who (ADR 0006).
+
   Messages live in a public ETS `ordered_set` keyed by `{msg_id, author}`,
   so viewers read history directly. Changes are broadcast on the room topic as
   `{:room_event, ref, event}`; see `PubkyRoomsWeb.RoomLive` for the consumer.
@@ -46,6 +51,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
   @retry_history_every 60_000
   @default_budget 5_000
   @default_poll_ms 60_000
+  @default_viewers_debounce 2_000
 
   @type ref :: Paths.room_ref()
   @type status :: :bootstrapping | :ready | :not_found | :closed | {:error, term()}
@@ -55,6 +61,21 @@ defmodule PubkyRooms.Rooms.RoomServer do
   @doc "The PubSub topic of a room."
   @spec topic(ref()) :: String.t()
   def topic({creator, id}), do: "room:#{creator}/#{id}"
+
+  @doc "The low-volume topic carrying `{:room_stats, ref, %{viewers: n}}` (lobby cards subscribe here)."
+  @spec stats_topic(ref()) :: String.t()
+  def stats_topic({creator, id}), do: "room:#{creator}/#{id}:stats"
+
+  @doc "How many viewers (signed in or anonymous) have the room open on this node; 0 when it is not running."
+  @spec viewer_count(ref()) :: non_neg_integer()
+  def viewer_count(ref) do
+    case whereis(ref) do
+      nil -> 0
+      pid -> GenServer.call(pid, :viewer_count)
+    end
+  catch
+    :exit, _ -> 0
+  end
 
   @doc "Starts the room's server if it is not running."
   @spec ensure(ref()) :: {:ok, pid()} | {:error, term()}
@@ -130,7 +151,9 @@ defmodule PubkyRooms.Rooms.RoomServer do
       idle_timer: nil,
       unreachable: MapSet.new(),
       retry_timer: nil,
-      poll_timer: nil
+      poll_timer: nil,
+      viewers_timer: nil,
+      announced_viewers: 0
     }
 
     {:ok, state, {:continue, :bootstrap}}
@@ -178,12 +201,13 @@ defmodule PubkyRooms.Rooms.RoomServer do
     state =
       if Map.has_key?(state.viewers, viewer),
         do: state,
-        else: put_in(state.viewers[viewer], Process.monitor(viewer))
+        else: state |> put_in([:viewers, viewer], Process.monitor(viewer)) |> viewers_changed()
 
     {:reply, {:ok, snapshot_of(state)}, state |> cancel_idle_timer() |> schedule_poll()}
   end
 
   def handle_call(:snapshot, _from, state), do: {:reply, {:ok, snapshot_of(state)}, state}
+  def handle_call(:viewer_count, _from, state), do: {:reply, map_size(state.viewers), state}
 
   def handle_call({:register_pending, msg, hash}, _from, state) do
     pending =
@@ -296,7 +320,24 @@ defmodule PubkyRooms.Rooms.RoomServer do
 
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
     state = %{state | viewers: Map.delete(state.viewers, pid)}
-    {:noreply, maybe_start_idle_timer(state)}
+    {:noreply, state |> viewers_changed() |> maybe_start_idle_timer()}
+  end
+
+  def handle_info(:announce_viewers, state) do
+    state = %{state | viewers_timer: nil}
+    total = map_size(state.viewers)
+
+    if total == state.announced_viewers do
+      {:noreply, state}
+    else
+      Phoenix.PubSub.broadcast(
+        PubkyRooms.PubSub,
+        stats_topic(state.ref),
+        {:room_stats, state.ref, %{viewers: total}}
+      )
+
+      {:noreply, %{state | announced_viewers: total}}
+    end
   end
 
   def handle_info(:idle_stop, state) do
@@ -652,6 +693,14 @@ defmodule PubkyRooms.Rooms.RoomServer do
     %{state | idle_timer: nil}
   end
 
+  # The viewer total is announced at most once per debounce window.
+  defp viewers_changed(%{viewers_timer: nil} = state) do
+    delay = config(:viewers_debounce_ms, @default_viewers_debounce)
+    %{state | viewers_timer: Process.send_after(self(), :announce_viewers, delay)}
+  end
+
+  defp viewers_changed(state), do: state
+
   defp snapshot_of(state) do
     %{
       status: state.status,
@@ -660,7 +709,8 @@ defmodule PubkyRooms.Rooms.RoomServer do
       members: MapSet.to_list(state.members),
       unreachable: MapSet.to_list(state.unreachable),
       polled: MapSet.to_list(state.polled),
-      live_unavailable: MapSet.to_list(state.live_unavailable)
+      live_unavailable: MapSet.to_list(state.live_unavailable),
+      viewers: map_size(state.viewers)
     }
   end
 

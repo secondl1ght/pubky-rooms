@@ -46,6 +46,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           composer: composer_form(),
           joining: false,
           online: %{},
+          viewers: 0,
           typing: %{},
           typing_timer: nil,
           last_typing_at: nil
@@ -55,6 +56,7 @@ defmodule PubkyRoomsWeb.RoomLive do
 
       if connected?(socket) do
         Phoenix.PubSub.subscribe(PubkyRooms.PubSub, RoomServer.topic(ref))
+        Phoenix.PubSub.subscribe(PubkyRooms.PubSub, Rooms.stats_topic(ref))
         Phoenix.PubSub.subscribe(PubkyRooms.PubSub, Rooms.typing_topic(ref))
         {:ok, socket |> attach() |> track_presence()}
       else
@@ -109,7 +111,8 @@ defmodule PubkyRoomsWeb.RoomLive do
     |> assign(
       unreachable: Map.get(snapshot, :unreachable, []),
       polled: Map.get(snapshot, :polled, []),
-      live_unavailable: Map.get(snapshot, :live_unavailable, [])
+      live_unavailable: Map.get(snapshot, :live_unavailable, []),
+      viewers: Map.get(snapshot, :viewers, 0)
     )
   end
 
@@ -288,6 +291,10 @@ defmodule PubkyRoomsWeb.RoomLive do
   @impl true
   def handle_info({:room_event, ref, event}, %{assigns: %{ref: ref}} = socket) do
     {:noreply, apply_room_event(socket, event)}
+  end
+
+  def handle_info({:room_stats, ref, %{viewers: viewers}}, %{assigns: %{ref: ref}} = socket) do
+    {:noreply, assign(socket, viewers: viewers)}
   end
 
   def handle_info(
@@ -472,6 +479,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           status={@status}
           members={@members}
           online_count={map_size(@online)}
+          anonymous_count={Rooms.anonymous_count(@viewers, @online)}
           is_member={@is_member}
           current_user={@current_user}
           joining={@joining}
@@ -610,7 +618,10 @@ defmodule PubkyRoomsWeb.RoomLive do
                 <.section_title class="text-xl">Members · {length(@members)}</.section_title>
                 <p class="text-xs text-muted-foreground">
                   <span class="mr-1 inline-block size-2 rounded-full bg-[#00FF5D] align-middle"></span>
-                  {map_size(@online)} online
+                  {map_size(@online)} online<span
+                    :if={Rooms.anonymous_count(@viewers, @online) > 0}
+                    title="Viewers who are not signed in"
+                  > · {Rooms.anonymous_count(@viewers, @online)} anonymous</span>
                 </p>
               </.card_header>
               <.card_content class="flex flex-col gap-3">
@@ -750,6 +761,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   attr :status, :any, required: true
   attr :members, :list, required: true
   attr :online_count, :integer, required: true
+  attr :anonymous_count, :integer, default: 0
   attr :is_member, :boolean, required: true
   attr :current_user, :any, required: true
   attr :joining, :boolean, required: true
@@ -796,6 +808,14 @@ defmodule PubkyRoomsWeb.RoomLive do
         >
           <span class="inline-block size-2 rounded-full bg-[#00FF5D]"></span>
           <span id="online-count">{@online_count} online</span>
+        </span>
+        <span
+          :if={@anonymous_count > 0}
+          id="anonymous-count"
+          class="hidden items-center gap-1 text-xs text-muted-foreground sm:flex"
+          title="Viewers who are not signed in"
+        >
+          <.icon name="lucide-eye" class="size-3.5" /> {@anonymous_count} anonymous
         </span>
         <.button
           variant="secondary"

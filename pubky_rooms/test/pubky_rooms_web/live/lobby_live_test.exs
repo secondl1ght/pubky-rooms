@@ -35,6 +35,28 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     assert wait_for(fn -> render(view) end, &(&1 =~ "2 people online"))
   end
 
+  test "room cards show signed-in and anonymous viewers", %{conn: conn} do
+    {sid, alice} = Fixtures.login("alice")
+
+    {:ok, room} =
+      PubkyRooms.Rooms.create_room(sid, alice, %{"name" => "Busy", "visibility" => "public"})
+
+    alice_conn = init_test_session(conn, Fixtures.cookie(sid))
+    room_path = ~p"/r/#{alice}/#{room.id}"
+
+    {:ok, lobby, html} = live(alice_conn, ~p"/")
+    assert html =~ "Busy"
+    refute html =~ "Anonymous viewers"
+
+    {:ok, _anon, _} = live(build_conn(), room_path)
+    html = wait_for(fn -> render(lobby) end, &(&1 =~ "Anonymous viewers"))
+    assert html =~ ~r/Anonymous viewers.*1/s
+    refute html =~ "Signed-in people in the room"
+
+    {:ok, _alice_room, _} = live(alice_conn, room_path)
+    assert wait_for(fn -> render(lobby) end, &(&1 =~ "Signed-in people in the room"))
+  end
+
   test "creating a room requires sign-in", %{conn: conn} do
     assert {:error, {:redirect, %{to: "/login?return_to=/rooms/new"}}} =
              live(conn, ~p"/rooms/new")

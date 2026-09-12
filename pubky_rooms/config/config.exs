@@ -22,6 +22,8 @@ config :pubky_rooms,
   # × 50 users) bounds the total per homeserver per node.
   max_members_subscribed: 5_000,
   member_poll_ms: 60_000,
+  # viewer totals per room are announced at most once per this window
+  viewers_debounce_ms: 2_000,
   # rooms stay warm (subscribed, cached) this long after the last viewer leaves…
   room_idle_timeout_ms: 1_800_000,
   # …unless more than this many room processes are alive, then rooms *without viewers*

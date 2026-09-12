@@ -212,6 +212,27 @@ defmodule PubkyRooms.Rooms.RoomServerTest do
     assert_receive {:room_event, ^ref, {:polled, [^bob]}}, 1_000
   end
 
+  test "the viewer total is announced on the stats topic, debounced, signed in or not", ctx do
+    %{ref: ref} = ctx
+    Phoenix.PubSub.subscribe(PubkyRooms.PubSub, RoomServer.stats_topic(ref))
+    assert RoomServer.viewer_count(ref) == 0
+
+    {:ok, _pid} = RoomServer.ensure(ref)
+    assert_receive {:room_event, ^ref, :ready}, 2_000
+    {:ok, %{viewers: 0}} = RoomServer.snapshot(ref)
+
+    # two viewers attach within one debounce window → a single announcement
+    {:ok, %{viewers: 1}} = RoomServer.attach(ref)
+    other = spawn(fn -> Process.sleep(:infinity) end)
+    {:ok, %{viewers: 2}} = RoomServer.attach(ref, other)
+    assert_receive {:room_stats, ^ref, %{viewers: 2}}, 1_000
+    refute_received {:room_stats, ^ref, %{viewers: 1}}
+    assert RoomServer.viewer_count(ref) == 2
+
+    Process.exit(other, :kill)
+    assert_receive {:room_stats, ^ref, %{viewers: 1}}, 1_000
+  end
+
   test "a member without a message folder yet is not reported as unreachable", ctx do
     %{ref: ref} = ctx
     newcomer = Fixtures.z32("newcomer")

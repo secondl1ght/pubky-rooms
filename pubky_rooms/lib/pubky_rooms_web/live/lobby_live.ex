@@ -21,7 +21,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
 
     {:ok,
      socket
-     |> assign(page_title: "Rooms", form: new_form(), creating: false)
+     |> assign(page_title: "Rooms", form: new_form(), creating: false, stats_topics: MapSet.new())
      |> load_rooms()
      |> load_presence()}
   end
@@ -95,6 +95,10 @@ defmodule PubkyRoomsWeb.LobbyLive do
   def handle_info({:directory, _event}, socket), do: {:noreply, load_rooms(socket)}
   def handle_info({:presence, _event}, socket), do: {:noreply, load_presence(socket)}
 
+  def handle_info({:room_stats, ref, %{viewers: viewers}}, socket) do
+    {:noreply, assign(socket, room_viewers: Map.put(socket.assigns.room_viewers, ref, viewers))}
+  end
+
   def handle_info({:profile_updated, z32, profile}, socket) do
     if Map.has_key?(socket.assigns.profiles, z32),
       do: {:noreply, assign(socket, profiles: Map.put(socket.assigns.profiles, z32, profile))},
@@ -104,22 +108,51 @@ defmodule PubkyRoomsWeb.LobbyLive do
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   defp load_rooms(%{assigns: %{current_user: nil}} = socket),
-    do: assign(socket, created: [], joined: [], profiles: %{})
+    do: socket |> assign(created: [], joined: [], profiles: %{}) |> load_viewers()
 
   defp load_rooms(%{assigns: %{current_user: %{pubky: pubky}}} = socket) do
     %{created: created, joined: joined} = Directory.rooms_of(pubky)
     creators = Enum.map(created ++ joined, & &1.creator)
     profiles = Map.new(creators, &{&1, Profiles.get(&1)})
-    assign(socket, created: created, joined: joined, profiles: profiles)
+    socket |> assign(created: created, joined: joined, profiles: profiles) |> load_viewers()
+  end
+
+  defp listed_refs(socket),
+    do: Enum.map(socket.assigns.created ++ socket.assigns.joined, &Room.ref/1)
+
+  # Viewer totals (signed in or not) per listed room, kept live through each
+  # room's low-volume stats topic and its presence topic; subscriptions follow
+  # the listed set.
+  defp load_viewers(socket) do
+    refs = listed_refs(socket)
+
+    wanted =
+      MapSet.new(
+        Enum.map(refs, &Rooms.stats_topic/1) ++
+          Enum.map(refs, &("proxy:" <> Presence.room_topic(&1)))
+      )
+
+    current = socket.assigns.stats_topics
+
+    if connected?(socket) do
+      for t <- MapSet.difference(wanted, current),
+          do: Phoenix.PubSub.subscribe(PubkyRooms.PubSub, t)
+
+      for t <- MapSet.difference(current, wanted),
+          do: Phoenix.PubSub.unsubscribe(PubkyRooms.PubSub, t)
+    end
+
+    assign(socket,
+      stats_topics: wanted,
+      room_viewers: Map.new(refs, &{&1, Rooms.viewer_count(&1)})
+    )
   end
 
   # App-wide online count and per-room online counts (signed-in users only).
   defp load_presence(socket) do
-    rooms = socket.assigns.created ++ socket.assigns.joined
-
     assign(socket,
       online_count: Presence.online_count(Presence.lobby_topic()),
-      room_online: Map.new(rooms, &{Room.ref(&1), Rooms.online_count(Room.ref(&1))})
+      room_online: socket |> listed_refs() |> Map.new(&{&1, Rooms.online_stats(&1)})
     )
   end
 
@@ -168,7 +201,8 @@ defmodule PubkyRoomsWeb.LobbyLive do
                 :for={room <- @created}
                 room={room}
                 creator={@profiles[room.creator]}
-                online={@room_online[Room.ref(room)] || 0}
+                online={@room_online[Room.ref(room)]}
+                viewers={@room_viewers[Room.ref(room)] || 0}
               />
             </div>
           </section>
@@ -179,7 +213,8 @@ defmodule PubkyRoomsWeb.LobbyLive do
                 :for={room <- @joined}
                 room={room}
                 creator={@profiles[room.creator]}
-                online={@room_online[Room.ref(room)] || 0}
+                online={@room_online[Room.ref(room)]}
+                viewers={@room_viewers[Room.ref(room)] || 0}
               />
             </div>
           </section>
@@ -293,15 +328,19 @@ defmodule PubkyRoomsWeb.LobbyLive do
 
   attr :room, Room, required: true
   attr :creator, :map, required: true, doc: "the creator's profile"
-  attr :online, :integer, default: 0, doc: "signed-in users in the room right now"
+  attr :online, :map, default: nil, doc: "signed-in presence: `%{users, tabs}`"
+  attr :viewers, :integer, default: 0, doc: "everyone with the room open, signed in or not"
 
   defp room_card(assigns) do
     ref = Room.ref(assigns.room)
+    %{users: users, tabs: tabs} = assigns.online || %{users: 0, tabs: 0}
 
     assigns =
       assign(assigns,
         member_count: Directory.member_count(ref),
-        activity: Directory.last_activity(ref)
+        activity: Directory.last_activity(ref),
+        online: users,
+        anonymous: max(assigns.viewers - tabs, 0)
       )
 
     ~H"""
@@ -322,8 +361,15 @@ defmodule PubkyRoomsWeb.LobbyLive do
             <span class="truncate">{@creator.name}</span>
           </span>
           <span class="flex shrink-0 items-center gap-3">
-            <span :if={@online > 0} class="flex items-center gap-1 text-secondary-foreground">
+            <span
+              :if={@online > 0}
+              class="flex items-center gap-1 text-secondary-foreground"
+              title="Signed-in people in the room"
+            >
               <span class="inline-block size-2 rounded-full bg-[#00FF5D]"></span> {@online}
+            </span>
+            <span :if={@anonymous > 0} class="flex items-center gap-1" title="Anonymous viewers">
+              <.icon name="lucide-eye" class="size-3.5" /> {@anonymous}
             </span>
             <span class="flex items-center gap-1"><.icon name="lucide-users" class="size-3.5" /> {@member_count}</span>
             <span :if={@activity}>{Format.relative(@activity)}</span>

@@ -72,6 +72,32 @@ defmodule PubkyRooms.Rooms do
   def online_count(ref),
     do: ref |> PubkyRoomsWeb.Presence.room_topic() |> PubkyRoomsWeb.Presence.online_count()
 
+  @doc "Signed-in presence of a room: distinct `users` and their open `tabs`."
+  @spec online_stats(Paths.room_ref()) :: %{users: non_neg_integer(), tabs: non_neg_integer()}
+  def online_stats(ref) do
+    online = ref |> PubkyRoomsWeb.Presence.room_topic() |> PubkyRoomsWeb.Presence.online()
+    %{users: map_size(online), tabs: online |> Map.values() |> Enum.map(&length/1) |> Enum.sum()}
+  end
+
+  @doc """
+  How many viewers have the room open right now, signed in or not (a count of
+  LiveView processes attached to the room server; nothing identifies them).
+  """
+  @spec viewer_count(Paths.room_ref()) :: non_neg_integer()
+  def viewer_count(ref), do: RoomServer.viewer_count(ref)
+
+  @doc "The PubSub topic carrying `{:room_stats, ref, %{viewers: n}}` for a room."
+  @spec stats_topic(Paths.room_ref()) :: String.t()
+  def stats_topic(ref), do: RoomServer.stats_topic(ref)
+
+  @doc """
+  Viewers who are not signed in: the room's viewer total minus the open tabs
+  of signed-in users (`online` maps z32 → tabs). Never negative.
+  """
+  @spec anonymous_count(non_neg_integer(), %{String.t() => non_neg_integer()}) ::
+          non_neg_integer()
+  def anonymous_count(viewers, online), do: max(viewers - Enum.sum(Map.values(online)), 0)
+
   @doc """
   Sets the user's Rooms nickname (`/pub/pubky-rooms/profile.json`), shown when
   they have no Pubky App profile.
