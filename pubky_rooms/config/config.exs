@@ -17,7 +17,11 @@ config :pubky_rooms,
   bootstrap_messages: 100,
   fetch_concurrency: 16,
   page_size: 50,
-  max_members_subscribed: 500,
+  # live event subscriptions per room (creator first); members beyond this are
+  # polled every member_poll_ms instead. The stream pool (PUBKY_STREAM_POOL_SIZE
+  # × 50 users) bounds the total per homeserver per node.
+  max_members_subscribed: 5_000,
+  member_poll_ms: 60_000,
   # rooms stay warm (subscribed, cached) this long after the last viewer leaves…
   room_idle_timeout_ms: 1_800_000,
   # …unless more than this many room processes are alive, then rooms *without viewers*

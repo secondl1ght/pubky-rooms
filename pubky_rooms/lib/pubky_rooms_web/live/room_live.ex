@@ -38,6 +38,8 @@ defmodule PubkyRoomsWeb.RoomLive do
           failed: %{},
           sent: %{},
           unreachable: [],
+          polled: [],
+          live_unavailable: [],
           room_pid: nil,
           room_monitor: nil,
           composer: composer_form(),
@@ -102,7 +104,11 @@ defmodule PubkyRoomsWeb.RoomLive do
     |> assign(status: status, room: room, page_title: (room && room.name) || "Room")
     |> assign_members(members)
     |> assign(is_member: user != nil and user.pubky in members)
-    |> assign(unreachable: Map.get(snapshot, :unreachable, []))
+    |> assign(
+      unreachable: Map.get(snapshot, :unreachable, []),
+      polled: Map.get(snapshot, :polled, []),
+      live_unavailable: Map.get(snapshot, :live_unavailable, [])
+    )
   end
 
   defp assign_members(socket, members) do
@@ -392,6 +398,11 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   defp apply_room_event(socket, {:unavailable, status}), do: assign(socket, status: status)
   defp apply_room_event(socket, {:unreachable, members}), do: assign(socket, unreachable: members)
+  defp apply_room_event(socket, {:polled, members}), do: assign(socket, polled: members)
+
+  defp apply_room_event(socket, {:live_unavailable, members}),
+    do: assign(socket, live_unavailable: members)
+
   defp apply_room_event(socket, _other), do: socket
 
   defp maybe_set_member(%{assigns: %{current_user: %{pubky: z32}}} = socket, z32, value),
@@ -469,6 +480,25 @@ defmodule PubkyRoomsWeb.RoomLive do
               <.button variant="ghost" size="sm" phx-click="retry_history">
                 <.icon name="lucide-refresh-cw" class="size-4" /> Retry
               </.button>
+            </div>
+            <div
+              :if={@live_unavailable != []}
+              id="live-unavailable"
+              class="flex items-center gap-2 border-b border-border/60 bg-white/[0.03] px-4 py-2 text-sm text-secondary-foreground"
+              role="status"
+            >
+              <.icon name="lucide-wifi-off" class="size-4 text-muted-foreground" />
+              Live updates from {members_phrase(length(@live_unavailable))} are unavailable right now
+              (their homeserver's event stream is down); new messages appear once it is back.
+            </div>
+            <div
+              :if={@polled != []}
+              id="polled-members"
+              class="flex items-center gap-2 border-b border-border/60 bg-white/[0.03] px-4 py-2 text-sm text-secondary-foreground"
+              role="status"
+            >
+              <.icon name="lucide-timer" class="size-4 text-muted-foreground" />
+              This room is over the live-subscription budget: {members_phrase(length(@polled))} are checked for new messages about once a minute instead of live.
             </div>
             <div
               id="messages"
@@ -596,6 +626,22 @@ defmodule PubkyRoomsWeb.RoomLive do
                   >
                     <.icon name="lucide-cloud-off" class="size-4" />
                   </span>
+                  <span
+                    :if={z32 in @live_unavailable and z32 not in @unreachable}
+                    class="tooltip text-muted-foreground"
+                    data-tip="Live updates unavailable, retrying"
+                    aria-label="Live updates unavailable, retrying"
+                  >
+                    <.icon name="lucide-wifi-off" class="size-4" />
+                  </span>
+                  <span
+                    :if={z32 in @polled}
+                    class="tooltip text-muted-foreground"
+                    data-tip="Checked once a minute (over the live budget)"
+                    aria-label="Checked once a minute (over the live budget)"
+                  >
+                    <.icon name="lucide-timer" class="size-4" />
+                  </span>
                 </div>
               </.card_content>
             </.card>
@@ -627,6 +673,9 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   defp profile_of(profiles, z32), do: Map.get(profiles, z32) || Profiles.fallback(z32)
+
+  defp members_phrase(1), do: "1 member"
+  defp members_phrase(n), do: "#{n} members"
 
   # online members first, then by name
   defp sort_members(members, online, profiles) do

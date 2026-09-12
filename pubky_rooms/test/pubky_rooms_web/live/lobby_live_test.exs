@@ -44,7 +44,7 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     {sid, alice} = Fixtures.login("alice")
     conn = init_test_session(conn, Fixtures.cookie(sid))
 
-    {:ok, view, html} = live(conn, ~p"/")
+    {:ok, _view, html} = live(conn, ~p"/")
     assert html =~ "No rooms yet"
 
     {:ok, view, _html} = live(conn, ~p"/rooms/new")

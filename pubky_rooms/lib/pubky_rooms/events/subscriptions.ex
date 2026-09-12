@@ -10,6 +10,12 @@ defmodule PubkyRooms.Events.Subscriptions do
   processes of at most 50 users (the homeserver limit). Resolving a user's
   homeserver and capturing their current cursor happen in tasks, so acquiring
   never blocks the caller. Events are handed to `PubkyRooms.Events.dispatch/1`.
+
+  Whenever a user's live status changes, `{:subscription_status, z32, status}`
+  is broadcast on the `"subscriptions"` topic (`subscribe/0`): `:attached`
+  when their events flow, `{:error, reason}` while their stream is down or
+  could not be started (it is retried). Room servers use this to mark
+  members whose live updates are unavailable.
   """
   use GenServer
 
@@ -49,6 +55,13 @@ defmodule PubkyRooms.Events.Subscriptions do
   @doc "The subscription status of a user: `:resolving`, `:attached`, `{:error, reason}` or `nil`."
   def status(user), do: GenServer.call(__MODULE__, {:status, user})
 
+  @doc "Statuses for many users at once: `%{z32 => status}` (unknown users are omitted)."
+  @spec statuses([String.t()] | MapSet.t()) :: %{String.t() => term()}
+  def statuses(users), do: GenServer.call(__MODULE__, {:statuses, Enum.to_list(users)})
+
+  @doc "Subscribes the caller to `{:subscription_status, z32, status}` messages."
+  def subscribe, do: Phoenix.PubSub.subscribe(PubkyRooms.PubSub, "subscriptions")
+
   @doc "Diagnostics: users, owners and streams."
   def info, do: GenServer.call(__MODULE__, :info)
 
@@ -72,6 +85,10 @@ defmodule PubkyRooms.Events.Subscriptions do
   @impl true
   def handle_call({:status, user}, _from, state) do
     {:reply, state.users[user] && state.users[user].status, state}
+  end
+
+  def handle_call({:statuses, users}, _from, state) do
+    {:reply, Map.new(for u <- users, e = state.users[u], do: {u, e.status}), state}
   end
 
   def handle_call(:info, _from, state) do
@@ -140,10 +157,11 @@ defmodule PubkyRooms.Events.Subscriptions do
     {:noreply, state}
   end
 
-  def handle_info({:pubky_stream, {hs, name}, status}, state) do
+  # A stream's connection state applies to every user riding on it.
+  def handle_info({:pubky_stream, {hs, name} = key, status}, state) do
     Logger.debug("stream #{inspect(name)} on #{String.slice(hs, 0, 8)}…: #{inspect(status)}")
     Phoenix.PubSub.broadcast(PubkyRooms.PubSub, "streams", {:stream_status, hs, name, status})
-    {:noreply, state}
+    {:noreply, apply_stream_status(state, key, user_status(status))}
   end
 
   def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
@@ -156,6 +174,22 @@ defmodule PubkyRooms.Events.Subscriptions do
 
   def handle_info({ref, _task_result}, state) when is_reference(ref), do: {:noreply, state}
   def handle_info(_msg, state), do: {:noreply, state}
+
+  defp user_status(:connected), do: :attached
+  defp user_status({:disconnected, reason}), do: {:error, {:disconnected, reason}}
+  defp user_status({:error, reason}), do: {:error, reason}
+  defp user_status(other), do: {:error, other}
+
+  defp apply_stream_status(state, key, status) do
+    users = (state.streams[key] && state.streams[key].users) || MapSet.new()
+
+    Enum.reduce(users, state, fn user, acc ->
+      case acc.users[user] do
+        %User{} = entry -> put_in(acc.users[user], set_status(user, entry, status))
+        nil -> acc
+      end
+    end)
+  end
 
   # ── owners ─────────────────────────────────────────────────────────────────
 
@@ -260,13 +294,8 @@ defmodule PubkyRooms.Events.Subscriptions do
       {:ok, key, state} ->
         state = update_in(state.streams[key].users, &MapSet.put(&1, user))
 
-        put_in(state.users[user], %{
-          entry
-          | status: :attached,
-            hs: hs,
-            stream: key,
-            cursor: cursor
-        })
+        entry = set_status(user, entry, :attached)
+        put_in(state.users[user], %{entry | hs: hs, stream: key, cursor: cursor})
 
       {:error, reason, state} ->
         attach(state, user, entry, {:error, reason})
@@ -281,7 +310,20 @@ defmodule PubkyRooms.Events.Subscriptions do
     Logger.warning("a member's homeserver events are unavailable (#{inspect(reason)}); retrying")
 
     Process.send_after(self(), {:retry, user}, @retry_delay)
-    put_in(state.users[user], %{entry | status: {:error, reason}})
+    put_in(state.users[user], set_status(user, entry, {:error, reason}))
+  end
+
+  # Records a status change and announces it (only actual changes are broadcast).
+  defp set_status(_user, %User{status: status} = entry, status), do: entry
+
+  defp set_status(user, entry, status) do
+    Phoenix.PubSub.broadcast(
+      PubkyRooms.PubSub,
+      "subscriptions",
+      {:subscription_status, user, status}
+    )
+
+    %{entry | status: status}
   end
 
   defp find_or_start_stream(state, hs, user, cursor) do
@@ -346,7 +388,8 @@ defmodule PubkyRooms.Events.Subscriptions do
 
           entry ->
             Process.send_after(self(), {:retry, user}, @retry_delay)
-            Map.put(users, user, %{entry | status: {:error, reason}, stream: nil})
+            entry = set_status(user, entry, {:error, reason})
+            Map.put(users, user, %{entry | stream: nil})
         end
       end)
 

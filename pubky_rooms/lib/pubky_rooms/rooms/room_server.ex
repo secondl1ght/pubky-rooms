@@ -21,6 +21,12 @@ defmodule PubkyRooms.Rooms.RoomServer do
     4. **Unreachable history** — members whose folder could not be listed are
        reported as `{:unreachable, [z32]}` (and in the snapshot) and retried
        every minute while viewers are attached, or on `retry_history/1`.
+    5. **Live budget** — at most `max_members_subscribed` members (creator
+       first) get event subscriptions; members beyond that are *polled*: their
+       folders are re-listed every `member_poll_ms` while viewers are
+       attached (`{:polled, [z32]}`). Members whose stream is down are
+       reported as `{:live_unavailable, [z32]}` from `Subscriptions` status
+       broadcasts. Nobody is ever dropped from a room.
 
   Messages live in a public ETS `ordered_set` keyed by `{msg_id, author}`,
   so viewers read history directly. Changes are broadcast on the room topic as
@@ -38,6 +44,8 @@ defmodule PubkyRooms.Rooms.RoomServer do
   @sweep_every 5_000
   @stop_after_error 30_000
   @retry_history_every 60_000
+  @default_budget 5_000
+  @default_poll_ms 60_000
 
   @type ref :: Paths.room_ref()
   @type status :: :bootstrapping | :ready | :not_found | :closed | {:error, term()}
@@ -114,11 +122,15 @@ defmodule PubkyRooms.Rooms.RoomServer do
       status: :bootstrapping,
       table: table,
       members: MapSet.new([creator]),
+      subscribed: MapSet.new(),
+      polled: MapSet.new(),
+      live_unavailable: MapSet.new(),
       pending: %{},
       viewers: %{},
       idle_timer: nil,
       unreachable: MapSet.new(),
-      retry_timer: nil
+      retry_timer: nil,
+      poll_timer: nil
     }
 
     {:ok, state, {:continue, :bootstrap}}
@@ -130,15 +142,20 @@ defmodule PubkyRooms.Rooms.RoomServer do
       {:ok, room} ->
         Directory.put_room(room)
         members = MapSet.new(Directory.members_of(state.ref))
-        state = %{state | room: room, members: members}
-        Subscriptions.acquire(members, self())
+        {subscribed, polled} = split_budget(state.creator, members)
+        state = %{state | room: room, members: members, subscribed: subscribed, polled: polled}
+        Subscriptions.acquire(subscribed, self())
+        # PubSub topics are free: polled members' events still arrive when
+        # anyone else on this node follows them (e.g. their own session).
         Enum.each(members, &Events.subscribe_user/1)
+        Subscriptions.subscribe()
         Directory.subscribe()
         state = backfill_sync(state, members)
+        state = apply_statuses(state, Subscriptions.statuses(subscribed))
         Process.send_after(self(), :sweep_pending, @sweep_every)
         state = %{state | status: :ready}
         broadcast(state, :ready)
-        {:noreply, maybe_start_idle_timer(state)}
+        {:noreply, state |> maybe_start_idle_timer() |> schedule_poll()}
 
       {:error, :not_found} ->
         fail(state, :not_found)
@@ -163,7 +180,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
         do: state,
         else: put_in(state.viewers[viewer], Process.monitor(viewer))
 
-    {:reply, {:ok, snapshot_of(state)}, cancel_idle_timer(state)}
+    {:reply, {:ok, snapshot_of(state)}, state |> cancel_idle_timer() |> schedule_poll()}
   end
 
   def handle_call(:snapshot, _from, state), do: {:reply, {:ok, snapshot_of(state)}, state}
@@ -247,6 +264,24 @@ defmodule PubkyRooms.Rooms.RoomServer do
       else: {:noreply, state}
   end
 
+  # Members over the live budget: re-list their folders while someone watches.
+  def handle_info(:poll_members, state) do
+    state = %{state | poll_timer: nil}
+
+    if map_size(state.viewers) > 0 and MapSet.size(state.polled) > 0 do
+      backfill_async(state.ref, MapSet.to_list(state.polled))
+      {:noreply, schedule_poll(state)}
+    else
+      {:noreply, state}
+    end
+  end
+
+  def handle_info({:subscription_status, z32, status}, state) do
+    if MapSet.member?(state.subscribed, z32),
+      do: {:noreply, apply_statuses(state, %{z32 => status})},
+      else: {:noreply, state}
+  end
+
   def handle_info(:sweep_pending, state) do
     timeout = Application.get_env(:pubky_rooms, :confirm_timeout_ms, 15_000)
     now = System.monotonic_time(:millisecond)
@@ -275,7 +310,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
 
   @impl true
   def terminate(_reason, state) do
-    Subscriptions.release(state.members, self())
+    Subscriptions.release(state.subscribed, self())
     :ok
   end
 
@@ -309,9 +344,17 @@ defmodule PubkyRooms.Rooms.RoomServer do
     if MapSet.member?(state.members, z32) do
       state
     else
-      Subscriptions.acquire([z32], self())
       Events.subscribe_user(z32)
       state = %{state | members: MapSet.put(state.members, z32)}
+
+      state =
+        if MapSet.size(state.subscribed) < budget() do
+          Subscriptions.acquire([z32], self())
+          %{state | subscribed: MapSet.put(state.subscribed, z32)}
+        else
+          state |> set_polled(MapSet.put(state.polled, z32)) |> schedule_poll()
+        end
+
       backfill_async(state.ref, [z32])
       broadcast(state, {:member_joined, z32})
       state
@@ -321,10 +364,67 @@ defmodule PubkyRooms.Rooms.RoomServer do
   defp remove_member(state, z32) when z32 == state.creator, do: state
 
   defp remove_member(state, z32) do
-    Subscriptions.release([z32], self())
+    if MapSet.member?(state.subscribed, z32), do: Subscriptions.release([z32], self())
     Events.unsubscribe_user(z32)
     broadcast(state, {:member_left, z32})
-    %{state | members: MapSet.delete(state.members, z32)}
+
+    state
+    |> set_polled(MapSet.delete(state.polled, z32))
+    |> set_live_unavailable(MapSet.delete(state.live_unavailable, z32))
+    |> Map.update!(:members, &MapSet.delete(&1, z32))
+    |> Map.update!(:subscribed, &MapSet.delete(&1, z32))
+  end
+
+  # ── live budget ────────────────────────────────────────────────────────────
+
+  # The creator always gets a live subscription; the rest in key order.
+  defp split_budget(creator, members) do
+    ordered = [creator | members |> MapSet.delete(creator) |> Enum.sort()]
+    {subscribed, polled} = Enum.split(ordered, budget())
+    {MapSet.new(subscribed), MapSet.new(polled)}
+  end
+
+  defp budget, do: max(config(:max_members_subscribed, @default_budget), 1)
+
+  defp schedule_poll(%{poll_timer: nil, polled: polled} = state) do
+    if MapSet.size(polled) > 0 and map_size(state.viewers) > 0 do
+      timer = Process.send_after(self(), :poll_members, config(:member_poll_ms, @default_poll_ms))
+      %{state | poll_timer: timer}
+    else
+      state
+    end
+  end
+
+  defp schedule_poll(state), do: state
+
+  defp set_polled(state, polled) do
+    if MapSet.equal?(polled, state.polled) do
+      state
+    else
+      state = %{state | polled: polled}
+      broadcast(state, {:polled, MapSet.to_list(polled)})
+      state
+    end
+  end
+
+  defp apply_statuses(state, statuses) do
+    unavailable =
+      Enum.reduce(statuses, state.live_unavailable, fn
+        {z32, {:error, _}}, acc -> MapSet.put(acc, z32)
+        {z32, _}, acc -> MapSet.delete(acc, z32)
+      end)
+
+    set_live_unavailable(state, unavailable)
+  end
+
+  defp set_live_unavailable(state, unavailable) do
+    if MapSet.equal?(unavailable, state.live_unavailable) do
+      state
+    else
+      state = %{state | live_unavailable: unavailable}
+      broadcast(state, {:live_unavailable, MapSet.to_list(unavailable)})
+      state
+    end
   end
 
   defp update_room(state, room) do
@@ -554,7 +654,9 @@ defmodule PubkyRooms.Rooms.RoomServer do
       room: state.room,
       table: state.table,
       members: MapSet.to_list(state.members),
-      unreachable: MapSet.to_list(state.unreachable)
+      unreachable: MapSet.to_list(state.unreachable),
+      polled: MapSet.to_list(state.polled),
+      live_unavailable: MapSet.to_list(state.live_unavailable)
     }
   end
 

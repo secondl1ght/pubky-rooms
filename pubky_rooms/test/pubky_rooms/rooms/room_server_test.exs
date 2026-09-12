@@ -2,6 +2,7 @@ defmodule PubkyRooms.Rooms.RoomServerTest do
   use PubkyRooms.RoomsCase, async: false
 
   alias PubkyRooms.{Fixtures, Rooms}
+  alias PubkyRooms.Events.Subscriptions
   alias PubkyRooms.Pubky.Fake
   alias PubkyRooms.Rooms.{Directory, Membership, Message, Paths, Room, RoomServer}
 
@@ -173,5 +174,75 @@ defmodule PubkyRooms.Rooms.RoomServerTest do
       tries == 0 -> false
       true -> Process.sleep(10) && wait_until(fun, tries - 1)
     end
+  end
+
+  test "members over the live budget are polled instead of subscribed; nobody is dropped", ctx do
+    %{alice: alice, ref: ref} = ctx
+    Application.put_env(:pubky_rooms, :max_members_subscribed, 1)
+    on_exit(fn -> Application.delete_env(:pubky_rooms, :max_members_subscribed) end)
+
+    # members unique to this test, so no earlier test's subscription lingers
+    bob = Fixtures.z32("budget-bob")
+    Directory.add_member(ref, bob)
+
+    {:ok, _pid} = RoomServer.ensure(ref)
+    assert_receive {:room_event, ^ref, :ready}, 2_000
+    {:ok, snapshot} = RoomServer.attach(ref)
+    assert Enum.sort(snapshot.members) == Enum.sort([alice, bob])
+    assert snapshot.polled == [bob]
+    # the creator is subscribed (asynchronously), the polled member never is
+    assert wait_until(fn -> Map.has_key?(Subscriptions.statuses([alice]), alice) end)
+    assert Subscriptions.statuses([bob]) == %{}
+
+    # a file that appears on bob's homeserver without an event reaching us is
+    # picked up by the poll (test config: every 100 ms while viewers are attached)
+    {:ok, m} = Message.new(bob, ref, "polled in")
+    Fake.seed(bob, Message.path(m), Message.encode(m))
+    assert_receive {:room_event, ^ref, {:message_upserted, %Message{content: "polled in"}}}, 2_000
+
+    # a third member joining also lands in the polled set
+    carol = Fixtures.z32("budget-carol")
+    Directory.add_member(ref, carol)
+    assert_receive {:room_event, ^ref, {:member_joined, ^carol}}, 1_000
+    assert_receive {:room_event, ^ref, {:polled, polled}}, 1_000
+    assert Enum.sort(polled) == Enum.sort([bob, carol])
+
+    # leaving removes them from it
+    Directory.remove_member(ref, carol)
+    assert_receive {:room_event, ^ref, {:polled, [^bob]}}, 1_000
+  end
+
+  test "members whose live stream is down are reported and cleared when it recovers", ctx do
+    %{alice: alice, ref: ref} = ctx
+    {:ok, _pid} = RoomServer.ensure(ref)
+    assert_receive {:room_event, ^ref, :ready}, 2_000
+
+    Phoenix.PubSub.broadcast(
+      PubkyRooms.PubSub,
+      "subscriptions",
+      {:subscription_status, alice, {:error, :boom}}
+    )
+
+    assert_receive {:room_event, ^ref, {:live_unavailable, [^alice]}}, 1_000
+    {:ok, %{live_unavailable: [^alice]}} = RoomServer.snapshot(ref)
+
+    Phoenix.PubSub.broadcast(
+      PubkyRooms.PubSub,
+      "subscriptions",
+      {:subscription_status, alice, :attached}
+    )
+
+    assert_receive {:room_event, ^ref, {:live_unavailable, []}}, 1_000
+
+    # statuses of users that are not subscribed members are ignored
+    stranger = Fixtures.z32("stranger")
+
+    Phoenix.PubSub.broadcast(
+      PubkyRooms.PubSub,
+      "subscriptions",
+      {:subscription_status, stranger, {:error, :boom}}
+    )
+
+    refute_receive {:room_event, ^ref, {:live_unavailable, _}}, 200
   end
 end

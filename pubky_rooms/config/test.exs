@@ -18,7 +18,8 @@ config :pubky_rooms,
   confirm_timeout_ms: 200,
   room_idle_timeout_ms: 100,
   bootstrap_per_member: 10,
-  bootstrap_messages: 5
+  bootstrap_messages: 5,
+  member_poll_ms: 100
 
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
