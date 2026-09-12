@@ -118,7 +118,7 @@ profile.json                            {v,name(1..32)}  optional local nickname
 
 ## Milestone 5 — membership, multi-homeserver, presence, profiles
 
-- `Directory` full: `sync_user` lists `rooms/` and `members/`; `pubky:all` handling; membership casts `{:member_joined|:member_left, ref, z32}` to running RoomServers (acquire/release, backfill member's last 50). Join/leave buttons; `is_member` flips when own event arrives; `max_members_subscribed` 500 documented v1 limit.
+- `Directory` full: `sync_user` lists `rooms/` and `members/`; `pubky:all` handling; membership casts `{:member_joined|:member_left, ref, z32}` to running RoomServers (acquire/release, backfill member's last 50). Join/leave buttons; `is_member` flips when own event arrives; `max_members_subscribed` 5 000 per room with polling beyond it (never a viewer cap).
 - Presence: topic `presence:room:<ref>` keyed by z32 with `{name, avatar_url, joined_at}` (anonymous viewers not tracked), sidebar "N online"; typing via PubSub `room:<ref>:typing` (throttled 2 s, pruned 1 s tick), never persisted; lobby online count from `presence:lobby`.
 - `Profiles`: `GET <z32>:/pub/pubky.app/profile.json` (name 3..50) with ETS 15-min TTL and in-flight dedupe; fallback local nickname then first 8 chars of z32; avatar: on mainnet use Pubky App's own CDN URL `{nexus_cdn_url}/avatar/<pubky>` (config `nexus_cdn_url`, e.g. `https://nexus.pubky.app/static`; exactly what Pubky App renders, so avatars match), else resolve `image` (`https://…` as-is, or `pubky://…/files/<id>` → File JSON `src` → `Pubky.Resolver.http_url`), else the generative facehash-style fallback; broadcast `{:profile_updated, z32, profile}`. Direct homeserver reads keep testnet working without Nexus.
 

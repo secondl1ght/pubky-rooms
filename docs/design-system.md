@@ -28,7 +28,7 @@ https://pubky.app. Reference data: `docs/notes/pubky-app-design-system.md`, `doc
 | `<.logo />`, `<.pubky_mark />` | key + "Pubky" wordmark + lime "Rooms" |
 | `<.button variant size>` | variants default (lime tint), brand (solid lime), secondary, ghost, outline, destructive, destructive-soft, link, dark, dark-outline; sizes default/sm/lg/icon/icon-lg; renders `<.link>` with href/navigate/patch |
 | `<.fab navigate label />` | 80px translucent circle, lime on hover |
-| `<.avatar src name pubky size>` | xs…2xl; generative fallback (signal-color disc + initial), hides broken images |
+| `<.avatar src name pubky size online>` | xs…2xl; generative fallback (signal-color disc + initial), hides broken images; `online` adds the lime presence dot |
 | `<.card variant>` + `card_header/title/description/content/footer` | default (`rounded-xl py-6`), post (`rounded-md py-0`), flat |
 | `<.badge variant>` | default, secondary, brand, brand-soft, destructive, outline |
 | `<.tag label count selected>` | Pubky App tag chip; color from `PubkyRooms.Tags.Color` (exact port of the App's hash) |

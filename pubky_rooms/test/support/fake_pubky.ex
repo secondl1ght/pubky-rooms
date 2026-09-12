@@ -83,23 +83,13 @@ defmodule PubkyRooms.Pubky.Fake do
   defp do_list(user, dir, opts) do
     limit = Keyword.get(opts, :limit, 100)
     reverse = Keyword.get(opts, :reverse, false)
-    shallow = Keyword.get(opts, :shallow, false)
     cursor = opts[:cursor] && cursor_path(opts[:cursor])
 
     paths =
-      Agent.get(__MODULE__, fn s ->
-        for {{^user, p}, _} <- s.files, String.starts_with?(p, dir), do: p
-      end)
-      |> Enum.map(fn p -> if shallow, do: shallow_entry(p, dir), else: p end)
-      |> Enum.uniq()
+      user
+      |> paths_under(dir, Keyword.get(opts, :shallow, false))
       |> Enum.sort(if(reverse, do: :desc, else: :asc))
-      |> Enum.filter(fn p ->
-        cond do
-          is_nil(cursor) -> true
-          reverse -> p < cursor
-          true -> p > cursor
-        end
-      end)
+      |> Enum.filter(&after_cursor?(&1, cursor, reverse))
       |> Enum.take(limit)
 
     entries = Enum.map(paths, &Resource.new(user, &1))
@@ -110,6 +100,18 @@ defmodule PubkyRooms.Pubky.Fake do
       do: {:error, :not_found},
       else: {:ok, %{entries: entries, next_cursor: next}}
   end
+
+  defp paths_under(user, dir, shallow) do
+    Agent.get(__MODULE__, fn s ->
+      for {{^user, p}, _} <- s.files, String.starts_with?(p, dir), do: p
+    end)
+    |> Enum.map(fn p -> if shallow, do: shallow_entry(p, dir), else: p end)
+    |> Enum.uniq()
+  end
+
+  defp after_cursor?(_path, nil, _reverse), do: true
+  defp after_cursor?(path, cursor, true), do: path < cursor
+  defp after_cursor?(path, cursor, false), do: path > cursor
 
   defp exists_under?(user, dir) do
     Agent.get(__MODULE__, fn s ->

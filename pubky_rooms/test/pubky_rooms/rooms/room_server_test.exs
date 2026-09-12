@@ -1,8 +1,8 @@
 defmodule PubkyRooms.Rooms.RoomServerTest do
   use PubkyRooms.RoomsCase, async: false
 
-  alias PubkyRooms.{Fixtures, Rooms}
   alias PubkyRooms.Events.Subscriptions
+  alias PubkyRooms.{Fixtures, Rooms}
   alias PubkyRooms.Pubky.Fake
   alias PubkyRooms.Rooms.{Directory, Membership, Message, Paths, Room, RoomServer}
 
