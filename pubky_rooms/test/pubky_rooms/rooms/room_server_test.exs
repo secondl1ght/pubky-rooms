@@ -4,7 +4,7 @@ defmodule PubkyRooms.Rooms.RoomServerTest do
   alias PubkyRooms.Events.Subscriptions
   alias PubkyRooms.{Fixtures, Rooms}
   alias PubkyRooms.Pubky.Fake
-  alias PubkyRooms.Rooms.{Directory, Membership, Message, Paths, Reaction, Room, RoomServer}
+  alias PubkyRooms.Rooms.{Ban, Directory, Membership, Message, Paths, Reaction, Room, RoomServer}
 
   setup do
     reset_state()
@@ -335,6 +335,60 @@ defmodule PubkyRooms.Rooms.RoomServerTest do
                    1_000
 
     assert r4 == r3
+  end
+
+  test "bans from the creator's homeserver hide a member; lifting the ban restores them", ctx do
+    %{alice: alice, ref: ref, sid: sid} = ctx
+    {bob_sid, bob} = Fixtures.login("ban-bob")
+    Directory.add_member(ref, bob)
+    {:ok, old} = Message.new(bob, ref, "bob before")
+    Fake.seed(bob, Message.path(old), Message.encode(old))
+    Fake.seed(bob, Paths.reaction(ref, alice, "0035PG0000000", "up"), Reaction.encode())
+    # a marker on someone else's homeserver is not a ban
+    Fake.seed(bob, Paths.ban(elem(ref, 1), alice), Ban.encode("nope"))
+    # a real one, already there at bootstrap
+    Fake.seed(alice, Paths.ban(elem(ref, 1), bob), Ban.encode("spam"))
+
+    {:ok, _pid} = RoomServer.ensure(ref)
+    assert_receive {:room_event, ^ref, :ready}, 2_000
+    {:ok, %{table: table, bans: bans, members: members}} = RoomServer.attach(ref)
+    assert bans == %{bob => "spam"}
+    assert bob in members
+    assert RoomServer.history(table) == []
+    drain_mailbox()
+
+    # while banned, bob's writes are ignored
+    {:ok, ignored} = Message.new(bob, ref, "still banned")
+    Fake.write_as(bob, Message.path(ignored), Message.encode(ignored))
+    refute_receive {:room_event, ^ref, {:message_upserted, _}}, 200
+
+    # lifting the ban restores bob's history
+    assert :ok = Rooms.unban(sid, alice, ref, bob)
+    assert_receive {:room_event, ^ref, {:member_unbanned, ^bob}}, 1_000
+
+    assert_receive {:room_event, ^ref, {:message_upserted, %Message{content: "bob before"}}},
+                   2_000
+
+    assert_receive {:room_event, ^ref, {:message_upserted, %Message{content: "still banned"}}},
+                   2_000
+
+    {:ok, %{bans: %{}}} = RoomServer.snapshot(ref)
+
+    # banning live removes the messages and announces the reason once it is read
+    assert {:error, :forbidden} = Rooms.ban(bob_sid, bob, ref, alice, nil)
+    assert {:error, :forbidden} = Rooms.ban(sid, alice, ref, alice, nil)
+    assert :ok = Rooms.ban(sid, alice, ref, bob, "  too loud  ")
+    assert_receive {:room_event, ^ref, {:member_banned, ^bob, _}}, 1_000
+    key1 = old.key
+    key2 = ignored.key
+    assert_receive {:room_event, ^ref, {:message_deleted, ^key1}}, 1_000
+    assert_receive {:room_event, ^ref, {:message_deleted, ^key2}}, 1_000
+
+    assert wait_until(fn ->
+             match?({:ok, %{bans: %{^bob => "too loud"}}}, RoomServer.snapshot(ref))
+           end)
+
+    assert RoomServer.history(table) == []
   end
 
   test "a member without a message folder yet is not reported as unreachable", ctx do

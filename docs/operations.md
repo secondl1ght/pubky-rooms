@@ -17,7 +17,7 @@ Everything here is one node (no clustering in v1). Costs scale **per room and pe
 | Rooms that exist / rooms with viewers | none | — | — | — | — |
 | Sessions in memory | none (a few KB each; dropped 60 s after the last tab closes, 15 min if never attached) | `session_memory_ttl_ms` | — | — | — |
 | Room directory (DETS + ETS) | grows with rooms and memberships known (~200 B each) | `PUBKY_DATA_DIR` | DETS files are limited to 2 GB | disk usage | fine to millions of rows; Nexus becomes the discovery source in M6 |
-| Per-session write limits (protect homeservers and us) | messages (send/edit) 5 / 5 s, reactions 20 / 10 s, rooms 5 / h, joins 20 / h, nickname 10 / 10 min; login starts 10 / min per IP | `PubkyRooms.Rooms`, `AuthLive` | user sees "Slow down — try again in N s" | — | code constants; make config if needed |
+| Per-session write limits (protect homeservers and us) | messages (send/edit) 5 / 5 s, reactions 20 / 10 s, rooms 5 / h, joins 20 / h, bans 20 / h, nickname 10 / 10 min; login starts 10 / min per IP | `PubkyRooms.Rooms`, `AuthLive` | user sees "Slow down — try again in N s" | — | code constants; make config if needed |
 | Homeserver anonymous read throttle | operator-set, e.g. 1 MB/s per IP | homeserver `[default_quotas] unauthenticated_ip_rate_read` | our reads slow down (delay, not error) | slow bootstraps only | ask the operator to whitelist our IP for count limits; (M7) `PUBKY_SERVICE_CREDENTIAL` for authenticated reads with an unlimited quota |
 | Homeserver request-count limits | operator-set per path (`429` + `Retry-After`) | homeserver `[[drive.rate_limits]]` | we back off and retry once; history of the affected member shows as unreachable with Retry | room banner | operator whitelist |
 

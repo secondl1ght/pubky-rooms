@@ -11,7 +11,7 @@ defmodule PubkyRooms.Rooms do
   alias PubkyRooms.{Events, Pubky, RateLimit}
   alias PubkyRooms.Events.Subscriptions
   alias PubkyRooms.Profiles.LocalProfile
-  alias PubkyRooms.Rooms.{Directory, Membership, Message, Paths, Reaction, Room, RoomServer}
+  alias PubkyRooms.Rooms.{Ban, Directory, Membership, Message, Paths, Reaction, Room, RoomServer}
 
   @type sid :: String.t()
 
@@ -203,6 +203,34 @@ defmodule PubkyRooms.Rooms do
     end
   end
 
+  @doc """
+  Removes a member from the room: the creator writes a ban marker on their own
+  homeserver (20 per hour). `creator` must be the session's user and the room's
+  creator; the creator cannot ban themselves.
+  """
+  @spec ban(sid(), String.t(), Paths.room_ref(), String.t(), String.t() | nil) ::
+          :ok | {:error, term()}
+  def ban(sid, creator, {creator, id}, banned, reason) when banned != creator do
+    with {:ok, reason} <- Ban.validate_reason(reason),
+         :ok <- limit({:bans, sid}, 20, :timer.hours(1)) do
+      Pubky.put(sid, Paths.ban(id, banned), Ban.encode(reason))
+    end
+  end
+
+  def ban(_sid, _user, _ref, _banned, _reason), do: {:error, :forbidden}
+
+  @doc "Lifts a ban by deleting the marker (already gone counts as done)."
+  @spec unban(sid(), String.t(), Paths.room_ref(), String.t()) :: :ok | {:error, term()}
+  def unban(sid, creator, {creator, id}, banned) do
+    case Pubky.delete(sid, Paths.ban(id, banned)) do
+      :ok -> :ok
+      {:error, :not_found} -> :ok
+      error -> error
+    end
+  end
+
+  def unban(_sid, _user, _ref, _banned), do: {:error, :forbidden}
+
   @doc "Writes a prepared message to the author's homeserver."
   @spec publish_message(sid(), Message.t()) :: :ok | {:error, Pubky.reason()}
   def publish_message(sid, %Message{} = msg) do
@@ -238,6 +266,7 @@ defmodule PubkyRooms.Rooms do
   def explain(:unauthorized), do: "Your session has expired. Please sign in again."
   def explain(:unreachable), do: "Your homeserver could not be reached."
   def explain(:invalid_reaction), do: "That reaction is not available."
+  def explain(:forbidden), do: "Only the room's creator can do that."
   def explain({:http, status}), do: "Your homeserver answered with status #{status}."
   def explain(reason) when is_binary(reason), do: reason
   def explain(reason), do: "Something went wrong (#{inspect(reason)})."

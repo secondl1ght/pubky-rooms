@@ -11,7 +11,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   use PubkyRoomsWeb, :live_view
 
   alias PubkyRooms.{Ids, Profiles, Rooms}
-  alias PubkyRooms.Rooms.{Message, Paths, Reaction, RoomServer}
+  alias PubkyRooms.Rooms.{Ban, Message, Paths, Reaction, RoomServer}
   alias PubkyRoomsWeb.{Format, Presence}
 
   # a viewer is shown as typing for this long after their last keystroke event
@@ -36,6 +36,12 @@ defmodule PubkyRoomsWeb.RoomLive do
           members: [],
           profiles: %{},
           is_member: false,
+          is_creator: false,
+          bans: %{},
+          banned?: false,
+          banning: nil,
+          ban_form: to_form(%{"reason" => ""}, as: :ban),
+          muted: MapSet.new(),
           failed: %{},
           sent: %{},
           unreachable: [],
@@ -107,18 +113,29 @@ defmodule PubkyRoomsWeb.RoomLive do
       loading_older: false
     )
     |> assign_room(snapshot)
-    |> stream(:messages, history, reset: true)
+    |> stream(:messages, unmuted(socket, history), reset: true)
   end
 
   defp apply_snapshot(socket, snapshot), do: assign_room(socket, snapshot)
 
+  # Session-local mute: hides an author's messages in this view only.
+  defp unmuted(%{assigns: %{muted: muted}}, msgs),
+    do: Enum.reject(msgs, &MapSet.member?(muted, &1.author))
+
   defp assign_room(socket, %{status: status, room: room, members: members} = snapshot) do
     user = socket.assigns.current_user
+
+    bans = Map.get(snapshot, :bans, %{})
 
     socket
     |> assign(status: status, room: room, page_title: (room && room.name) || "Room")
     |> assign_members(members)
-    |> assign(is_member: user != nil and user.pubky in members)
+    |> assign(
+      is_member: user != nil and user.pubky in members,
+      is_creator: user != nil and user.pubky == socket.assigns.creator,
+      bans: bans,
+      banned?: user != nil and Map.has_key?(bans, user.pubky)
+    )
     |> assign(
       unreachable: Map.get(snapshot, :unreachable, []),
       polled: Map.get(snapshot, :polled, []),
@@ -154,6 +171,9 @@ defmodule PubkyRoomsWeb.RoomLive do
 
       not socket.assigns.is_member ->
         {:noreply, put_flash(socket, :error, "Join the room to chat.")}
+
+      socket.assigns.banned? ->
+        {:noreply, put_flash(socket, :error, "You were removed from this room by its creator.")}
 
       true ->
         case prepare(socket.assigns.composer_mode, sid, user.pubky, ref, content) do
@@ -233,7 +253,8 @@ defmodule PubkyRoomsWeb.RoomLive do
   def handle_event(
         "react",
         %{"id" => id, "key" => key},
-        %{assigns: %{current_user: %{pubky: me}, sid: sid, is_member: true}} = socket
+        %{assigns: %{current_user: %{pubky: me}, sid: sid, is_member: true, banned?: false}} =
+          socket
       ) do
     case lookup_message(socket, id) do
       %Message{reactions: reactions} = msg ->
@@ -342,8 +363,58 @@ defmodule PubkyRoomsWeb.RoomLive do
      |> start_async(:leave, fn -> Rooms.leave(sid, user.pubky, ref) end)}
   end
 
-  # signed-out or non-member viewers cannot use these actions
-  def handle_event(event, _params, socket) when event in ~w(edit delete react) do
+  # Moderation: the creator removes (bans) and restores members; anyone
+  # signed in can mute an author for themselves, in this tab only.
+  def handle_event("start_ban", %{"z32" => z32}, %{assigns: %{is_creator: true}} = socket) do
+    {:noreply, assign(socket, banning: z32, ban_form: to_form(%{"reason" => ""}, as: :ban))}
+  end
+
+  def handle_event("cancel_ban", _params, socket), do: {:noreply, assign(socket, banning: nil)}
+
+  def handle_event(
+        "ban",
+        %{"ban" => %{"reason" => reason}},
+        %{assigns: %{is_creator: true, banning: z32, sid: sid, ref: ref, creator: creator}} =
+          socket
+      )
+      when is_binary(z32) do
+    case Ban.validate_reason(reason) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(joining: true)
+         |> start_async(:ban, fn -> Rooms.ban(sid, creator, ref, z32, reason) end)}
+
+      {:error, error} ->
+        {:noreply,
+         assign(socket,
+           ban_form: to_form(%{"reason" => reason}, as: :ban, errors: [reason: {error, []}])
+         )}
+    end
+  end
+
+  def handle_event(
+        "unban",
+        %{"z32" => z32},
+        %{assigns: %{is_creator: true, sid: sid, ref: ref, creator: creator}} = socket
+      ) do
+    {:noreply,
+     socket
+     |> assign(joining: true)
+     |> start_async(:unban, fn -> Rooms.unban(sid, creator, ref, z32) end)}
+  end
+
+  def handle_event("mute", %{"z32" => z32}, %{assigns: %{current_user: %{}}} = socket) do
+    {:noreply, set_muted(socket, MapSet.put(socket.assigns.muted, z32))}
+  end
+
+  def handle_event("unmute", %{"z32" => z32}, %{assigns: %{current_user: %{}}} = socket) do
+    {:noreply, set_muted(socket, MapSet.delete(socket.assigns.muted, z32))}
+  end
+
+  # signed-out, non-member or non-creator viewers cannot use these actions
+  def handle_event(event, _params, socket)
+      when event in ~w(edit delete react start_ban ban unban mute unmute) do
     {:noreply, socket}
   end
 
@@ -409,7 +480,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         {:noreply,
          socket
          |> assign(oldest_key: oldest.key)
-         |> stream(:messages, Enum.reverse(msgs), at: 0)
+         |> stream(:messages, socket |> unmuted(msgs) |> Enum.reverse(), at: 0)
          |> push_event("older:loaded", %{count: length(msgs)})}
     end
   end
@@ -420,6 +491,31 @@ defmodule PubkyRoomsWeb.RoomLive do
      |> assign(loading_older: false)
      |> push_event("older:loaded", %{count: 0})
      |> put_flash(:error, "Earlier messages could not be loaded right now.")}
+  end
+
+  def handle_async(:ban, {:ok, :ok}, socket) do
+    {:noreply,
+     socket
+     |> assign(joining: false, banning: nil)
+     |> put_flash(:info, "Member removed. Their messages are hidden while the ban is in place.")}
+  end
+
+  def handle_async(:ban, {:ok, {:error, reason}}, socket) do
+    {:noreply,
+     socket
+     |> assign(joining: false)
+     |> put_flash(:error, "Not removed: " <> Rooms.explain(reason))}
+  end
+
+  def handle_async(:unban, {:ok, :ok}, socket) do
+    {:noreply, socket |> assign(joining: false) |> put_flash(:info, "Member restored.")}
+  end
+
+  def handle_async(:unban, {:ok, {:error, reason}}, socket) do
+    {:noreply,
+     socket
+     |> assign(joining: false)
+     |> put_flash(:error, "Not restored: " <> Rooms.explain(reason))}
   end
 
   def handle_async(:join, {:ok, :ok}, socket) do
@@ -503,13 +599,17 @@ defmodule PubkyRoomsWeb.RoomLive do
     do: {:noreply, socket}
 
   def handle_info({:typing, z32, true}, socket) do
-    until = System.monotonic_time(:millisecond) + @typing_ttl
+    if MapSet.member?(socket.assigns.muted, z32) or Map.has_key?(socket.assigns.bans, z32) do
+      {:noreply, socket}
+    else
+      until = System.monotonic_time(:millisecond) + @typing_ttl
 
-    {:noreply,
-     socket
-     |> assign(typing: Map.put(socket.assigns.typing, z32, until))
-     |> ensure_profile(z32)
-     |> schedule_typing_prune()}
+      {:noreply,
+       socket
+       |> assign(typing: Map.put(socket.assigns.typing, z32, until))
+       |> ensure_profile(z32)
+       |> schedule_typing_prune()}
+    end
   end
 
   def handle_info({:typing, z32, false}, socket),
@@ -541,14 +641,37 @@ defmodule PubkyRoomsWeb.RoomLive do
   defp apply_room_event(socket, :ready), do: attach(socket)
 
   defp apply_room_event(socket, {:message_upserted, %Message{} = msg}) do
+    socket =
+      socket
+      |> assign(
+        failed: Map.delete(socket.assigns.failed, dom_id(msg)),
+        sent: Map.delete(socket.assigns.sent, msg.key),
+        typing: Map.delete(socket.assigns.typing, msg.author)
+      )
+      |> ensure_profile(msg.author)
+
+    if MapSet.member?(socket.assigns.muted, msg.author),
+      do: socket,
+      else: stream_insert(socket, :messages, msg)
+  end
+
+  defp apply_room_event(socket, {:member_banned, z32, reason}) do
+    me? = match?(%{pubky: ^z32}, socket.assigns.current_user)
+
     socket
     |> assign(
-      failed: Map.delete(socket.assigns.failed, dom_id(msg)),
-      sent: Map.delete(socket.assigns.sent, msg.key),
-      typing: Map.delete(socket.assigns.typing, msg.author)
+      bans: Map.put(socket.assigns.bans, z32, reason),
+      typing: Map.delete(socket.assigns.typing, z32)
     )
-    |> ensure_profile(msg.author)
-    |> stream_insert(:messages, msg)
+    |> then(fn s -> if me?, do: assign(s, banned?: true, composer_mode: :new), else: s end)
+  end
+
+  defp apply_room_event(socket, {:member_unbanned, z32}) do
+    me? = match?(%{pubky: ^z32}, socket.assigns.current_user)
+
+    socket
+    |> assign(bans: Map.delete(socket.assigns.bans, z32))
+    |> then(fn s -> if me?, do: assign(s, banned?: false), else: s end)
   end
 
   defp apply_room_event(socket, {:message_deleted, key}) do
@@ -590,6 +713,17 @@ defmodule PubkyRoomsWeb.RoomLive do
     do: assign(socket, is_member: value)
 
   defp maybe_set_member(socket, _z32, _value), do: socket
+
+  # Re-renders the window without (or again with) the author's messages.
+  defp set_muted(socket, muted) do
+    socket =
+      assign(socket, muted: muted, typing: Map.drop(socket.assigns.typing, MapSet.to_list(muted)))
+
+    case socket.assigns.table do
+      nil -> socket
+      table -> stream(socket, :messages, unmuted(socket, RoomServer.history(table)), reset: true)
+    end
+  end
 
   defp ensure_profile(socket, z32) do
     if Map.has_key?(socket.assigns.profiles, z32),
@@ -784,7 +918,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                 msg={msg}
                 profile={Map.get(@profiles, msg.author) || Profiles.get(msg.author)}
                 own={@current_user != nil && @current_user.pubky == msg.author}
-                can_reply={@is_member and @status == :ready}
+                can_reply={@is_member and not @banned? and @status == :ready}
                 viewer={@current_user && @current_user.pubky}
                 quote={quote_of(assigns, msg)}
               />
@@ -800,6 +934,20 @@ defmodule PubkyRoomsWeb.RoomLive do
                     <.button navigate={~p"/login?return_to=#{room_path(assigns)}"}>
                       <.icon name="lucide-key-round" class="size-4" /> Sign in
                     </.button>
+                  </div>
+                <% @banned? -> %>
+                  <div
+                    id="banned-notice"
+                    class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+                    role="status"
+                  >
+                    <.icon name="lucide-shield-ban" class="size-4 text-destructive" />
+                    <span>
+                      You were removed from this room by its creator<span :if={
+                        @bans[@current_user.pubky]
+                      }>: {@bans[@current_user.pubky]}</span>.
+                      Your messages stay on your homeserver; they are hidden here.
+                    </span>
                   </div>
                 <% not @is_member -> %>
                   <div class="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
@@ -867,8 +1015,9 @@ defmodule PubkyRoomsWeb.RoomLive do
               </.card_header>
               <.card_content class="flex flex-col gap-3">
                 <div
-                  :for={z32 <- sort_members(@members, @online, @profiles)}
-                  class="flex items-center gap-3"
+                  :for={z32 <- sort_members(active_members(@members, @bans), @online, @profiles)}
+                  class="group/member flex items-center gap-3"
+                  id={"member-#{z32}"}
                 >
                   <.avatar
                     src={profile_of(@profiles, z32).avatar_url}
@@ -908,6 +1057,55 @@ defmodule PubkyRoomsWeb.RoomLive do
                   >
                     <.icon name="lucide-timer" class="size-4" />
                   </span>
+                  <span
+                    :if={MapSet.member?(@muted, z32)}
+                    class="tooltip text-muted-foreground"
+                    data-tip="Muted for you"
+                    aria-label="Muted for you"
+                  >
+                    <.icon name="lucide-volume-x" class="size-4" />
+                  </span>
+                  <.member_actions
+                    :if={@current_user && @current_user.pubky != z32}
+                    z32={z32}
+                    muted={MapSet.member?(@muted, z32)}
+                    can_ban={@is_creator and z32 != @creator}
+                    busy={@joining}
+                  />
+                </div>
+              </.card_content>
+              <.card_content
+                :if={@is_creator and @bans != %{}}
+                class="flex flex-col gap-3 border-t border-border/60 pt-4"
+              >
+                <p class="text-xs font-semibold text-muted-foreground">Removed by you</p>
+                <div
+                  :for={{z32, reason} <- Enum.sort(@bans)}
+                  class="flex items-center gap-3"
+                  id={"banned-#{z32}"}
+                >
+                  <.avatar
+                    src={profile_of(@profiles, z32).avatar_url}
+                    name={profile_of(@profiles, z32).name}
+                    pubky={z32}
+                    size="md"
+                    class="opacity-60"
+                  />
+                  <span class="flex min-w-0 flex-1 flex-col">
+                    <span class="truncate text-sm font-semibold text-muted-foreground">
+                      {profile_of(@profiles, z32).name}
+                    </span>
+                    <span :if={reason} class="truncate text-xs text-muted-foreground">{reason}</span>
+                  </span>
+                  <.button
+                    variant="ghost"
+                    size="sm"
+                    phx-click="unban"
+                    phx-value-z32={z32}
+                    disabled={@joining}
+                  >
+                    Restore
+                  </.button>
                 </div>
               </.card_content>
             </.card>
@@ -934,11 +1132,73 @@ defmodule PubkyRoomsWeb.RoomLive do
           </aside>
         </div>
       </.container>
+
+      <.dialog :if={@banning} id="ban-dialog" show on_cancel={JS.push("cancel_ban")}>
+        <:title>Remove {profile_of(@profiles, @banning).name} from this room?</:title>
+        <:description>
+          A ban marker is written to your homeserver; their messages and reactions are hidden in this
+          room for everyone and they cannot post until you restore them. Their files stay on their
+          own homeserver.
+        </:description>
+        <.form for={@ban_form} id="ban-form" phx-submit="ban" class="flex flex-col gap-4">
+          <.input
+            field={@ban_form[:reason]}
+            label="Reason (optional, shown to them)"
+            maxlength={Ban.reason_max()}
+            placeholder="Spam, harassment…"
+            autofocus
+          />
+        </.form>
+        <:footer>
+          <.button variant="ghost" phx-click="cancel_ban">Cancel</.button>
+          <.button variant="destructive" type="submit" form="ban-form" disabled={@joining}>
+            <.spinner :if={@joining} class="size-4" />
+            <.icon :if={!@joining} name="lucide-shield-ban" class="size-4" /> Remove member
+          </.button>
+        </:footer>
+      </.dialog>
     </Layouts.app>
     """
   end
 
   defp profile_of(profiles, z32), do: Map.get(profiles, z32) || Profiles.fallback(z32)
+
+  defp active_members(members, bans), do: Enum.reject(members, &Map.has_key?(bans, &1))
+
+  attr :z32, :string, required: true
+  attr :muted, :boolean, required: true
+  attr :can_ban, :boolean, required: true
+  attr :busy, :boolean, default: false
+
+  # Per-member actions, revealed on hover/focus of the row.
+  defp member_actions(assigns) do
+    ~H"""
+    <span class="flex shrink-0 items-center gap-0.5 sm:opacity-0 sm:group-hover/member:opacity-100 sm:group-focus-within/member:opacity-100">
+      <button
+        type="button"
+        phx-click={if @muted, do: "unmute", else: "mute"}
+        phx-value-z32={@z32}
+        class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
+        aria-label={if @muted, do: "Unmute", else: "Mute for me"}
+        title={if @muted, do: "Unmute", else: "Mute for me (this tab only)"}
+      >
+        <.icon name={if @muted, do: "lucide-volume-2", else: "lucide-volume-x"} class="size-4" />
+      </button>
+      <button
+        :if={@can_ban}
+        type="button"
+        phx-click="start_ban"
+        phx-value-z32={@z32}
+        disabled={@busy}
+        class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/20 hover:text-destructive"
+        aria-label="Remove from room"
+        title="Remove from room"
+      >
+        <.icon name="lucide-user-x" class="size-4" />
+      </button>
+    </span>
+    """
+  end
 
   defp authored_by(table, z32) do
     if :ets.info(table) == :undefined,

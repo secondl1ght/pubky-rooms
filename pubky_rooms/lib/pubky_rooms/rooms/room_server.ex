@@ -35,7 +35,12 @@ defmodule PubkyRooms.Rooms.RoomServer do
        viewer scrolling up always sees a complete, ordered history. Paged
        messages are inserted silently (no broadcast): only the viewer who
        asked prepends them.
-    7. **Viewers** — every attached viewer (signed in or not) is monitored;
+    7. **Bans** — markers under `bans/<room_id>/` on the *creator's*
+       homeserver (listed at bootstrap, applied live) hide a member's messages
+       and reactions and are reported as `{:member_banned, z32, reason}`;
+       deleting the marker restores them (`{:member_unbanned, z32}` and a
+       backfill). Markers anywhere else are ignored.
+    8. **Viewers** — every attached viewer (signed in or not) is monitored;
        the total is announced as `{:room_stats, ref, %{viewers: n}}` on
        `stats_topic/1`, debounced to at most one broadcast per
        `viewers_debounce_ms`. Only a count, never who (ADR 0006).
@@ -51,7 +56,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
   alias Pubky.Crypto.Blake3
   alias PubkyRooms.{Events, Pubky}
   alias PubkyRooms.Events.Subscriptions
-  alias PubkyRooms.Rooms.{Directory, Message, Paths}
+  alias PubkyRooms.Rooms.{Ban, Directory, Message, Paths}
 
   @sweep_every 5_000
   @stop_after_error 30_000
@@ -177,7 +182,8 @@ defmodule PubkyRooms.Rooms.RoomServer do
       older: %{},
       paging: false,
       waiters: [],
-      reactions: %{}
+      reactions: %{},
+      bans: %{}
     }
 
     {:ok, state, {:continue, :bootstrap}}
@@ -197,7 +203,8 @@ defmodule PubkyRooms.Rooms.RoomServer do
         Enum.each(members, &Events.subscribe_user/1)
         Subscriptions.subscribe()
         Directory.subscribe()
-        state = backfill_sync(state, members)
+        state = %{state | bans: load_bans(state)}
+        state = backfill_sync(state, MapSet.difference(members, banned_set(state)))
         state = apply_statuses(state, Subscriptions.statuses(subscribed))
         Process.send_after(self(), :sweep_pending, @sweep_every)
         state = %{state | status: :ready}
@@ -270,10 +277,17 @@ defmodule PubkyRooms.Rooms.RoomServer do
     state =
       case Paths.parse(path) do
         {:message, c, id, msg_id} when {c, id} == state.ref ->
-          handle_message_event(state, type, user, msg_id, ev.content_hash)
+          if banned?(state, user),
+            do: state,
+            else: handle_message_event(state, type, user, msg_id, ev.content_hash)
 
         {:reaction, c, id, author, msg_id, key} when {c, id} == state.ref ->
-          handle_reaction_event(state, type, user, {msg_id, author}, key)
+          if banned?(state, user),
+            do: state,
+            else: handle_reaction_event(state, type, user, {msg_id, author}, key)
+
+        {:ban, id, banned} when user == state.creator and id == state.id ->
+          handle_ban_event(state, type, banned)
 
         _ ->
           state
@@ -310,7 +324,21 @@ defmodule PubkyRooms.Rooms.RoomServer do
     {:noreply, apply_fetch(state, key, result)}
   end
 
+  # The reason of a ban applied live arrives a moment later.
+  def handle_info({:ban_reason, z32, reason}, state) do
+    case state.bans do
+      %{^z32 => ban} when ban.reason != reason ->
+        state = put_in(state.bans[z32], %{ban | reason: reason})
+        broadcast(state, {:member_banned, z32, reason})
+        {:noreply, state}
+
+      _ ->
+        {:noreply, state}
+    end
+  end
+
   def handle_info({:backfilled, members, {msgs, failed, leftovers, reactions}}, state) do
+    msgs = Enum.reject(msgs, &banned?(state, &1.author))
     state = Enum.reduce(msgs, state, fn msg, acc -> upsert(acc, msg) end)
     state = merge_leftovers(state, leftovers, msgs)
     state = apply_listed_reactions(state, reactions, broadcast: true)
@@ -542,7 +570,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
           state |> set_polled(MapSet.put(state.polled, z32)) |> schedule_poll()
         end
 
-      backfill_async(state, [z32])
+      unless banned?(state, z32), do: backfill_async(state, [z32])
       broadcast(state, {:member_joined, z32})
       state
     end
@@ -561,6 +589,98 @@ defmodule PubkyRooms.Rooms.RoomServer do
     |> Map.update!(:members, &MapSet.delete(&1, z32))
     |> Map.update!(:subscribed, &MapSet.delete(&1, z32))
     |> Map.update!(:older, &Map.delete(&1, z32))
+  end
+
+  # ── bans ───────────────────────────────────────────────────────────────────
+
+  defp banned?(state, z32), do: Map.has_key?(state.bans, z32)
+  defp banned_set(state), do: state.bans |> Map.keys() |> MapSet.new()
+
+  # Bootstrap: one listing of the creator's ban folder plus one small read per
+  # marker for its reason (bans are rare). Unreadable markers still ban.
+  defp load_bans(state) do
+    dir = Paths.bans_dir(state.id)
+
+    case retrying(fn -> Pubky.list(state.creator, dir, limit: 1_000) end) do
+      {:ok, %{entries: entries}} ->
+        for %{path: path} <- entries,
+            {:ban, _id, z32} <- [Paths.parse(path)],
+            into: %{},
+            do: {z32, read_ban(state.creator, path)}
+
+      {:error, reason} ->
+        if reason != :not_found,
+          do: Logger.debug("bans of #{inspect(state.ref)} unavailable: #{inspect(reason)}")
+
+        %{}
+    end
+  end
+
+  defp read_ban(creator, path) do
+    with {:ok, bytes} <- Pubky.get(creator, path),
+         {:ok, ban} <- Ban.decode(bytes) do
+      ban
+    else
+      _ -> %{created_at: nil, reason: nil}
+    end
+  end
+
+  defp handle_ban_event(state, :put, z32) when z32 == state.creator, do: state
+
+  defp handle_ban_event(state, :put, z32) do
+    if banned?(state, z32) do
+      state
+    else
+      state = put_in(state.bans[z32], %{created_at: System.os_time(:millisecond), reason: nil})
+      broadcast(state, {:member_banned, z32, nil})
+      fetch_ban_reason(state, z32)
+      hide_author(state, z32)
+    end
+  end
+
+  defp handle_ban_event(state, :del, z32) do
+    if banned?(state, z32) do
+      state = %{state | bans: Map.delete(state.bans, z32)}
+      broadcast(state, {:member_unbanned, z32})
+      if MapSet.member?(state.members, z32), do: backfill_async(state, [z32])
+      state
+    else
+      state
+    end
+  end
+
+  defp fetch_ban_reason(state, z32) do
+    server = self()
+    %{creator: creator, id: id} = state
+
+    Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn ->
+      %{reason: reason} = read_ban(creator, Paths.ban(id, z32))
+      send(server, {:ban_reason, z32, reason})
+    end)
+  end
+
+  # A banned author's messages leave the table (each one announced as deleted)
+  # and their reactions leave every row; paging forgets their entries too.
+  defp hide_author(state, z32) do
+    keys = :ets.select(state.table, [{{{:_, z32}, :_}, [], [{:element, 1, :"$_"}]}])
+
+    Enum.each(keys, fn key ->
+      :ets.delete(state.table, key)
+      broadcast(state, {:message_deleted, key})
+    end)
+
+    state = %{state | older: Map.delete(state.older, z32), pending: Map.drop(state.pending, keys)}
+    state = %{state | reactions: Map.drop(state.reactions, keys)}
+
+    theirs =
+      for {msg_key, by_key} <- state.reactions,
+          {key, reactors} <- by_key,
+          MapSet.member?(reactors, z32),
+          do: {msg_key, key}
+
+    Enum.reduce(theirs, state, fn {msg_key, key}, acc ->
+      set_reaction(acc, msg_key, key, z32, false, broadcast: true)
+    end)
   end
 
   # ── live budget ────────────────────────────────────────────────────────────
@@ -1081,6 +1201,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
       polled: MapSet.to_list(state.polled),
       live_unavailable: MapSet.to_list(state.live_unavailable),
       viewers: map_size(state.viewers),
+      bans: Map.new(state.bans, fn {z32, %{reason: reason}} -> {z32, reason} end),
       more?: boundary(state.older) != nil or :ets.info(state.table, :size) > @history_limit
     }
   end

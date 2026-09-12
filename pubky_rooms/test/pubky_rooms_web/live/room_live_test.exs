@@ -342,6 +342,74 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     refute has_element?(anon, "##{id}-palette")
   end
 
+  test "the creator removes and restores a member; the member sees why", ctx do
+    {bob_sid, bob} = Fixtures.login("bob")
+    Rooms.join(bob_sid, bob, Room.ref(ctx.room))
+    bob_conn = init_test_session(ctx.conn, Fixtures.cookie(bob_sid))
+
+    {:ok, bob_view, _} = live(bob_conn, ctx.path)
+    bob_view |> form("#composer", message: %{content: "bob speaks"}) |> render_submit()
+    render_async(bob_view)
+
+    {:ok, alice_view, _} = live(ctx.alice_conn, ctx.path)
+    wait_for(fn -> render(alice_view) end, &(&1 =~ "bob speaks"))
+    # bob has no moderation controls
+    refute has_element?(bob_view, "#member-#{ctx.alice} button[aria-label='Remove from room']")
+
+    alice_view
+    |> element("#member-#{bob} button[aria-label='Remove from room']")
+    |> render_click()
+
+    assert has_element?(alice_view, "#ban-dialog")
+    alice_view |> form("#ban-form", ban: %{reason: "spam"}) |> render_submit()
+    render_async(alice_view)
+
+    html = wait_for(fn -> render(alice_view) end, &(&1 =~ "Removed by you"))
+    refute html =~ "bob speaks"
+    assert html =~ ~s(id="banned-#{bob}")
+    refute has_element?(alice_view, "#member-#{bob}")
+
+    html = wait_for(fn -> render(bob_view) end, &(&1 =~ "removed from this room"))
+    assert html =~ "spam"
+    refute has_element?(bob_view, "#composer")
+    assert Map.has_key?(Fake.files(ctx.alice), Paths.ban(ctx.room.id, bob))
+
+    alice_view |> element("#banned-#{bob} button", "Restore") |> render_click()
+    render_async(alice_view)
+    wait_for(fn -> render(bob_view) end, &has_composer?/1)
+    assert wait_for(fn -> render(alice_view) end, &(&1 =~ "bob speaks"))
+  end
+
+  test "muting hides an author's messages in this tab only", ctx do
+    {bob_sid, bob} = Fixtures.login("bob")
+    Rooms.join(bob_sid, bob, Room.ref(ctx.room))
+    bob_conn = init_test_session(ctx.conn, Fixtures.cookie(bob_sid))
+
+    {:ok, bob_view, _} = live(bob_conn, ctx.path)
+    bob_view |> form("#composer", message: %{content: "first from bob"}) |> render_submit()
+    render_async(bob_view)
+
+    {:ok, alice_view, _} = live(ctx.alice_conn, ctx.path)
+    {:ok, other_tab, _} = live(ctx.alice_conn, ctx.path)
+    wait_for(fn -> render(alice_view) end, &(&1 =~ "first from bob"))
+
+    alice_view |> element("#member-#{bob} button[aria-label='Mute for me']") |> render_click()
+    refute render(alice_view) =~ "first from bob"
+    assert has_element?(alice_view, "#member-#{bob} button[aria-label=Unmute]")
+
+    bob_view |> form("#composer", message: %{content: "second from bob"}) |> render_submit()
+    render_async(bob_view)
+    assert wait_for(fn -> render(other_tab) end, &(&1 =~ "second from bob"))
+    refute render(alice_view) =~ "second from bob"
+
+    alice_view |> element("#member-#{bob} button[aria-label=Unmute]") |> render_click()
+    html = render(alice_view)
+    assert html =~ "first from bob"
+    assert html =~ "second from bob"
+    # nothing was written anywhere for a mute
+    refute Fake.files(ctx.alice) |> Map.keys() |> Enum.any?(&String.contains?(&1, "mute"))
+  end
+
   test "anonymous viewers are counted, never identified", ctx do
     {:ok, alice_view, _} = live(ctx.alice_conn, ctx.path)
     assert wait_for(fn -> render(alice_view) end, &(&1 =~ "1 online"))
