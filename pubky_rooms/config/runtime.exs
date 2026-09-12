@@ -47,6 +47,14 @@ pubky_overrides =
 
 config :pubky, pubky_overrides
 
+# Connection pools per homeserver host (Finch). The stream pool bounds how many
+# users' events one node can follow per homeserver: streams carry 50 users each.
+config :pubky,
+  pools: [
+    http: String.to_integer(System.get_env("PUBKY_HTTP_POOL_SIZE", "50")),
+    streams: String.to_integer(System.get_env("PUBKY_STREAM_POOL_SIZE", "100"))
+  ]
+
 config :pubky_rooms,
   data_dir: System.get_env("PUBKY_DATA_DIR") || Application.get_env(:pubky_rooms, :data_dir),
   nexus_url: System.get_env("NEXUS_URL"),

@@ -9,6 +9,7 @@ Sovereign live chat rooms on the Pubky protocol, built with Phoenix/Elixir. Part
 - `docs/notes/pubky-ex-design.md` — design of the `pubky_ex` library (modules, APIs, algorithms, tests).
 - `docs/notes/rooms-app-design.md` — design of the Phoenix app (data model, processes, PubSub, LiveViews).
 - `docs/notes/pubky-app-design-system.md` — Pubky App design tokens/specs (reference data only; never copy their code).
+- `docs/operations.md` — capacity limits table, what happens when each is hit, and the runbook (keep it current whenever a limit or config key changes).
 - `docs/design-system.md` — our clean-room component library (`PubkyRoomsWeb.UI.*`), tokens, and rules; gallery at `/dev/ui` in dev.
 - `docs/adr/` — architecture decision records.
 - `docs/fixtures/` — captured protocol payloads used by tests.

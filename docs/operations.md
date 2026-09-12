@@ -1,0 +1,31 @@
+# Operations: capacity, limits, and what to do when they are hit
+
+Everything here is one node (no clustering in v1). Costs scale **per room and per followed user, never per viewer**: a viewer is a LiveView process reading a shared in-memory room; a followed user is one fiftieth of an event-stream connection to their homeserver.
+
+## Limits at a glance
+
+| What | Default | Where | When hit | How you notice | How to raise |
+|---|---|---|---|---|---|
+| Concurrent viewers (per room or total) | none | machine size | slower fan-out, higher memory (~50–100 KB per LiveView) | LiveDashboard: memory, scheduler load (M7: telemetry gauges) | bigger Fly machine (vertical); clustering is a later milestone |
+| Followed users per homeserver per node (members of open rooms + signed-in users, each once) | 5 000 = 100 stream connections × 50 users | `PUBKY_STREAM_POOL_SIZE` (default 100) | new streams wait, then fail and retry every 30 s; those users' *new* messages stop arriving live until a connection frees; nothing crashes | `Subscriptions.info/0` in a remote shell; (M5) room marker "live updates unavailable"; (M7) warning at 80 % of the pool | raise the variable, redeploy; each connection is one socket and a little memory |
+| Concurrent regular requests per homeserver (reads, listings, writes) | 50 | `PUBKY_HTTP_POOL_SIZE` | requests queue; bootstraps slow down; timeouts surface as "unreachable" and are retried | slow room opens; (M7) bootstrap duration metric | raise the variable; keep `fetch_concurrency` below it |
+| Bootstrap work per room | list every member once (≤ `bootstrap_per_member` 50 entries each), fetch newest `bootstrap_messages` 100, `fetch_concurrency` 16 | `config :pubky_rooms` | opening a huge room takes seconds | (M7) bootstrap duration metric | tune the three values; M6 adds the detached cache and incremental first paint |
+| Members per room | no hard cap; each member is a followed user | — | see followed users | — | M5: `max_members_subscribed` 5 000 with graceful degradation (poll unsubscribed members' folders, room notice) |
+| Warm rooms without viewers | 200 | `max_idle_rooms`, `room_idle_timeout_ms` 30 min | past 200, idle rooms stop after 1 s instead of 30 min and re-bootstrap on the next visit | — | raise `max_idle_rooms` if memory allows (a warm room is a few hundred KB) |
+| Rooms that exist / rooms with viewers | none | — | — | — | — |
+| Sessions in memory | none (a few KB each; dropped 60 s after the last tab closes, 15 min if never attached) | `session_memory_ttl_ms` | — | — | — |
+| Room directory (DETS + ETS) | grows with rooms and memberships known (~200 B each) | `PUBKY_DATA_DIR` | DETS files are limited to 2 GB | disk usage | fine to millions of rows; Nexus becomes the discovery source in M6 |
+| Per-session write limits (protect homeservers and us) | messages 5 / 5 s, rooms 5 / h, joins 20 / h; login starts 10 / min per IP | `PubkyRooms.Rooms`, `AuthLive` | user sees "Slow down — try again in N s" | — | code constants; make config if needed |
+| Homeserver anonymous read throttle | operator-set, e.g. 1 MB/s per IP | homeserver `[default_quotas] unauthenticated_ip_rate_read` | our reads slow down (delay, not error) | slow bootstraps only | ask the operator to whitelist our IP for count limits; (M7) `PUBKY_SERVICE_CREDENTIAL` for authenticated reads with an unlimited quota |
+| Homeserver request-count limits | operator-set per path (`429` + `Retry-After`) | homeserver `[[drive.rate_limits]]` | we back off and retry once; history of the affected member shows as unreachable with Retry | room banner | operator whitelist |
+
+## Runbook
+
+- **Rooms feel slow to open:** check the homeserver throttle first (is our IP whitelisted? are reads authenticated?), then `PUBKY_HTTP_POOL_SIZE` and `fetch_concurrency`.
+- **Members' messages stop arriving live in many rooms at once:** stream pool exhausted or a homeserver rejecting streams. `Subscriptions.info/0` shows per-user status; raise `PUBKY_STREAM_POOL_SIZE` or check the homeserver.
+- **Memory climbing:** count viewers and warm rooms (LiveDashboard); lower `max_idle_rooms` or move to a bigger machine.
+- **Deploy / restart:** safe at any time. Sessions survive via the cookie; rooms re-bootstrap lazily on first open; the directory reloads from DETS. Expect a burst of homeserver reads as popular rooms reopen.
+- **Homeserver down:** rooms whose creator's homeserver is unreachable show an error state; other rooms are unaffected. Members on a down homeserver are marked unreachable and retried every minute.
+
+## Telemetry to add in M7 (ADR 0006: aggregates only)
+Gauges: stream connections per homeserver vs pool size (warn in logs at 80 %), followed users, open rooms, warm idle rooms, viewers. Durations: bootstrap, send→confirm latency, event lag (cursor age). `/healthz` for Fly checks.

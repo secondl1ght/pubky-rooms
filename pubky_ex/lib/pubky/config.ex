@@ -11,7 +11,8 @@ defmodule Pubky.Config do
         client_id: "rooms.pubky.app"
 
   `network` selects a preset (`mainnet/1` or `testnet/1`); any other key
-  overrides the preset value.
+  overrides the preset value. The `:pools` key is read by `Pubky.Application`
+  (Finch pool sizes) and is not part of this struct.
 
   ## Fields
 
@@ -95,7 +96,7 @@ defmodule Pubky.Config do
   """
   @spec get() :: t()
   def get do
-    env = Application.get_all_env(:pubky) |> Keyword.drop([:included_applications])
+    env = Application.get_all_env(:pubky) |> Keyword.drop([:included_applications, :pools])
     {network, overrides} = Keyword.pop(env, :network, :mainnet)
 
     case network do
