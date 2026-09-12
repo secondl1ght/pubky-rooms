@@ -13,8 +13,9 @@ defmodule PubkyRooms.Rooms.RoomServer do
        *members + messages shown*, not members × messages.
     2. **Live** — apply homeserver events: message `PUT`s become fetches (or
        instant confirmations when the content hash matches a pending write
-       from this node), `DEL`s remove, join markers add and remove members,
-       room definition changes update or close the room.
+       from this node), `DEL`s remove, reaction markers toggle a reaction on
+       the message (no fetch: the path says it all), join markers add and
+       remove members, room definition changes update or close the room.
     3. **Idle** — with no viewers attached for `room_idle_timeout_ms` the room
        releases its subscriptions and stops (sooner when more than
        `max_idle_rooms` rooms are alive); the next visit bootstraps again.
@@ -175,7 +176,8 @@ defmodule PubkyRooms.Rooms.RoomServer do
       announced_viewers: 0,
       older: %{},
       paging: false,
-      waiters: []
+      waiters: [],
+      reactions: %{}
     }
 
     {:ok, state, {:continue, :bootstrap}}
@@ -270,6 +272,9 @@ defmodule PubkyRooms.Rooms.RoomServer do
         {:message, c, id, msg_id} when {c, id} == state.ref ->
           handle_message_event(state, type, user, msg_id, ev.content_hash)
 
+        {:reaction, c, id, author, msg_id, key} when {c, id} == state.ref ->
+          handle_reaction_event(state, type, user, {msg_id, author}, key)
+
         _ ->
           state
       end
@@ -305,9 +310,10 @@ defmodule PubkyRooms.Rooms.RoomServer do
     {:noreply, apply_fetch(state, key, result)}
   end
 
-  def handle_info({:backfilled, members, {msgs, failed, leftovers}}, state) do
+  def handle_info({:backfilled, members, {msgs, failed, leftovers, reactions}}, state) do
     state = Enum.reduce(msgs, state, fn msg, acc -> upsert(acc, msg) end)
     state = merge_leftovers(state, leftovers, msgs)
+    state = apply_listed_reactions(state, reactions, broadcast: true)
 
     unreachable =
       state.unreachable
@@ -442,8 +448,84 @@ defmodule PubkyRooms.Rooms.RoomServer do
     key = {msg_id, author}
     :ets.delete(state.table, key)
     broadcast(state, {:message_deleted, key})
-    %{state | pending: Map.delete(state.pending, key)}
+
+    %{
+      state
+      | pending: Map.delete(state.pending, key),
+        reactions: Map.delete(state.reactions, key)
+    }
   end
+
+  # ── reactions ──────────────────────────────────────────────────────────────
+
+  # `reactions` maps message key → %{reaction key => MapSet of reactors}; the
+  # message row in the table carries a copy so viewers render it directly.
+  defp handle_reaction_event(state, type, reactor, msg_key, key) do
+    if MapSet.member?(state.members, reactor),
+      do: set_reaction(state, msg_key, key, reactor, type == :put, broadcast: true),
+      else: state
+  end
+
+  defp set_reaction(state, msg_key, key, reactor, on?, opts) do
+    by_key = Map.get(state.reactions, msg_key, %{})
+    reactors = Map.get(by_key, key, MapSet.new())
+
+    reactors =
+      if on?, do: MapSet.put(reactors, reactor), else: MapSet.delete(reactors, reactor)
+
+    by_key =
+      if MapSet.size(reactors) == 0,
+        do: Map.delete(by_key, key),
+        else: Map.put(by_key, key, reactors)
+
+    reactions =
+      if by_key == %{},
+        do: Map.delete(state.reactions, msg_key),
+        else: Map.put(state.reactions, msg_key, by_key)
+
+    state = %{state | reactions: reactions}
+    refresh_message_reactions(state, msg_key, opts[:broadcast])
+  end
+
+  # Pushes the current reactions of a message into its table row.
+  defp refresh_message_reactions(state, msg_key, broadcast?) do
+    with [{^msg_key, %Message{} = msg}] <- :ets.lookup(state.table, msg_key),
+         updated = with_reactions(state, msg),
+         true <- updated != msg do
+      :ets.insert(state.table, {msg_key, updated})
+      if broadcast?, do: broadcast(state, {:message_upserted, updated})
+    end
+
+    state
+  end
+
+  # A listing of members' reaction folders: `{reactor, msg_key, key}` triples.
+  # Each listed member's reactions are replaced wholesale (a poll may reveal
+  # removals the events missed).
+  defp apply_listed_reactions(state, {listed_members, triples}, opts) do
+    listed = MapSet.new(listed_members)
+    wanted = MapSet.new(triples)
+
+    current =
+      for {msg_key, by_key} <- state.reactions,
+          {key, reactors} <- by_key,
+          reactor <- reactors,
+          MapSet.member?(listed, reactor),
+          into: MapSet.new(),
+          do: {reactor, msg_key, key}
+
+    state =
+      Enum.reduce(MapSet.difference(current, wanted), state, fn {reactor, msg_key, key}, acc ->
+        set_reaction(acc, msg_key, key, reactor, false, opts)
+      end)
+
+    Enum.reduce(MapSet.difference(wanted, current), state, fn {reactor, msg_key, key}, acc ->
+      set_reaction(acc, msg_key, key, reactor, true, opts)
+    end)
+  end
+
+  defp with_reactions(state, %Message{key: key} = msg),
+    do: %{msg | reactions: Map.get(state.reactions, key, %{})}
 
   defp add_member(state, z32) do
     if MapSet.member?(state.members, z32) do
@@ -587,6 +669,8 @@ defmodule PubkyRooms.Rooms.RoomServer do
   end
 
   defp upsert(state, %Message{key: key} = msg) do
+    msg = with_reactions(state, msg)
+
     changed? =
       case :ets.lookup(state.table, key) do
         [{^key, ^msg}] -> false
@@ -604,9 +688,10 @@ defmodule PubkyRooms.Rooms.RoomServer do
 
   # Bootstrap: fetch every member's newest messages before announcing :ready.
   defp backfill_sync(state, members) do
-    {msgs, failed, leftovers} = fetch_history(members, state.ref, MapSet.new())
+    {msgs, failed, leftovers, reactions} = fetch_history(members, state.ref, MapSet.new())
     state = Enum.reduce(msgs, state, fn msg, acc -> upsert(acc, msg) end)
     state = merge_leftovers(state, leftovers, msgs)
+    state = apply_listed_reactions(state, reactions, broadcast: false)
     set_unreachable(state, MapSet.new(failed))
   end
 
@@ -708,7 +793,43 @@ defmodule PubkyRooms.Rooms.RoomServer do
 
     picks = listed |> all_entries() |> Enum.take(total)
     leftovers = without_picks(listed, picks)
-    {fetch_messages(ref, picks), failed, leftovers}
+    {fetch_messages(ref, picks), failed, leftovers, list_reactions(ref, Map.keys(listed))}
+  end
+
+  # One listing per member of their reaction markers for this room (at most
+  # `reactions_per_member`); nothing is fetched. Returns the members whose
+  # listing succeeded and the `{reactor, msg_key, key}` triples found.
+  defp list_reactions(ref, members) do
+    limit = config(:reactions_per_member, 1_000)
+
+    members
+    |> Task.async_stream(&list_member_reactions(ref, &1, limit),
+      max_concurrency: concurrency(),
+      timeout: 30_000,
+      on_timeout: :kill_task
+    )
+    |> Enum.reduce({[], []}, fn
+      {:ok, {member, triples}}, {listed, acc} -> {[member | listed], triples ++ acc}
+      _failed_or_exit, acc -> acc
+    end)
+  end
+
+  defp list_member_reactions(ref, member, limit) do
+    case retrying(fn -> Pubky.list(member, Paths.reactions_dir(ref), limit: limit) end) do
+      {:ok, %{entries: entries}} ->
+        triples =
+          for %{path: path} <- entries,
+              {:reaction, _c, _id, author, msg_id, key} <- [Paths.parse(path)],
+              do: {member, {msg_id, author}, key}
+
+        {member, triples}
+
+      {:error, :not_found} ->
+        {member, []}
+
+      {:error, _reason} ->
+        :failed
+    end
   end
 
   # Every unfetched entry across members as `{msg_id, member, path}`, newest first.
@@ -869,7 +990,8 @@ defmodule PubkyRooms.Rooms.RoomServer do
   end
 
   defp insert_silently(state, %Message{key: key} = msg) do
-    unless :ets.member(state.table, key), do: :ets.insert(state.table, {key, msg})
+    unless :ets.member(state.table, key),
+      do: :ets.insert(state.table, {key, with_reactions(state, msg)})
   end
 
   # One page of a member's folder, newest first: `{:ok, [{msg_id, path}], next_cursor}`.

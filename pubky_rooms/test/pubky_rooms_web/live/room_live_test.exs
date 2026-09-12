@@ -290,6 +290,58 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     refute has_element?(anon, "button[aria-label=Reply]")
   end
 
+  test "members react from the palette and toggle their reaction; others see counts", ctx do
+    {bob_sid, bob} = Fixtures.login("bob")
+    Rooms.join(bob_sid, bob, Room.ref(ctx.room))
+    bob_conn = init_test_session(ctx.conn, Fixtures.cookie(bob_sid))
+
+    {:ok, alice_view, _} = live(ctx.alice_conn, ctx.path)
+    alice_view |> form("#composer", message: %{content: "react here"}) |> render_submit()
+    render_async(alice_view)
+    [stored] = messages_on_homeserver(ctx.alice, ctx.room)
+    id = "msg-#{ctx.alice}-#{stored.msg_id}"
+
+    {:ok, bob_view, _} = live(bob_conn, ctx.path)
+    wait_for(fn -> render(bob_view) end, &(&1 =~ "react here"))
+    assert has_element?(bob_view, "##{id}-palette button[aria-label='React with fire']")
+
+    render_click(bob_view, "react", %{"id" => id, "key" => "fire"})
+    render_async(bob_view)
+    html = wait_for(fn -> render(bob_view) end, &(&1 =~ ~s(title="fire · 1")))
+
+    assert html =~
+             ~r/aria-pressed="true"[^>]*title="fire · 1"|title="fire · 1"[^>]*aria-pressed="true"/
+
+    assert Map.has_key?(
+             Fake.files(bob),
+             Paths.reaction(Room.ref(ctx.room), ctx.alice, stored.msg_id, "fire")
+           )
+
+    # alice sees the count, not pressed
+    html = wait_for(fn -> render(alice_view) end, &(&1 =~ ~s(title="fire · 1")))
+
+    assert html =~
+             ~r/aria-pressed="false"[^>]*title="fire · 1"|title="fire · 1"[^>]*aria-pressed="false"/
+
+    # clicking the chip toggles it off again
+    render_click(bob_view, "react", %{"id" => id, "key" => "fire"})
+    render_async(bob_view)
+    wait_for(fn -> render(alice_view) end, &(not (&1 =~ "fire · 1")))
+
+    refute Map.has_key?(
+             Fake.files(bob),
+             Paths.reaction(Room.ref(ctx.room), ctx.alice, stored.msg_id, "fire")
+           )
+
+    # anonymous viewers see chips but cannot react
+    render_click(bob_view, "react", %{"id" => id, "key" => "up"})
+    render_async(bob_view)
+    {:ok, anon, _} = live(ctx.conn, ctx.path)
+    html = wait_for(fn -> render(anon) end, &(&1 =~ ~s(title="up · 1")))
+    assert html =~ ~r/<button[^>]*disabled[^>]*title="up · 1"|title="up · 1"[^>]*disabled/
+    refute has_element?(anon, "##{id}-palette")
+  end
+
   test "anonymous viewers are counted, never identified", ctx do
     {:ok, alice_view, _} = live(ctx.alice_conn, ctx.path)
     assert wait_for(fn -> render(alice_view) end, &(&1 =~ "1 online"))

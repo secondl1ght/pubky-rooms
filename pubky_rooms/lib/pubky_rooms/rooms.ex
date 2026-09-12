@@ -11,7 +11,7 @@ defmodule PubkyRooms.Rooms do
   alias PubkyRooms.{Events, Pubky, RateLimit}
   alias PubkyRooms.Events.Subscriptions
   alias PubkyRooms.Profiles.LocalProfile
-  alias PubkyRooms.Rooms.{Directory, Membership, Message, Paths, Room, RoomServer}
+  alias PubkyRooms.Rooms.{Directory, Membership, Message, Paths, Reaction, Room, RoomServer}
 
   @type sid :: String.t()
 
@@ -179,6 +179,30 @@ defmodule PubkyRooms.Rooms do
     end
   end
 
+  @doc """
+  Reacts to a message: writes a marker on the reactor's homeserver. Only the
+  v1 palette is written; 20 reactions per 10 s per session.
+  """
+  @spec react(sid(), Message.t(), String.t()) :: :ok | {:error, term()}
+  def react(sid, %Message{} = msg, key) do
+    with true <- Reaction.writable?(key) || {:error, :invalid_reaction},
+         :ok <- limit({:reactions, sid}, 20, 10_000) do
+      Pubky.put(sid, Paths.reaction(msg.room_ref, msg.author, msg.msg_id, key), Reaction.encode())
+    end
+  end
+
+  @doc "Removes the session user's reaction marker (already gone counts as done)."
+  @spec unreact(sid(), Message.t(), String.t()) :: :ok | {:error, term()}
+  def unreact(sid, %Message{} = msg, key) do
+    with :ok <- limit({:reactions, sid}, 20, 10_000) do
+      case Pubky.delete(sid, Paths.reaction(msg.room_ref, msg.author, msg.msg_id, key)) do
+        :ok -> :ok
+        {:error, :not_found} -> :ok
+        error -> error
+      end
+    end
+  end
+
   @doc "Writes a prepared message to the author's homeserver."
   @spec publish_message(sid(), Message.t()) :: :ok | {:error, Pubky.reason()}
   def publish_message(sid, %Message{} = msg) do
@@ -213,6 +237,7 @@ defmodule PubkyRooms.Rooms do
   def explain({:rate_limited, ms}), do: "Slow down — try again in #{max(div(ms, 1000), 1)} s."
   def explain(:unauthorized), do: "Your session has expired. Please sign in again."
   def explain(:unreachable), do: "Your homeserver could not be reached."
+  def explain(:invalid_reaction), do: "That reaction is not available."
   def explain({:http, status}), do: "Your homeserver answered with status #{status}."
   def explain(reason) when is_binary(reason), do: reason
   def explain(reason), do: "Something went wrong (#{inspect(reason)})."

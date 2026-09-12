@@ -11,7 +11,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   use PubkyRoomsWeb, :live_view
 
   alias PubkyRooms.{Ids, Profiles, Rooms}
-  alias PubkyRooms.Rooms.{Message, Paths, RoomServer}
+  alias PubkyRooms.Rooms.{Message, Paths, Reaction, RoomServer}
   alias PubkyRoomsWeb.{Format, Presence}
 
   # a viewer is shown as typing for this long after their last keystroke event
@@ -229,8 +229,24 @@ defmodule PubkyRoomsWeb.RoomLive do
     end
   end
 
-  def handle_event(event, _params, socket) when event in ~w(edit delete) do
-    {:noreply, socket}
+  # Toggles the viewer's reaction; the homeserver event updates the row.
+  def handle_event(
+        "react",
+        %{"id" => id, "key" => key},
+        %{assigns: %{current_user: %{pubky: me}, sid: sid, is_member: true}} = socket
+      ) do
+    case lookup_message(socket, id) do
+      %Message{reactions: reactions} = msg ->
+        mine? = reactions |> Map.get(key, MapSet.new()) |> MapSet.member?(me)
+
+        {:noreply,
+         start_async(socket, {:react, msg.key, key}, fn ->
+           if mine?, do: Rooms.unreact(sid, msg, key), else: Rooms.react(sid, msg, key)
+         end)}
+
+      nil ->
+        {:noreply, socket}
+    end
   end
 
   def handle_event("retry", %{"id" => id}, %{assigns: %{failed: failed, sid: sid}} = socket) do
@@ -326,6 +342,11 @@ defmodule PubkyRoomsWeb.RoomLive do
      |> start_async(:leave, fn -> Rooms.leave(sid, user.pubky, ref) end)}
   end
 
+  # signed-out or non-member viewers cannot use these actions
+  def handle_event(event, _params, socket) when event in ~w(edit delete react) do
+    {:noreply, socket}
+  end
+
   # Which write the composer performs in its current mode.
   defp prepare(:new, sid, author, ref, content),
     do: Rooms.prepare_message(sid, author, ref, content)
@@ -361,6 +382,14 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   def handle_async({:delete, _key}, {:ok, :ok}, socket), do: {:noreply, socket}
+
+  def handle_async({:react, _msg_key, _key}, {:ok, :ok}, socket), do: {:noreply, socket}
+
+  def handle_async({:react, _msg_key, _key}, {:ok, {:error, reason}}, socket),
+    do: {:noreply, put_flash(socket, :error, "Reaction not stored: " <> Rooms.explain(reason))}
+
+  def handle_async({:react, _msg_key, _key}, {:exit, reason}, socket),
+    do: {:noreply, put_flash(socket, :error, Rooms.explain({:unexpected, reason}))}
 
   def handle_async({:delete, key}, {:ok, {:error, reason}}, socket),
     do: {:noreply, restore_message(socket, key, reason)}
@@ -756,6 +785,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                 profile={Map.get(@profiles, msg.author) || Profiles.get(msg.author)}
                 own={@current_user != nil && @current_user.pubky == msg.author}
                 can_reply={@is_member and @status == :ready}
+                viewer={@current_user && @current_user.pubky}
                 quote={quote_of(assigns, msg)}
               />
             </div>
@@ -1101,7 +1131,8 @@ defmodule PubkyRoomsWeb.RoomLive do
   attr :msg, Message, required: true
   attr :profile, :map, required: true
   attr :own, :boolean, default: false
-  attr :can_reply, :boolean, default: false
+  attr :can_reply, :boolean, default: false, doc: "also gates reacting"
+  attr :viewer, :string, default: nil, doc: "the viewer's z32, to mark their own reactions"
   attr :quote, :any, default: nil, doc: "nil | :unavailable | %{id, name, content}"
 
   defp message_row(assigns) do
@@ -1114,6 +1145,17 @@ defmodule PubkyRoomsWeb.RoomLive do
         :if={@msg.state == :confirmed and (@can_reply or @own)}
         class="absolute -top-3 right-2 flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5 shadow-xs sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
       >
+        <button
+          :if={@can_reply}
+          type="button"
+          phx-click={JS.toggle(to: "##{@id}-palette")}
+          class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
+          aria-label="React"
+          title="React"
+          aria-controls={"#{@id}-palette"}
+        >
+          <.icon name="lucide-smile-plus" class="size-4" />
+        </button>
         <button
           :if={@can_reply}
           type="button"
@@ -1188,6 +1230,48 @@ defmodule PubkyRoomsWeb.RoomLive do
         ]}>
           {@msg.content}
         </p>
+        <div
+          :if={@can_reply}
+          id={"#{@id}-palette"}
+          class="mt-1 hidden flex-wrap gap-1"
+          phx-click-away={JS.hide(to: "##{@id}-palette")}
+          role="group"
+          aria-label="Choose a reaction"
+        >
+          <button
+            :for={{key, emoji} <- Reaction.palette()}
+            type="button"
+            phx-click={
+              JS.push("react", value: %{id: @id, key: key}) |> JS.hide(to: "##{@id}-palette")
+            }
+            class="flex size-8 cursor-pointer items-center justify-center rounded-full text-lg hover:bg-white/10"
+            aria-label={"React with #{key}"}
+          >
+            {emoji}
+          </button>
+        </div>
+        <div :if={@msg.reactions != %{}} class="mt-1 flex flex-wrap gap-1.5">
+          <button
+            :for={{key, reactors} <- Enum.sort_by(@msg.reactions, &elem(&1, 0))}
+            type="button"
+            phx-click={@can_reply && JS.push("react", value: %{id: @id, key: key})}
+            disabled={!@can_reply}
+            aria-pressed={to_string(@viewer != nil and MapSet.member?(reactors, @viewer))}
+            class={[
+              "flex h-7 items-center gap-1 rounded-full border px-2 text-xs transition-colors",
+              @can_reply && "cursor-pointer hover:bg-white/10",
+              if(@viewer != nil and MapSet.member?(reactors, @viewer),
+                do: "border-brand/60 bg-brand/15 text-foreground",
+                else: "border-border bg-white/[0.03] text-secondary-foreground"
+              )
+            ]}
+            title={"#{key} · #{MapSet.size(reactors)}"}
+          >
+            <span aria-hidden="true">{Reaction.emoji(key)}</span>
+            <span class="sr-only">{key}</span>
+            <span class="font-semibold">{MapSet.size(reactors)}</span>
+          </button>
+        </div>
         <div
           :if={@msg.state == :failed}
           class="mt-1 flex flex-wrap items-center gap-2 text-xs text-destructive"

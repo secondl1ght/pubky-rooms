@@ -17,6 +17,7 @@ config :pubky_rooms,
   bootstrap_messages: 100,
   fetch_concurrency: 16,
   page_size: 50,
+  reactions_per_member: 1_000,
   # live event subscriptions per room (creator first); members beyond this are
   # polled every member_poll_ms instead. The stream pool (PUBKY_STREAM_POOL_SIZE
   # × 50 users) bounds the total per homeserver per node.

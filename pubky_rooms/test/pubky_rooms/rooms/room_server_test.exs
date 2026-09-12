@@ -4,7 +4,7 @@ defmodule PubkyRooms.Rooms.RoomServerTest do
   alias PubkyRooms.Events.Subscriptions
   alias PubkyRooms.{Fixtures, Rooms}
   alias PubkyRooms.Pubky.Fake
-  alias PubkyRooms.Rooms.{Directory, Membership, Message, Paths, Room, RoomServer}
+  alias PubkyRooms.Rooms.{Directory, Membership, Message, Paths, Reaction, Room, RoomServer}
 
   setup do
     reset_state()
@@ -287,6 +287,54 @@ defmodule PubkyRooms.Rooms.RoomServerTest do
         assert List.last(msgs).key < before
         if more?, do: page_back(ref, hd(msgs).key, [msgs | acc]), else: [msgs | acc]
     end
+  end
+
+  test "reactions are restored from listings and toggled by events without any fetch", ctx do
+    %{alice: alice, ref: ref, sid: sid} = ctx
+    {bob_sid, bob} = Fixtures.login("react-bob")
+    Directory.add_member(ref, bob)
+
+    {:ok, m} = Message.new(alice, ref, "react to me")
+    Fake.seed(alice, Message.path(m), Message.encode(m))
+    Fake.seed(bob, Paths.reaction(ref, alice, m.msg_id, "up"), Reaction.encode())
+    # a marker for a message that is not loaded is kept aside until it is
+    Fake.seed(bob, Paths.reaction(ref, alice, "0000000000000", "fire"), Reaction.encode())
+
+    {:ok, _pid} = RoomServer.ensure(ref)
+    assert_receive {:room_event, ^ref, :ready}, 2_000
+    {:ok, %{table: table}} = RoomServer.attach(ref)
+    [%Message{reactions: reactions}] = RoomServer.history(table)
+    assert reactions == %{"up" => MapSet.new([bob])}
+    drain_mailbox()
+
+    # alice reacts (writes a marker): the event updates the row and is broadcast
+    assert :ok = Rooms.react(sid, m, "up")
+    assert_receive {:room_event, ^ref, {:message_upserted, %Message{reactions: r1}}}, 1_000
+    assert r1["up"] == MapSet.new([alice, bob])
+
+    assert :ok = Rooms.react(sid, m, "heart")
+    assert_receive {:room_event, ^ref, {:message_upserted, %Message{reactions: r2}}}, 1_000
+    assert Map.keys(r2) |> Enum.sort() == ["heart", "up"]
+
+    # bob withdraws
+    assert :ok = Rooms.unreact(bob_sid, m, "up")
+    assert_receive {:room_event, ^ref, {:message_upserted, %Message{reactions: r3}}}, 1_000
+    assert r3["up"] == MapSet.new([alice])
+
+    # only the palette is written; a stranger's marker is ignored
+    assert {:error, :invalid_reaction} = Rooms.react(sid, m, "nope")
+    stranger = Fixtures.z32("react-stranger")
+    Fake.write_as(stranger, Paths.reaction(ref, alice, m.msg_id, "up"), Reaction.encode())
+    refute_receive {:room_event, ^ref, {:message_upserted, _}}, 200
+
+    # an edit keeps the reactions
+    Fake.write_as(alice, Message.path(m), Message.encode(%{m | content: "edited", edited_at: 1}))
+
+    assert_receive {:room_event, ^ref,
+                    {:message_upserted, %Message{content: "edited", reactions: r4}}},
+                   1_000
+
+    assert r4 == r3
   end
 
   test "a member without a message folder yet is not reported as unreachable", ctx do
