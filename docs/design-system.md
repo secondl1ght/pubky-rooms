@@ -31,7 +31,8 @@ https://pubky.app. Reference data: `docs/notes/pubky-app-design-system.md`, `doc
 | `<.avatar src name pubky size online>` | xs…2xl; generative fallback (signal-color disc + initial), hides broken images; `online` adds the lime presence dot |
 | `<.card variant>` + `card_header/title/description/content/footer` | default (`rounded-xl py-6`), post (`rounded-md py-0`), flat |
 | `<.badge variant>` | default, secondary, brand, brand-soft, destructive, outline |
-| `<.tag label count selected>` | Pubky App tag chip; color from `PubkyRooms.Tags.Color` (exact port of the App's hash) |
+| `<.tag label count selected size static>` | Pubky App tag chip; color from `PubkyRooms.Tags.Color` (exact port of the App's hash); `size="sm"` for cards/headers, `static` renders a span (inside links) |
+| `<Linkify.linkify text>` | message text with `http(s)` URLs linked safely (escaped segments, `noopener noreferrer nofollow ugc`, new tab); adds no whitespace |
 | `<.input field type label hint>` | text/email/…/textarea (`variant="inline"` for composers)/select/checkbox/hidden; `<.label>`, `<.error>` |
 | `<.dialog id show on_cancel>` + `show_dialog/hide_dialog` | centered modal ≥ sm, bottom sheet on mobile; slots title/description/footer |
 | `<.flash kind>`, `Layouts.flash_group` | bottom-right toasts (info/success/error) |
