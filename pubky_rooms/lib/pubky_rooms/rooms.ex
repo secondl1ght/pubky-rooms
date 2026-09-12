@@ -8,10 +8,15 @@ defmodule PubkyRooms.Rooms do
   rate-limited per login session.
   """
 
+  require Logger
+
   alias PubkyRooms.{Events, Pubky, RateLimit}
   alias PubkyRooms.Events.Subscriptions
   alias PubkyRooms.Profiles.LocalProfile
   alias PubkyRooms.Rooms.{Ban, Directory, Membership, Message, Paths, Reaction, Room, RoomServer}
+  alias PubkyRooms.Tags.Tag
+
+  @max_own_tags 10
 
   @type sid :: String.t()
 
@@ -25,18 +30,90 @@ defmodule PubkyRooms.Rooms do
 
   @doc """
   Creates a room on the creator's homeserver (room definition + the creator's
-  own join marker) and records it locally.
+  own join marker) and records it locally. Public rooms also get universal
+  tags for discovery: the automatic `room` label plus up to
+  #{Tag.max_custom_labels()} labels from `attrs["tags"]` (ADR 0003); tag
+  writes are best effort.
   """
   @spec create_room(sid(), String.t(), map()) ::
           {:ok, Room.t()} | {:error, keyword() | Pubky.reason()}
   def create_room(sid, creator, attrs) do
-    with {:ok, room} <- Room.new(creator, attrs),
+    with {:ok, labels} <- room_labels(attrs),
+         {:ok, room} <- Room.new(creator, attrs),
          :ok <- limit({:rooms, sid}, 5, :timer.hours(1)),
          ref = Room.ref(room),
          :ok <- Pubky.put(sid, Paths.room(room.id), Room.encode(room)),
          :ok <- Pubky.put(sid, Paths.member(ref), Membership.encode(ref)) do
       Directory.put_room(room)
+
+      if room.visibility == "public",
+        do: write_tags(sid, creator, ref, [Tag.auto_label() | labels])
+
       {:ok, room}
+    end
+  end
+
+  defp room_labels(attrs) do
+    case Tag.parse_labels(Room.field(attrs, "tags")) do
+      {:ok, labels} -> {:ok, labels}
+      {:error, reason} -> {:error, [tags: {reason, []}]}
+    end
+  end
+
+  defp write_tags(sid, user, ref, labels) do
+    uri = Paths.room_uri(ref)
+
+    for label <- labels do
+      case Pubky.put(sid, Tag.path(uri, label), Tag.encode(uri, label)) do
+        :ok -> Directory.add_tag(ref, label, user, Tag.id(uri, label))
+        {:error, reason} -> Logger.debug("tag not written: #{inspect(reason)}")
+      end
+    end
+
+    :ok
+  end
+
+  defp delete_tags(sid, user, ref, labels) do
+    uri = Paths.room_uri(ref)
+
+    for label <- labels do
+      case Pubky.delete(sid, Tag.path(uri, label)) do
+        ok when ok in [:ok, {:error, :not_found}] ->
+          Directory.remove_tag(user, Tag.id(uri, label))
+
+        {:error, reason} ->
+          Logger.debug("tag not deleted: #{inspect(reason)}")
+      end
+    end
+
+    :ok
+  end
+
+  @doc """
+  Tags a room: writes a `PubkyAppTag` in the user's own Rooms namespace (any
+  signed-in user, 20 per hour, at most #{@max_own_tags} labels per room).
+  """
+  @spec tag_room(sid(), String.t(), Paths.room_ref(), String.t()) ::
+          {:ok, String.t()} | {:error, String.t() | Pubky.reason()}
+  def tag_room(sid, user, ref, label) do
+    with {:ok, label} <- Tag.normalize(label),
+         true <-
+           length(Directory.own_tags(ref, user)) < @max_own_tags ||
+             {:error, "at most #{@max_own_tags} tags per room"},
+         :ok <- limit({:tags, sid}, 20, :timer.hours(1)),
+         uri = Paths.room_uri(ref),
+         :ok <- Pubky.put(sid, Tag.path(uri, label), Tag.encode(uri, label)) do
+      Directory.add_tag(ref, label, user, Tag.id(uri, label))
+      {:ok, label}
+    end
+  end
+
+  @doc "Removes the user's own tag from a room (already gone counts as done)."
+  @spec untag_room(sid(), String.t(), Paths.room_ref(), String.t()) ::
+          :ok | {:error, String.t() | Pubky.reason()}
+  def untag_room(sid, user, ref, label) do
+    with {:ok, label} <- Tag.normalize(label) do
+      delete_tags(sid, user, ref, [label])
     end
   end
 
@@ -52,6 +129,14 @@ defmodule PubkyRooms.Rooms do
          updated = %{room | name: fields.name, topic: fields.topic, visibility: fields.visibility},
          :ok <- Pubky.put(sid, Paths.room(room.id), Room.encode(updated)) do
       Directory.put_room(updated)
+      ref = Room.ref(room)
+
+      case {room.visibility, updated.visibility} do
+        {"public", "unlisted"} -> delete_tags(sid, creator, ref, Directory.own_tags(ref, creator))
+        {"unlisted", "public"} -> write_tags(sid, creator, ref, [Tag.auto_label()])
+        _ -> :ok
+      end
+
       {:ok, updated}
     end
   end
@@ -64,13 +149,12 @@ defmodule PubkyRooms.Rooms do
   """
   @spec close_room(sid(), String.t(), Room.t()) :: :ok | {:error, Pubky.reason() | :forbidden}
   def close_room(sid, creator, %Room{creator: creator} = room) do
-    case Pubky.delete(sid, Paths.room(room.id)) do
-      :ok ->
-        Directory.remove_room(Room.ref(room))
-        :ok
+    ref = Room.ref(room)
 
-      {:error, :not_found} ->
-        Directory.remove_room(Room.ref(room))
+    case Pubky.delete(sid, Paths.room(room.id)) do
+      ok when ok in [:ok, {:error, :not_found}] ->
+        delete_tags(sid, creator, ref, Directory.own_tags(ref, creator))
+        Directory.remove_room(ref)
         :ok
 
       error ->

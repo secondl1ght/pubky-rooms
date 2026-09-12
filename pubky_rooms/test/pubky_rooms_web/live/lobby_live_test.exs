@@ -4,9 +4,9 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
 
   import Phoenix.LiveViewTest
 
-  alias PubkyRooms.Fixtures
+  alias PubkyRooms.{Fixtures, Rooms}
   alias PubkyRooms.Pubky.Fake
-  alias PubkyRooms.Rooms.{Directory, Paths}
+  alias PubkyRooms.Rooms.{Directory, Paths, Room}
 
   setup do
     reset_state()
@@ -39,7 +39,7 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     {sid, alice} = Fixtures.login("alice")
 
     {:ok, room} =
-      PubkyRooms.Rooms.create_room(sid, alice, %{"name" => "Busy", "visibility" => "public"})
+      Rooms.create_room(sid, alice, %{"name" => "Busy", "visibility" => "public"})
 
     alice_conn = init_test_session(conn, Fixtures.cookie(sid))
     room_path = ~p"/r/#{alice}/#{room.id}"
@@ -62,18 +62,18 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     {sid, alice} = Fixtures.login("alice")
 
     {:ok, quiet} =
-      PubkyRooms.Rooms.create_room(sid, alice, %{"name" => "Quiet room", "visibility" => "public"})
+      Rooms.create_room(sid, alice, %{"name" => "Quiet room", "visibility" => "public"})
 
     {:ok, _hidden} =
-      PubkyRooms.Rooms.create_room(sid, alice, %{
+      Rooms.create_room(sid, alice, %{
         "name" => "Secret room",
         "visibility" => "unlisted"
       })
 
     {:ok, busy} =
-      PubkyRooms.Rooms.create_room(sid, alice, %{"name" => "Busy room", "visibility" => "public"})
+      Rooms.create_room(sid, alice, %{"name" => "Busy room", "visibility" => "public"})
 
-    Directory.touch(PubkyRooms.Rooms.Room.ref(busy), System.os_time(:millisecond) + 10_000)
+    Directory.touch(Room.ref(busy), System.os_time(:millisecond) + 10_000)
 
     {:ok, view, html} = live(conn, ~p"/")
     assert html =~ "Public rooms"
@@ -85,7 +85,7 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
              :binary.match(html, "Quiet room") |> elem(0)
 
     # activity elsewhere reorders live (debounced)
-    Directory.touch(PubkyRooms.Rooms.Room.ref(quiet), System.os_time(:millisecond) + 20_000)
+    Directory.touch(Room.ref(quiet), System.os_time(:millisecond) + 20_000)
 
     html =
       wait_for(
@@ -100,6 +100,63 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     assert html =~ "Your rooms"
     assert length(Regex.scan(~r/Busy room/, html)) == 1
     assert html =~ "No public rooms known to this server yet"
+  end
+
+  test "rooms can be created with tags; the lobby lists popular tags and filters by one",
+       %{conn: conn} do
+    {sid, alice} = Fixtures.login("alice")
+    alice_conn = init_test_session(conn, Fixtures.cookie(sid))
+
+    {:ok, view, _html} = live(alice_conn, ~p"/rooms/new")
+
+    view
+    |> form("#new-room-form",
+      room: %{name: "Too many", visibility: "public", tags: "a b c d e"}
+    )
+    |> render_submit()
+
+    assert wait_for(fn -> render(view) end, &(&1 =~ "at most 4 tags"))
+
+    view
+    |> form("#new-room-form",
+      room: %{name: "Bitcoin devs", visibility: "public", tags: "Bitcoin, dev"}
+    )
+    |> render_submit()
+
+    {_path, _flash} = assert_redirect(view)
+    %{created: [room]} = Directory.rooms_of(alice)
+    assert Enum.map(Directory.tags_of(Room.ref(room)), & &1.label) == ["bitcoin", "dev", "room"]
+
+    {:ok, _other} =
+      Rooms.create_room(sid, alice, %{
+        "name" => "Music",
+        "visibility" => "public",
+        "tags" => "music"
+      })
+
+    # anonymous lobby: popular tags in the sidebar, chips on the cards
+    {:ok, lobby, html} = live(build_conn(), ~p"/")
+    assert html =~ ~s(id="popular-tags")
+    assert html =~ "bitcoin"
+    assert html =~ "music"
+    assert html =~ "Bitcoin devs"
+    assert html =~ "Music"
+
+    # filtering by a tag
+    lobby |> element("#popular-tags button", "music") |> render_click()
+    assert_patch(lobby, ~p"/?tag=music")
+    html = render(lobby)
+    assert html =~ "Music"
+    refute html =~ "Bitcoin devs"
+    assert html =~ "Clear filter"
+
+    lobby |> element("a", "Clear filter") |> render_click()
+    assert_patch(lobby, ~p"/")
+    assert render(lobby) =~ "Bitcoin devs"
+
+    {:ok, _lobby, html} = live(build_conn(), ~p"/?tag=nothing-here")
+    assert html =~ "No public room is tagged"
+    assert html =~ "nothing-here"
   end
 
   test "creating a room requires sign-in", %{conn: conn} do

@@ -18,24 +18,42 @@ defmodule PubkyRoomsWeb.UI.Tag do
   attr :label, :string, required: true
   attr :count, :integer, default: nil
   attr :selected, :boolean, default: false
+  attr :size, :string, default: "default", values: ~w(default sm)
+
+  attr :static, :boolean,
+    default: false,
+    doc: "render a non-interactive span (e.g. inside a link)"
+
   attr :class, :any, default: nil
   attr :rest, :global, include: ~w(disabled aria-pressed href navigate patch)
 
   def tag(assigns) do
-    assigns = assign(assigns, :style, "--tag-rgb: #{Color.css_rgb(assigns.label)}")
+    assigns =
+      assigns
+      |> assign(:style, "--tag-rgb: #{Color.css_rgb(assigns.label)}")
+      |> assign(:classes, [
+        "flex w-fit max-w-full items-center rounded-md border font-bold",
+        (assigns.size == "sm" && "h-6 px-2 text-xs") || "h-8 px-3 text-sm",
+        "transition-all duration-200 bg-[rgb(var(--tag-rgb)/0.3)]",
+        (assigns.selected && "border-[rgb(var(--tag-rgb)/0.5)]") || "border-transparent",
+        assigns.class
+      ])
 
     ~H"""
+    <span :if={@static} style={@style} class={@classes} {@rest}>
+      <span class="truncate">{@label}</span>
+      <span :if={@count} class="ml-1.5 font-medium text-foreground/50">{@count}</span>
+    </span>
     <button
+      :if={!@static}
       type="button"
       style={@style}
       class={[
-        "flex h-8 w-fit max-w-full cursor-pointer items-center rounded-md border px-3 text-sm font-bold",
-        "transition-all duration-200 bg-[rgb(var(--tag-rgb)/0.3)]",
-        "hover:shadow-[inset_0_0_10px_2px_rgb(var(--tag-rgb)/0.5)]",
-        (@selected && "border-[rgb(var(--tag-rgb)/0.5)]") || "border-transparent",
-        @class
+        @classes,
+        "cursor-pointer hover:shadow-[inset_0_0_10px_2px_rgb(var(--tag-rgb)/0.5)]",
+        "disabled:cursor-default disabled:hover:shadow-none"
       ]}
-      aria-pressed={@selected}
+      aria-pressed={to_string(@selected)}
       {@rest}
     >
       <span class="truncate">{@label}</span>

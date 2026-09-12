@@ -12,6 +12,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
 
   alias PubkyRooms.{Profiles, Rooms}
   alias PubkyRooms.Rooms.{Directory, Room}
+  alias PubkyRooms.Tags.Tag
   alias PubkyRoomsWeb.{Format, Presence}
 
   @impl true
@@ -28,7 +29,8 @@ defmodule PubkyRoomsWeb.LobbyLive do
        form: new_form(),
        creating: false,
        stats_topics: MapSet.new(),
-       reload_timer: nil
+       reload_timer: nil,
+       tag_filter: nil
      )
      |> load_rooms()
      |> load_presence()}
@@ -42,7 +44,17 @@ defmodule PubkyRoomsWeb.LobbyLive do
      |> redirect(to: ~p"/login?return_to=/rooms/new")}
   end
 
-  def handle_params(_params, _uri, socket), do: {:noreply, socket}
+  def handle_params(params, _uri, socket) do
+    filter =
+      case Tag.normalize(params["tag"]) do
+        {:ok, label} -> label
+        {:error, _} -> nil
+      end
+
+    if filter == socket.assigns.tag_filter,
+      do: {:noreply, socket},
+      else: {:noreply, socket |> assign(tag_filter: filter) |> load_rooms() |> load_presence()}
+  end
 
   @impl true
   def handle_event("validate", %{"room" => params}, socket) do
@@ -131,11 +143,30 @@ defmodule PubkyRoomsWeb.LobbyLive do
 
     mine = MapSet.new(created ++ joined, &Room.ref/1)
     public = Directory.public_rooms() |> Enum.reject(&MapSet.member?(mine, Room.ref(&1)))
+
+    public =
+      case socket.assigns.tag_filter do
+        nil ->
+          public
+
+        label ->
+          tagged = MapSet.new(Directory.rooms_tagged(label))
+          Enum.filter(public, &MapSet.member?(tagged, Room.ref(&1)))
+      end
+
     creators = Enum.map(created ++ joined ++ public, & &1.creator)
     profiles = Map.new(creators, &{&1, Profiles.get(&1)})
 
     socket
-    |> assign(created: created, joined: joined, public: public, profiles: profiles)
+    |> assign(
+      created: created,
+      joined: joined,
+      public: public,
+      profiles: profiles,
+      popular_tags: Directory.popular_tags(),
+      room_tags:
+        Map.new(created ++ joined ++ public, &{Room.ref(&1), Directory.tags_of(Room.ref(&1))})
+    )
     |> load_viewers()
   end
 
@@ -180,7 +211,9 @@ defmodule PubkyRoomsWeb.LobbyLive do
     )
   end
 
-  defp new_form, do: form_for(%{"name" => "", "topic" => "", "visibility" => "public"})
+  defp new_form,
+    do: form_for(%{"name" => "", "topic" => "", "visibility" => "public", "tags" => ""})
+
   defp form_for(params, errors \\ []), do: to_form(params, as: :room, errors: errors)
 
   @impl true
@@ -204,6 +237,18 @@ defmodule PubkyRoomsWeb.LobbyLive do
             <.sidebar_item href="#public-rooms" icon="lucide-globe">
               Public rooms
             </.sidebar_item>
+          </div>
+          <div :if={@popular_tags != []} class="flex flex-col gap-2" id="popular-tags">
+            <.section_title class="mb-1">Tags</.section_title>
+            <div class="flex flex-wrap gap-1.5">
+              <.tag
+                :for={{label, _rooms} <- @popular_tags}
+                label={label}
+                size="sm"
+                selected={@tag_filter == label}
+                phx-click={JS.patch(if(@tag_filter == label, do: ~p"/", else: ~p"/?tag=#{label}"))}
+              />
+            </div>
           </div>
           <div class="flex flex-col gap-1">
             <.section_title class="mb-2">Right now</.section_title>
@@ -230,6 +275,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
                 creator={@profiles[room.creator]}
                 online={@room_online[Room.ref(room)]}
                 viewers={@room_viewers[Room.ref(room)] || 0}
+                tags={@room_tags[Room.ref(room)] || []}
               />
             </div>
           </section>
@@ -242,6 +288,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
                 creator={@profiles[room.creator]}
                 online={@room_online[Room.ref(room)]}
                 viewers={@room_viewers[Room.ref(room)] || 0}
+                tags={@room_tags[Room.ref(room)] || []}
               />
             </div>
           </section>
@@ -275,9 +322,18 @@ defmodule PubkyRoomsWeb.LobbyLive do
         <% end %>
 
         <section id="public-rooms" class="flex flex-col gap-3">
-          <div class="flex items-baseline justify-between gap-3">
-            <.section_title>Public rooms</.section_title>
-            <span class="text-xs text-muted-foreground">Most recent activity first</span>
+          <div class="flex flex-wrap items-baseline justify-between gap-3">
+            <.section_title>
+              Public rooms<span :if={@tag_filter} class="text-muted-foreground"> · {@tag_filter}</span>
+            </.section_title>
+            <span :if={!@tag_filter} class="text-xs text-muted-foreground">Most recent activity first</span>
+            <.link
+              :if={@tag_filter}
+              patch={~p"/"}
+              class="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Clear filter
+            </.link>
           </div>
           <div :if={@public != []} class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:gap-6">
             <.room_card
@@ -286,9 +342,13 @@ defmodule PubkyRoomsWeb.LobbyLive do
               creator={@profiles[room.creator]}
               online={@room_online[Room.ref(room)]}
               viewers={@room_viewers[Room.ref(room)] || 0}
+              tags={@room_tags[Room.ref(room)] || []}
             />
           </div>
-          <p :if={@public == []} class="text-sm text-muted-foreground">
+          <p :if={@public == [] and @tag_filter} class="text-sm text-muted-foreground">
+            No public room is tagged "{@tag_filter}" yet.
+          </p>
+          <p :if={@public == [] and !@tag_filter} class="text-sm text-muted-foreground">
             No public rooms known to this server yet. Rooms show up here as their creators and members sign in.
           </p>
         </section>
@@ -359,6 +419,14 @@ defmodule PubkyRoomsWeb.LobbyLive do
               {"Unlisted — not listed, still readable by anyone with the link", "unlisted"}
             ]}
           />
+          <.input
+            :if={@form[:visibility].value != "unlisted"}
+            field={@form[:tags]}
+            label="Tags"
+            placeholder="bitcoin, nostr, dev"
+            hint={"Up to #{Tag.max_custom_labels()} labels for discovery, written as universal tags on your homeserver (every public room is also tagged “room”)."}
+            autocomplete="off"
+          />
         </.form>
         <:footer>
           <.button variant="ghost" phx-click={JS.patch(~p"/")}>Cancel</.button>
@@ -376,6 +444,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
   attr :creator, :map, required: true, doc: "the creator's profile"
   attr :online, :map, default: nil, doc: "signed-in presence: `%{users, tabs}`"
   attr :viewers, :integer, default: 0, doc: "everyone with the room open, signed in or not"
+  attr :tags, :list, default: [], doc: "`Directory.tags_of/1` result; the top three are shown"
 
   defp room_card(assigns) do
     ref = Room.ref(assigns.room)
@@ -400,6 +469,9 @@ defmodule PubkyRoomsWeb.LobbyLive do
             </.badge>
           </div>
           <.card_description :if={@room.topic} class="line-clamp-2">{@room.topic}</.card_description>
+          <div :if={@tags != []} class="flex flex-wrap gap-1.5 pt-1">
+            <.tag :for={t <- Enum.take(@tags, 3)} label={t.label} count={t.count} size="sm" static />
+          </div>
         </.card_header>
         <.card_footer class="justify-between gap-3 text-xs text-muted-foreground">
           <span class="flex min-w-0 items-center gap-2">

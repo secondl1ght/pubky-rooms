@@ -38,6 +38,8 @@ config :pubky_rooms,
   secure_cookies: false,
   pubky_backend: PubkyRooms.Pubky.Live,
   nexus_url: nil,
+  # how often the Nexus resources stream is polled for rooms tagged anywhere (mainnet only)
+  nexus_sync_ms: 300_000,
   nexus_cdn_url: nil,
   simulator_url: nil
 

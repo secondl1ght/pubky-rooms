@@ -49,6 +49,18 @@ defmodule PubkyRooms.Ids do
     for <<chunk::5 <- padded>>, into: "", do: <<Enum.at(@alphabet, chunk)>>
   end
 
+  @doc """
+  Encodes any binary in Crockford base32 without padding characters (the
+  trailing bits are zero-filled), as pubky-app-specs does for *hash ids*:
+  16 bytes become 26 characters.
+  """
+  @spec crockford(binary()) :: String.t()
+  def crockford(bytes) when is_binary(bytes) do
+    pad = rem(5 - rem(bit_size(bytes), 5), 5)
+    padded = <<bytes::binary, 0::size(pad)>>
+    for <<chunk::5 <- padded>>, into: "", do: <<Enum.at(@alphabet, chunk)>>
+  end
+
   @doc "Decodes a timestamp id back to microseconds."
   @spec decode(String.t()) :: {:ok, non_neg_integer()} | :error
   def decode(id) when is_binary(id) do

@@ -7,6 +7,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
   alias PubkyRooms.{Fixtures, Profiles, Rooms}
   alias PubkyRooms.Pubky.Fake
   alias PubkyRooms.Rooms.{Directory, Message, Paths, Room, RoomServer}
+  alias PubkyRooms.Tags.Tag
 
   setup %{conn: conn} do
     reset_state()
@@ -455,6 +456,53 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     refute Map.has_key?(Fake.files(ctx.alice), Paths.room(ctx.room.id))
     assert wait_for(fn -> render(bob_view) end, &(&1 =~ "closed"))
     assert Directory.get(Room.ref(ctx.room)) == nil
+  end
+
+  test "room tags are shown to everyone; signed-in users toggle their own", ctx do
+    {bob_sid, bob} = Fixtures.login("bob")
+    bob_conn = init_test_session(ctx.conn, Fixtures.cookie(bob_sid))
+    uri = Room.uri(ctx.room)
+
+    {:ok, anon, html} = live(ctx.conn, ctx.path)
+    assert html =~ ~s(id="room-tags")
+
+    assert html =~
+             ~r/aria-pressed="false"[^>]*phx-value-label="room"|phx-value-label="room"[^>]*aria-pressed="false"/
+
+    assert html =~ ~r/<button[^>]*disabled[^>]*phx-value-label="room"/
+    refute has_element?(anon, "#tag-form")
+
+    # bob (not even a member) adds a tag and joins alice on "room"
+    {:ok, bob_view, _} = live(bob_conn, ctx.path)
+    bob_view |> form("#tag-form", tag: %{label: " Lightning "}) |> render_submit()
+    render_async(bob_view)
+    html = wait_for(fn -> render(bob_view) end, &(&1 =~ "lightning"))
+    assert html =~ ~r/aria-pressed="true"[^>]*phx-value-label="lightning"/
+    assert Map.has_key?(Fake.files(bob), Tag.path(uri, "lightning"))
+
+    render_click(bob_view, "toggle_tag", %{"label" => "room"})
+    render_async(bob_view)
+
+    html =
+      wait_for(
+        fn -> render(bob_view) end,
+        &(&1 =~ ~r/phx-value-label="room"[^>]*>[^<]*<span[^>]*>room<\/span><span[^>]*>2</)
+      )
+
+    assert html =~ ~r/aria-pressed="true"[^>]*phx-value-label="room"/
+
+    # everyone sees the counts live
+    assert wait_for(fn -> render(anon) end, &(&1 =~ "lightning"))
+
+    # toggling again removes bob's tag file
+    render_click(bob_view, "toggle_tag", %{"label" => "lightning"})
+    render_async(bob_view)
+    wait_for(fn -> render(bob_view) end, &(not (&1 =~ "lightning")))
+    refute Map.has_key?(Fake.files(bob), Tag.path(uri, "lightning"))
+
+    # bad labels are rejected before any write
+    bob_view |> form("#tag-form", tag: %{label: String.duplicate("x", 21)}) |> render_submit()
+    assert render(bob_view) =~ "must be at most 20 characters"
   end
 
   test "anonymous viewers are counted, never identified", ctx do

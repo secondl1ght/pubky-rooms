@@ -11,7 +11,8 @@ defmodule PubkyRoomsWeb.RoomLive do
   use PubkyRoomsWeb, :live_view
 
   alias PubkyRooms.{Ids, Profiles, Rooms}
-  alias PubkyRooms.Rooms.{Ban, Message, Paths, Reaction, Room, RoomServer}
+  alias PubkyRooms.Rooms.{Ban, Directory, Message, Paths, Reaction, Room, RoomServer}
+  alias PubkyRooms.Tags.Tag
   alias PubkyRoomsWeb.{Format, Presence}
 
   # a viewer is shown as typing for this long after their last keystroke event
@@ -43,6 +44,8 @@ defmodule PubkyRoomsWeb.RoomLive do
           ban_form: to_form(%{"reason" => ""}, as: :ban),
           settings_form: nil,
           saving: false,
+          tags: [],
+          tag_form: to_form(%{"label" => ""}, as: :tag),
           muted: MapSet.new(),
           failed: %{},
           sent: %{},
@@ -70,7 +73,9 @@ defmodule PubkyRoomsWeb.RoomLive do
         Phoenix.PubSub.subscribe(PubkyRooms.PubSub, RoomServer.topic(ref))
         Phoenix.PubSub.subscribe(PubkyRooms.PubSub, Rooms.stats_topic(ref))
         Phoenix.PubSub.subscribe(PubkyRooms.PubSub, Rooms.typing_topic(ref))
-        {:ok, socket |> attach() |> track_presence()}
+        Directory.subscribe()
+        Directory.refresh_nexus_tags(ref)
+        {:ok, socket |> attach() |> track_presence() |> load_tags()}
       else
         {:ok, socket}
       end
@@ -146,6 +151,8 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   defp apply_snapshot(socket, snapshot), do: assign_room(socket, snapshot)
+
+  defp load_tags(socket), do: assign(socket, tags: Directory.tags_of(socket.assigns.ref))
 
   # Session-local mute: hides an author's messages in this view only.
   defp unmuted(%{assigns: %{muted: muted}}, msgs),
@@ -441,6 +448,43 @@ defmodule PubkyRoomsWeb.RoomLive do
     {:noreply, set_muted(socket, MapSet.delete(socket.assigns.muted, z32))}
   end
 
+  # Tags: any signed-in user toggles their own tag on the room (a chip they
+  # already used removes it) or adds a new label.
+  def handle_event(
+        "toggle_tag",
+        %{"label" => label},
+        %{assigns: %{current_user: %{pubky: me}, sid: sid, ref: ref}} = socket
+      ) do
+    mine? = Directory.tagged_by?(ref, label, me)
+
+    {:noreply,
+     start_async(socket, {:tag, label}, fn ->
+       if mine?,
+         do: Rooms.untag_room(sid, me, ref, label),
+         else: Rooms.tag_room(sid, me, ref, label)
+     end)}
+  end
+
+  def handle_event(
+        "add_tag",
+        %{"tag" => %{"label" => label}},
+        %{assigns: %{current_user: %{pubky: me}, sid: sid, ref: ref}} = socket
+      ) do
+    case Tag.normalize(label) do
+      {:ok, normalized} ->
+        {:noreply,
+         socket
+         |> assign(tag_form: to_form(%{"label" => ""}, as: :tag))
+         |> start_async({:tag, normalized}, fn -> Rooms.tag_room(sid, me, ref, normalized) end)}
+
+      {:error, error} ->
+        {:noreply,
+         assign(socket,
+           tag_form: to_form(%{"label" => label}, as: :tag, errors: [label: {error, []}])
+         )}
+    end
+  end
+
   # Room settings (creator only): rename, topic, visibility, close.
   def handle_event(
         "validate_settings",
@@ -480,7 +524,7 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   # signed-out, non-member or non-creator viewers cannot use these actions
   def handle_event(event, _params, socket)
-      when event in ~w(edit delete react start_ban ban unban mute unmute validate_settings save_settings close_room) do
+      when event in ~w(edit delete react start_ban ban unban mute unmute validate_settings save_settings close_room toggle_tag add_tag) do
     {:noreply, socket}
   end
 
@@ -558,6 +602,17 @@ defmodule PubkyRoomsWeb.RoomLive do
      |> push_event("older:loaded", %{count: 0})
      |> put_flash(:error, "Earlier messages could not be loaded right now.")}
   end
+
+  def handle_async({:tag, _label}, {:ok, :ok}, socket), do: {:noreply, load_tags(socket)}
+
+  def handle_async({:tag, _label}, {:ok, {:ok, _saved}}, socket),
+    do: {:noreply, load_tags(socket)}
+
+  def handle_async({:tag, _label}, {:ok, {:error, reason}}, socket),
+    do: {:noreply, put_flash(socket, :error, "Tag not saved: " <> Rooms.explain(reason))}
+
+  def handle_async({:tag, _label}, {:exit, reason}, socket),
+    do: {:noreply, put_flash(socket, :error, Rooms.explain({:unexpected, reason}))}
 
   def handle_async(:save_settings, {:ok, {:ok, %Room{} = room}}, socket) do
     {:noreply,
@@ -649,6 +704,11 @@ defmodule PubkyRoomsWeb.RoomLive do
   def handle_info({:room_stats, ref, %{viewers: viewers}}, %{assigns: %{ref: ref}} = socket) do
     {:noreply, assign(socket, viewers: viewers)}
   end
+
+  def handle_info({:directory, {:tags_updated, ref}}, %{assigns: %{ref: ref}} = socket),
+    do: {:noreply, load_tags(socket)}
+
+  def handle_info({:directory, _event}, socket), do: {:noreply, socket}
 
   def handle_info(
         {:DOWN, ref, :process, _pid, _reason},
@@ -936,6 +996,12 @@ defmodule PubkyRoomsWeb.RoomLive do
           joining={@joining}
           creator={@creator}
           room_id={@room_id}
+        />
+        <.tag_row
+          :if={@room && (@tags != [] or @current_user)}
+          tags={@tags}
+          viewer={@current_user && @current_user.pubky}
+          form={@tag_form}
         />
 
         <div class="flex min-h-0 flex-1 gap-6">
@@ -1512,6 +1578,47 @@ defmodule PubkyRoomsWeb.RoomLive do
         </.button>
       </div>
     </header>
+    """
+  end
+
+  attr :tags, :list, required: true, doc: "`Directory.tags_of/1` result"
+  attr :viewer, :string, default: nil
+  attr :form, Phoenix.HTML.Form, required: true
+
+  # Universal tags on the room: click to add or remove your own; the input
+  # adds a new label. Anonymous viewers just see them.
+  defp tag_row(assigns) do
+    ~H"""
+    <div id="room-tags" class="flex flex-wrap items-center gap-1.5">
+      <.tag
+        :for={t <- @tags}
+        label={t.label}
+        count={t.count}
+        size="sm"
+        selected={@viewer != nil and @viewer in t.taggers}
+        disabled={is_nil(@viewer)}
+        phx-click="toggle_tag"
+        phx-value-label={t.label}
+        title={if @viewer in t.taggers, do: "Remove your tag", else: "Tag this room too"}
+      />
+      <.form
+        :if={@viewer}
+        for={@form}
+        id="tag-form"
+        phx-submit="add_tag"
+        class="flex items-center gap-1"
+      >
+        <.input
+          field={@form[:label]}
+          placeholder="+ tag"
+          maxlength={Tag.label_max()}
+          class="h-6 w-28 rounded-md px-2 text-xs"
+          wrapper_class="gap-0"
+          autocomplete="off"
+          aria-label="Add a tag"
+        />
+      </.form>
+    </div>
     """
   end
 
