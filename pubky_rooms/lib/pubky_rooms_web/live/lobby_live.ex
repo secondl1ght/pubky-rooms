@@ -10,16 +10,20 @@ defmodule PubkyRoomsWeb.LobbyLive do
 
   alias PubkyRooms.{Profiles, Rooms}
   alias PubkyRooms.Rooms.{Directory, Room}
-  alias PubkyRoomsWeb.Format
+  alias PubkyRoomsWeb.{Format, Presence}
 
   @impl true
   def mount(_params, _session, socket) do
-    if connected?(socket), do: Directory.subscribe()
+    if connected?(socket) do
+      Directory.subscribe()
+      Presence.subscribe(Presence.lobby_topic())
+    end
 
     {:ok,
      socket
      |> assign(page_title: "Rooms", form: new_form(), creating: false)
-     |> load_rooms()}
+     |> load_rooms()
+     |> load_presence()}
   end
 
   @impl true
@@ -89,6 +93,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
 
   @impl true
   def handle_info({:directory, _event}, socket), do: {:noreply, load_rooms(socket)}
+  def handle_info({:presence, _event}, socket), do: {:noreply, load_presence(socket)}
 
   def handle_info({:profile_updated, z32, profile}, socket) do
     if Map.has_key?(socket.assigns.profiles, z32),
@@ -106,6 +111,16 @@ defmodule PubkyRoomsWeb.LobbyLive do
     creators = Enum.map(created ++ joined, & &1.creator)
     profiles = Map.new(creators, &{&1, Profiles.get(&1)})
     assign(socket, created: created, joined: joined, profiles: profiles)
+  end
+
+  # App-wide online count and per-room online counts (signed-in users only).
+  defp load_presence(socket) do
+    rooms = socket.assigns.created ++ socket.assigns.joined
+
+    assign(socket,
+      online_count: Presence.online_count(Presence.lobby_topic()),
+      room_online: Map.new(rooms, &{Room.ref(&1), Rooms.online_count(Room.ref(&1))})
+    )
   end
 
   defp new_form, do: form_for(%{"name" => "", "topic" => "", "visibility" => "public"})
@@ -131,6 +146,13 @@ defmodule PubkyRoomsWeb.LobbyLive do
             </.sidebar_item>
           </div>
           <div class="flex flex-col gap-1">
+            <.section_title class="mb-2">Right now</.section_title>
+            <p class="flex items-center gap-2 text-sm text-secondary-foreground" id="lobby-online">
+              <span class="inline-block size-2 rounded-full bg-[#00FF5D]"></span>
+              {@online_count} {if @online_count == 1, do: "person", else: "people"} online
+            </p>
+          </div>
+          <div class="flex flex-col gap-1">
             <.section_title class="mb-2">About</.section_title>
             <p class="text-sm text-muted-foreground">
               Every message is a file on its author's homeserver. This server only relays and never stores your chats.
@@ -142,13 +164,23 @@ defmodule PubkyRoomsWeb.LobbyLive do
           <section :if={@created != []} class="flex flex-col gap-3">
             <.section_title>Your rooms</.section_title>
             <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:gap-6">
-              <.room_card :for={room <- @created} room={room} creator={@profiles[room.creator]} />
+              <.room_card
+                :for={room <- @created}
+                room={room}
+                creator={@profiles[room.creator]}
+                online={@room_online[Room.ref(room)] || 0}
+              />
             </div>
           </section>
           <section :if={@joined != []} class="flex flex-col gap-3">
             <.section_title>Joined</.section_title>
             <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:gap-6">
-              <.room_card :for={room <- @joined} room={room} creator={@profiles[room.creator]} />
+              <.room_card
+                :for={room <- @joined}
+                room={room}
+                creator={@profiles[room.creator]}
+                online={@room_online[Room.ref(room)] || 0}
+              />
             </div>
           </section>
           <.empty_state
@@ -261,6 +293,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
 
   attr :room, Room, required: true
   attr :creator, :map, required: true, doc: "the creator's profile"
+  attr :online, :integer, default: 0, doc: "signed-in users in the room right now"
 
   defp room_card(assigns) do
     ref = Room.ref(assigns.room)
@@ -285,10 +318,13 @@ defmodule PubkyRoomsWeb.LobbyLive do
         </.card_header>
         <.card_footer class="justify-between gap-3 text-xs text-muted-foreground">
           <span class="flex min-w-0 items-center gap-2">
-            <.avatar name={@creator.name} pubky={@creator.pubky} size="xs" />
+            <.avatar src={@creator.avatar_url} name={@creator.name} pubky={@creator.pubky} size="xs" />
             <span class="truncate">{@creator.name}</span>
           </span>
           <span class="flex shrink-0 items-center gap-3">
+            <span :if={@online > 0} class="flex items-center gap-1 text-secondary-foreground">
+              <span class="inline-block size-2 rounded-full bg-[#00FF5D]"></span> {@online}
+            </span>
             <span class="flex items-center gap-1"><.icon name="lucide-users" class="size-3.5" /> {@member_count}</span>
             <span :if={@activity}>{Format.relative(@activity)}</span>
           </span>

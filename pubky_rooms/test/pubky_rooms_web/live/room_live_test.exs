@@ -4,7 +4,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
 
   import Phoenix.LiveViewTest
 
-  alias PubkyRooms.{Fixtures, Rooms}
+  alias PubkyRooms.{Fixtures, Profiles, Rooms}
   alias PubkyRooms.Pubky.Fake
   alias PubkyRooms.Rooms.{Message, Paths, Room, RoomServer}
 
@@ -116,6 +116,47 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     view |> form("#composer", message: %{content: "after the crash"}) |> render_submit()
     render_async(view)
     assert wait_for(fn -> render(view) end, &(&1 =~ "after the crash"))
+  end
+
+  test "presence counts signed-in viewers only; typing is shown to others and cleared on send",
+       ctx do
+    {bob_sid, bob} = Fixtures.login("bob")
+    PubkyRooms.Rooms.join(bob_sid, bob, Room.ref(ctx.room))
+    bob_conn = init_test_session(ctx.conn, Fixtures.cookie(bob_sid))
+
+    {:ok, alice_view, _} = live(ctx.alice_conn, ctx.path)
+    {:ok, _anon, _} = live(ctx.conn, ctx.path)
+    assert wait_for(fn -> render(alice_view) end, &(&1 =~ "1 online"))
+
+    {:ok, bob_view, _} = live(bob_conn, ctx.path)
+    assert wait_for(fn -> render(alice_view) end, &(&1 =~ "2 online"))
+    assert wait_for(fn -> render(bob_view) end, &(&1 =~ "2 online"))
+    assert PubkyRooms.Rooms.online_count(Room.ref(ctx.room)) == 2
+
+    # the lobby-wide count includes both as well
+    assert PubkyRoomsWeb.Presence.online_count(PubkyRoomsWeb.Presence.lobby_topic()) == 2
+
+    # typing: bob's composer reports keystrokes; alice sees it, bob does not see himself
+    render_hook(bob_view, "typing", %{})
+    bob_name = Profiles.short_key(bob)
+    assert wait_for(fn -> render(alice_view) end, &(&1 =~ "#{bob_name} is typing"))
+    refute render(bob_view) =~ "is typing"
+
+    # sending clears it right away for everyone
+    bob_view |> form("#composer", message: %{content: "done typing"}) |> render_submit()
+    render_async(bob_view)
+    html = wait_for(fn -> render(alice_view) end, &(&1 =~ "done typing"))
+    refute html =~ "is typing"
+
+    # a typing signal expires on its own
+    render_hook(bob_view, "typing", %{})
+    assert wait_for(fn -> render(alice_view) end, &(&1 =~ "is typing"))
+    send(alice_view.pid, {:typing, bob, false})
+    refute wait_for(fn -> render(alice_view) end, &(not (&1 =~ "is typing"))) =~ "is typing"
+
+    # leaving drops bob from the online count
+    GenServer.stop(bob_view.pid)
+    assert wait_for(fn -> render(alice_view) end, &(&1 =~ "1 online"))
   end
 
   defp has_composer?(html), do: html =~ ~s(id="composer")

@@ -24,6 +24,17 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     assert {:error, {:redirect, %{to: "/"}}} = live(conn, ~p"/login")
   end
 
+  test "the lobby shows how many signed-in people are online", %{conn: conn} do
+    {sid, _} = Fixtures.login("online")
+    conn = init_test_session(conn, Fixtures.cookie(sid))
+    {:ok, view, _html} = live(conn, ~p"/")
+    assert wait_for(fn -> render(view) end, &(&1 =~ "1 person online"))
+
+    {other_sid, _} = Fixtures.login("online-2")
+    {:ok, _other, _} = live(init_test_session(build_conn(), Fixtures.cookie(other_sid)), ~p"/")
+    assert wait_for(fn -> render(view) end, &(&1 =~ "2 people online"))
+  end
+
   test "creating a room requires sign-in", %{conn: conn} do
     assert {:error, {:redirect, %{to: "/login?return_to=/rooms/new"}}} =
              live(conn, ~p"/rooms/new")
@@ -63,5 +74,15 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     {:ok, _view, html} = live(conn, ~p"/")
     assert html =~ "Test room"
     assert html =~ "unlisted"
+  end
+
+  defp wait_for(fun, pred, tries \\ 50) do
+    value = fun.()
+
+    cond do
+      pred.(value) -> value
+      tries == 0 -> flunk("condition not met; last value: #{inspect(value, limit: 300)}")
+      true -> Process.sleep(20) && wait_for(fun, pred, tries - 1)
+    end
   end
 end

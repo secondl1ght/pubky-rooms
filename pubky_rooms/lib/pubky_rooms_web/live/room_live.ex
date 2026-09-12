@@ -12,7 +12,11 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   alias PubkyRooms.{Ids, Profiles, Rooms}
   alias PubkyRooms.Rooms.{Message, RoomServer}
-  alias PubkyRoomsWeb.Format
+  alias PubkyRoomsWeb.{Format, Presence}
+
+  # a viewer is shown as typing for this long after their last keystroke event
+  @typing_ttl 4_000
+  @typing_throttle 2_000
 
   @impl true
   def mount(%{"creator" => creator, "room_id" => room_id}, _session, socket) do
@@ -37,14 +41,19 @@ defmodule PubkyRoomsWeb.RoomLive do
           room_pid: nil,
           room_monitor: nil,
           composer: composer_form(),
-          joining: false
+          joining: false,
+          online: %{},
+          typing: %{},
+          typing_timer: nil,
+          last_typing_at: nil
         )
         |> stream_configure(:messages, dom_id: &dom_id/1)
         |> stream(:messages, [])
 
       if connected?(socket) do
         Phoenix.PubSub.subscribe(PubkyRooms.PubSub, RoomServer.topic(ref))
-        {:ok, attach(socket)}
+        Phoenix.PubSub.subscribe(PubkyRooms.PubSub, Rooms.typing_topic(ref))
+        {:ok, socket |> attach() |> track_presence()}
       else
         {:ok, socket}
       end
@@ -101,6 +110,16 @@ defmodule PubkyRoomsWeb.RoomLive do
     assign(socket, members: members, profiles: Map.merge(socket.assigns.profiles, profiles))
   end
 
+  # Signed-in viewers are tracked in the room's presence; anonymous ones only
+  # subscribe. `online` maps z32 → number of open tabs.
+  defp track_presence(%{assigns: %{ref: ref, current_user: user}} = socket) do
+    topic = Presence.room_topic(ref)
+    Presence.subscribe(topic)
+    if user, do: Presence.track_room(ref, user)
+    online = topic |> Presence.online() |> Map.new(fn {z32, metas} -> {z32, length(metas)} end)
+    Enum.reduce(Map.keys(online), assign(socket, online: online), &ensure_profile(&2, &1))
+  end
+
   # ── events from the browser ────────────────────────────────────────────────
 
   @impl true
@@ -119,6 +138,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           {:ok, msg} ->
             {:noreply,
              socket
+             |> stop_typing()
              |> stream_insert(:messages, msg)
              |> assign(
                composer: composer_form(),
@@ -167,6 +187,22 @@ defmodule PubkyRoomsWeb.RoomLive do
     RoomServer.retry_history(socket.assigns.ref)
     {:noreply, socket}
   end
+
+  # The composer reports keystrokes; at most one broadcast every 2 s per viewer.
+  def handle_event("typing", _params, %{assigns: %{current_user: %{pubky: z32}}} = socket) do
+    now = System.monotonic_time(:millisecond)
+    last = socket.assigns.last_typing_at
+
+    if socket.assigns.is_member and (is_nil(last) or now - last >= @typing_throttle) do
+      Rooms.broadcast_typing(socket.assigns.ref, z32, true)
+      {:noreply, assign(socket, last_typing_at: now)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("typing", _params, socket), do: {:noreply, socket}
+  def handle_event("stop_typing", _params, socket), do: {:noreply, stop_typing(socket)}
 
   def handle_event("join", _params, %{assigns: %{current_user: nil}} = socket) do
     {:noreply, redirect(socket, to: ~p"/login?return_to=#{room_path(socket)}")}
@@ -259,7 +295,61 @@ defmodule PubkyRoomsWeb.RoomLive do
       else: {:noreply, socket}
   end
 
+  def handle_info({:presence, {:join, %{key: z32, metas: metas}}}, socket) do
+    online = Map.put(socket.assigns.online, z32, length(metas))
+    {:noreply, socket |> assign(online: online) |> ensure_profile(z32)}
+  end
+
+  def handle_info({:presence, {:leave, %{key: z32, metas: []}}}, socket) do
+    {:noreply,
+     assign(socket,
+       online: Map.delete(socket.assigns.online, z32),
+       typing: Map.delete(socket.assigns.typing, z32)
+     )}
+  end
+
+  def handle_info({:presence, {:leave, %{key: z32, metas: metas}}}, socket) do
+    {:noreply, assign(socket, online: Map.put(socket.assigns.online, z32, length(metas)))}
+  end
+
+  def handle_info({:typing, z32, _}, %{assigns: %{current_user: %{pubky: z32}}} = socket),
+    do: {:noreply, socket}
+
+  def handle_info({:typing, z32, true}, socket) do
+    until = System.monotonic_time(:millisecond) + @typing_ttl
+
+    {:noreply,
+     socket
+     |> assign(typing: Map.put(socket.assigns.typing, z32, until))
+     |> ensure_profile(z32)
+     |> schedule_typing_prune()}
+  end
+
+  def handle_info({:typing, z32, false}, socket),
+    do: {:noreply, assign(socket, typing: Map.delete(socket.assigns.typing, z32))}
+
+  def handle_info(:prune_typing, socket) do
+    now = System.monotonic_time(:millisecond)
+    typing = socket.assigns.typing |> Enum.reject(fn {_, until} -> until <= now end) |> Map.new()
+    {:noreply, socket |> assign(typing: typing, typing_timer: nil) |> schedule_typing_prune()}
+  end
+
   def handle_info(_msg, socket), do: {:noreply, socket}
+
+  defp schedule_typing_prune(%{assigns: %{typing: typing, typing_timer: nil}} = socket)
+       when map_size(typing) > 0,
+       do: assign(socket, typing_timer: Process.send_after(self(), :prune_typing, 1_000))
+
+  defp schedule_typing_prune(socket), do: socket
+
+  defp stop_typing(%{assigns: %{last_typing_at: nil}} = socket), do: socket
+
+  defp stop_typing(%{assigns: %{current_user: %{pubky: z32}, ref: ref}} = socket) do
+    Rooms.broadcast_typing(ref, z32, false)
+    assign(socket, last_typing_at: nil)
+  end
+
+  defp stop_typing(socket), do: socket
 
   defp apply_room_event(socket, :ready), do: attach(socket)
 
@@ -267,7 +357,8 @@ defmodule PubkyRoomsWeb.RoomLive do
     socket
     |> assign(
       failed: Map.delete(socket.assigns.failed, dom_id(msg)),
-      sent: Map.delete(socket.assigns.sent, msg.key)
+      sent: Map.delete(socket.assigns.sent, msg.key),
+      typing: Map.delete(socket.assigns.typing, msg.author)
     )
     |> ensure_profile(msg.author)
     |> stream_insert(:messages, msg)
@@ -355,6 +446,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           room={@room}
           status={@status}
           members={@members}
+          online_count={map_size(@online)}
           is_member={@is_member}
           current_user={@current_user}
           joining={@joining}
@@ -406,6 +498,8 @@ defmodule PubkyRoomsWeb.RoomLive do
               />
             </div>
 
+            <.typing_line typing={@typing} profiles={@profiles} />
+
             <div class="shrink-0 border-t border-border/60 p-3 sm:p-4">
               <%= cond do %>
                 <% is_nil(@current_user) -> %>
@@ -427,6 +521,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                   <.form for={@composer} id="composer" phx-submit="send" class="flex flex-col gap-2">
                     <div class="flex items-end gap-3 rounded-md border border-dashed border-input px-4 py-3 focus-within:border-ring">
                       <.avatar
+                        src={@current_user.avatar_url}
                         name={@current_user.name}
                         pubky={@current_user.pubky}
                         size="md"
@@ -442,6 +537,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                         maxlength={Message.content_max()}
                         wrapper_class="flex-1"
                         phx-hook="Composer"
+                        data-typing-events
                         disabled={@status != :ready}
                         autocomplete="off"
                       />
@@ -468,11 +564,29 @@ defmodule PubkyRoomsWeb.RoomLive do
             <.card class="gap-3 py-5">
               <.card_header>
                 <.section_title class="text-xl">Members · {length(@members)}</.section_title>
+                <p class="text-xs text-muted-foreground">
+                  <span class="mr-1 inline-block size-2 rounded-full bg-[#00FF5D] align-middle"></span>
+                  {map_size(@online)} online
+                </p>
               </.card_header>
               <.card_content class="flex flex-col gap-3">
-                <div :for={z32 <- @members} class="flex items-center gap-3">
-                  <.avatar name={@profiles[z32].name} pubky={z32} size="md" />
-                  <span class="min-w-0 flex-1 truncate text-sm font-semibold">{@profiles[z32].name}</span>
+                <div
+                  :for={z32 <- sort_members(@members, @online, @profiles)}
+                  class="flex items-center gap-3"
+                >
+                  <.avatar
+                    src={profile_of(@profiles, z32).avatar_url}
+                    name={profile_of(@profiles, z32).name}
+                    pubky={z32}
+                    size="md"
+                    online={Map.has_key?(@online, z32)}
+                  />
+                  <span class={[
+                    "min-w-0 flex-1 truncate text-sm font-semibold",
+                    !Map.has_key?(@online, z32) && "text-muted-foreground"
+                  ]}>
+                    {profile_of(@profiles, z32).name}
+                  </span>
                   <.badge :if={z32 == @creator} variant="brand-soft">creator</.badge>
                   <span
                     :if={z32 in @unreachable}
@@ -485,6 +599,26 @@ defmodule PubkyRoomsWeb.RoomLive do
                 </div>
               </.card_content>
             </.card>
+            <.card :if={visitors(@online, @members) != []} class="gap-3 py-5">
+              <.card_header>
+                <.section_title class="text-xl">Also here</.section_title>
+                <p class="text-xs text-muted-foreground">Signed in, not (yet) members</p>
+              </.card_header>
+              <.card_content class="flex flex-col gap-3">
+                <div :for={z32 <- visitors(@online, @members)} class="flex items-center gap-3">
+                  <.avatar
+                    src={profile_of(@profiles, z32).avatar_url}
+                    name={profile_of(@profiles, z32).name}
+                    pubky={z32}
+                    size="md"
+                    online
+                  />
+                  <span class="min-w-0 flex-1 truncate text-sm font-semibold">
+                    {profile_of(@profiles, z32).name}
+                  </span>
+                </div>
+              </.card_content>
+            </.card>
           </aside>
         </div>
       </.container>
@@ -492,9 +626,61 @@ defmodule PubkyRoomsWeb.RoomLive do
     """
   end
 
+  defp profile_of(profiles, z32), do: Map.get(profiles, z32) || Profiles.fallback(z32)
+
+  # online members first, then by name
+  defp sort_members(members, online, profiles) do
+    Enum.sort_by(members, fn z32 ->
+      {if(Map.has_key?(online, z32), do: 0, else: 1),
+       String.downcase(profile_of(profiles, z32).name)}
+    end)
+  end
+
+  defp visitors(online, members),
+    do: online |> Map.keys() |> Enum.reject(&(&1 in members)) |> Enum.sort()
+
+  attr :typing, :map, required: true, doc: "z32 → expiry"
+  attr :profiles, :map, required: true
+
+  defp typing_line(assigns) do
+    names =
+      assigns.typing
+      |> Map.keys()
+      |> Enum.sort()
+      |> Enum.map(&profile_of(assigns.profiles, &1).name)
+
+    text =
+      case names do
+        [] -> nil
+        [a] -> "#{a} is typing…"
+        [a, b] -> "#{a} and #{b} are typing…"
+        [a, b, _ | _] -> "#{a}, #{b} and others are typing…"
+      end
+
+    assigns = assign(assigns, text: text)
+
+    ~H"""
+    <div
+      id="typing"
+      class="h-5 shrink-0 truncate px-4 text-xs text-muted-foreground sm:px-6"
+      aria-live="polite"
+    >
+      <span :if={@text} class="inline-flex items-center gap-1.5">
+        <span class="inline-flex gap-0.5" aria-hidden="true">
+          <span class="size-1 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]"></span>
+          <span class="size-1 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]"></span>
+          <span class="size-1 animate-bounce rounded-full bg-muted-foreground"></span>
+        </span>
+        {@text}
+      </span>
+    </div>
+    """
+  end
+
   attr :room, :any, required: true
   attr :status, :any, required: true
   attr :members, :list, required: true
+  attr :online_count, :integer, required: true
   attr :is_member, :boolean, required: true
   attr :current_user, :any, required: true
   attr :joining, :boolean, required: true
@@ -529,8 +715,18 @@ defmodule PubkyRoomsWeb.RoomLive do
         </.badge>
       </div>
       <div class="flex shrink-0 items-center gap-2">
-        <span class="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
+        <span
+          class="hidden items-center gap-1 text-xs text-muted-foreground sm:flex"
+          title="Members"
+        >
           <.icon name="lucide-users" class="size-3.5" /> {length(@members)}
+        </span>
+        <span
+          class="flex items-center gap-1.5 text-xs text-muted-foreground"
+          title="Signed-in people in the room right now"
+        >
+          <span class="inline-block size-2 rounded-full bg-[#00FF5D]"></span>
+          <span id="online-count">{@online_count} online</span>
         </span>
         <.button
           variant="secondary"
@@ -569,7 +765,13 @@ defmodule PubkyRoomsWeb.RoomLive do
       id={@id}
       class="group flex gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-white/[0.03]"
     >
-      <.avatar name={@profile.name} pubky={@msg.author} size="default" class="mt-0.5" />
+      <.avatar
+        src={@profile.avatar_url}
+        name={@profile.name}
+        pubky={@msg.author}
+        size="default"
+        class="mt-0.5"
+      />
       <div class="flex min-w-0 flex-1 flex-col gap-0.5">
         <div class="flex items-baseline gap-2">
           <span class="truncate text-sm font-bold leading-5">{@profile.name}</span>

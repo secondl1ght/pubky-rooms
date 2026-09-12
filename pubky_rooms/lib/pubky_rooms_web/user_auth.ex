@@ -35,7 +35,8 @@ defmodule PubkyRoomsWeb.UserAuth do
   LiveView `on_mount` hooks.
 
     * `:mount_current_user` — assigns the user (or nil) and, once connected,
-      wires the user's live subscriptions
+      wires the user's live subscriptions, tracks app-wide presence and keeps
+      `current_user` fresh on profile updates
     * `:require_authenticated` — redirects anonymous visitors to `/login`
     * `:redirect_if_authenticated` — sends signed-in users away from `/login`
   """
@@ -79,6 +80,7 @@ defmodule PubkyRoomsWeb.UserAuth do
       SessionStore.touch(sid)
       SessionStore.attach(sid)
       PubkyRooms.Rooms.on_user_connected(user.pubky)
+      PubkyRoomsWeb.Presence.track_lobby(user)
       Profiles.subscribe()
       LiveView.attach_hook(socket, :own_profile, :handle_info, &own_profile_hook/2)
     else

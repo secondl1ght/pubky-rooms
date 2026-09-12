@@ -4,7 +4,8 @@ defmodule PubkyRoomsWeb.UI.Avatar do
 
   When no image is available (or it fails to load) a generative fallback is
   shown: a disc in one of the six Pubky signal colors, chosen from the user's
-  public key, with the first letter of their name.
+  public key, with the first letter of their name. `online` adds a small
+  presence dot.
   """
   use Phoenix.Component
 
@@ -16,6 +17,16 @@ defmodule PubkyRoomsWeb.UI.Avatar do
     "lg" => "size-12 text-lg",
     "xl" => "size-16 text-2xl",
     "2xl" => "size-24 text-4xl"
+  }
+
+  @dots %{
+    "xs" => "size-2 ring-1",
+    "sm" => "size-2 ring-1",
+    "md" => "size-2.5 ring-2",
+    "default" => "size-3 ring-2",
+    "lg" => "size-3 ring-2",
+    "xl" => "size-4 ring-2",
+    "2xl" => "size-5 ring-2"
   }
 
   # The six Pubky signal colors; the text color keeps contrast on each.
@@ -32,12 +43,13 @@ defmodule PubkyRoomsWeb.UI.Avatar do
   Renders an avatar.
 
       <.avatar src={@profile.avatar_url} name={@profile.name} pubky={@profile.pubky} />
-      <.avatar name="Satoshi" pubky={pubky} size="lg" />
+      <.avatar name="Satoshi" pubky={pubky} size="lg" online />
   """
   attr :src, :string, default: nil
   attr :name, :string, default: nil, doc: "display name; its first letter is the fallback glyph"
   attr :pubky, :string, default: nil, doc: "public key used to pick the fallback color"
   attr :size, :string, default: "default", values: Map.keys(@sizes)
+  attr :online, :boolean, default: false, doc: "shows a presence dot"
   attr :class, :any, default: nil
   attr :rest, :global
 
@@ -47,33 +59,38 @@ defmodule PubkyRoomsWeb.UI.Avatar do
     assigns =
       assigns
       |> assign(:size_classes, @sizes[assigns.size])
+      |> assign(:dot_classes, @dots[assigns.size])
       |> assign(:initial, initial(assigns.name, assigns.pubky))
       |> assign(:fallback_style, "background-color: #{bg}; color: #{fg}")
 
     ~H"""
     <span
-      class={[
-        "relative inline-flex shrink-0 overflow-hidden rounded-full align-middle select-none",
-        @size_classes,
-        @class
-      ]}
+      class={["relative inline-flex shrink-0 align-middle select-none", @size_classes, @class]}
       {@rest}
     >
-      <span
-        class="flex size-full items-center justify-center font-bold uppercase leading-none"
-        style={@fallback_style}
-        aria-hidden={!!@src}
-      >
-        {@initial}
+      <span class="relative flex size-full overflow-hidden rounded-full">
+        <span
+          class="flex size-full items-center justify-center font-bold uppercase leading-none"
+          style={@fallback_style}
+          aria-hidden={!!@src}
+        >
+          {@initial}
+        </span>
+        <img
+          :if={@src}
+          id={"avatar-img-#{:erlang.phash2(@src)}"}
+          src={@src}
+          alt={@name || ""}
+          class="absolute inset-0 size-full object-cover"
+          phx-hook=".HideOnError"
+          loading="lazy"
+        />
       </span>
-      <img
-        :if={@src}
-        id={"avatar-img-#{:erlang.phash2(@src)}"}
-        src={@src}
-        alt={@name || ""}
-        class="absolute inset-0 size-full object-cover"
-        phx-hook=".HideOnError"
-        loading="lazy"
+      <span
+        :if={@online}
+        class={["absolute right-0 bottom-0 rounded-full bg-[#00FF5D] ring-background", @dot_classes]}
+        aria-label="online"
+        role="img"
       />
     </span>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".HideOnError">

@@ -57,6 +57,21 @@ defmodule PubkyRooms.Rooms do
     end
   end
 
+  @doc "The PubSub topic carrying `{:typing, z32, boolean}` for a room. Never persisted."
+  @spec typing_topic(Paths.room_ref()) :: String.t()
+  def typing_topic({creator, id}), do: "room:#{creator}/#{id}:typing"
+
+  @doc "Tells the room's viewers whether `z32` is typing."
+  @spec broadcast_typing(Paths.room_ref(), String.t(), boolean()) :: :ok
+  def broadcast_typing(ref, z32, typing?) do
+    Phoenix.PubSub.broadcast(PubkyRooms.PubSub, typing_topic(ref), {:typing, z32, typing?})
+  end
+
+  @doc "How many signed-in users have the room open right now."
+  @spec online_count(Paths.room_ref()) :: non_neg_integer()
+  def online_count(ref),
+    do: ref |> PubkyRoomsWeb.Presence.room_topic() |> PubkyRoomsWeb.Presence.online_count()
+
   @doc """
   Sets the user's Rooms nickname (`/pub/pubky-rooms/profile.json`), shown when
   they have no Pubky App profile.
