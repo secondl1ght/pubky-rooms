@@ -159,6 +159,24 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert wait_for(fn -> render(alice_view) end, &(&1 =~ "1 online"))
   end
 
+  test "names update in place when a profile changes, including on existing messages", ctx do
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    view |> form("#composer", message: %{content: "who am I"}) |> render_submit()
+    render_async(view)
+    wait_for(fn -> render(view) end, &(&1 =~ "who am I"))
+    assert render(view) =~ Profiles.short_key(ctx.alice)
+
+    Fake.seed(ctx.alice, Profiles.pubky_app_profile_path(), JSON.encode!(%{name: "Alice Prime"}))
+    Profiles.refresh(ctx.alice)
+
+    html = wait_for(fn -> render(view) end, &(&1 =~ "Alice Prime"))
+    # the message row (a stream item) shows the new name too
+    assert html =~ ~r/msg-#{ctx.alice}-[0-9A-Z]+.*Alice Prime/s
+
+    refute html =~
+             ~r/<article[^>]*>.*#{Regex.escape(Profiles.short_key(ctx.alice))}.*<\/article>/s
+  end
+
   defp has_composer?(html), do: html =~ ~s(id="composer")
 
   defp messages_on_homeserver(user, room) do

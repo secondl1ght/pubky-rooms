@@ -32,6 +32,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           page_title: "Room",
           status: :loading,
           room: nil,
+          table: nil,
           members: [],
           profiles: %{},
           is_member: false,
@@ -91,6 +92,7 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   defp apply_snapshot(socket, %{status: :ready, table: table} = snapshot) do
     socket
+    |> assign(table: table)
     |> assign_room(snapshot)
     |> stream(:messages, RoomServer.history(table), reset: true)
   end
@@ -295,10 +297,22 @@ defmodule PubkyRoomsWeb.RoomLive do
     {:noreply, socket |> assign(room_pid: nil, room_monitor: nil, status: :loading) |> attach()}
   end
 
+  # Stream items are not re-rendered when assigns change, so the author's
+  # visible messages are re-inserted (same DOM ids) from the room's table.
   def handle_info({:profile_updated, z32, profile}, socket) do
-    if Map.has_key?(socket.assigns.profiles, z32),
-      do: {:noreply, assign(socket, profiles: Map.put(socket.assigns.profiles, z32, profile))},
-      else: {:noreply, socket}
+    if Map.has_key?(socket.assigns.profiles, z32) do
+      socket = assign(socket, profiles: Map.put(socket.assigns.profiles, z32, profile))
+
+      socket =
+        case socket.assigns.table do
+          nil -> socket
+          table -> Enum.reduce(authored_by(table, z32), socket, &stream_insert(&2, :messages, &1))
+        end
+
+      {:noreply, socket}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info({:presence, {:join, %{key: z32, metas: metas}}}, socket) do
@@ -673,6 +687,12 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   defp profile_of(profiles, z32), do: Map.get(profiles, z32) || Profiles.fallback(z32)
+
+  defp authored_by(table, z32) do
+    if :ets.info(table) == :undefined,
+      do: [],
+      else: table |> RoomServer.history() |> Enum.filter(&(&1.author == z32))
+  end
 
   defp members_phrase(1), do: "1 member"
   defp members_phrase(n), do: "#{n} members"
