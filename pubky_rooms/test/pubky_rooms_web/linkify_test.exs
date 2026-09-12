@@ -39,5 +39,9 @@ defmodule PubkyRoomsWeb.LinkifyTest do
     assert html =~ ~s(target="_blank")
     refute html =~ "<script>"
     refute html =~ "<b>"
+
+    # exactly the text's whitespace, nothing added around the anchor
+    assert render_component(&Linkify.linkify/1, text: "a https://x.y b") ==
+             ~s(a <a href="https://x.y" rel="noopener noreferrer nofollow ugc" target="_blank" class="text-brand underline decoration-brand/40 hover:decoration-brand">https://x.y</a> b)
   end
 end

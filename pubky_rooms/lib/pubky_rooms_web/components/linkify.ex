@@ -50,27 +50,40 @@ defmodule PubkyRoomsWeb.Linkify do
     end
   end
 
-  @doc "Renders text with its URLs linked."
+  @doc "Renders text with its URLs linked (no whitespace is added between segments)."
   attr :text, :string, required: true
-  attr :class, :any, default: "text-brand underline decoration-brand/40 hover:decoration-brand"
+  attr :class, :string, default: "text-brand underline decoration-brand/40 hover:decoration-brand"
 
   def linkify(assigns) do
-    assigns = assign(assigns, :segments, segments(assigns.text))
-
-    ~H"""
-    <%= for segment <- @segments do %>
-      <%= case segment do %>
-        <% {:text, s} -> %>
-          {s}
-        <% {:link, url} -> %>
-          <a
-            href={url}
-            rel="noopener noreferrer nofollow ugc"
-            target="_blank"
-            class={@class}
-          >{url}</a>
-      <% end %>
-    <% end %>
-    """
+    assigns = assign(assigns, :html, to_html(assigns.text, assigns.class))
+    ~H"{@html}"
   end
+
+  # Built by hand so the output has exactly the text's whitespace: the
+  # paragraph around it renders with `white-space: pre-wrap`.
+  defp to_html(text, class) do
+    text
+    |> segments()
+    |> Enum.map(fn
+      {:text, s} ->
+        Phoenix.HTML.html_escape(s)
+
+      {:link, url} ->
+        {:safe,
+         [
+           ~s(<a href="),
+           escape(url),
+           ~s(" rel="noopener noreferrer nofollow ugc" target="_blank" class="),
+           escape(class),
+           ~s(">),
+           escape(url),
+           "</a>"
+         ]}
+    end)
+    |> Enum.map(&Phoenix.HTML.safe_to_string/1)
+    |> IO.iodata_to_binary()
+    |> Phoenix.HTML.raw()
+  end
+
+  defp escape(s), do: s |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
 end

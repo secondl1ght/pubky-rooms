@@ -142,16 +142,17 @@ defmodule PubkyRoomsWeb.LobbyLive do
       end
 
     mine = MapSet.new(created ++ joined, &Room.ref/1)
-    public = Directory.public_rooms() |> Enum.reject(&MapSet.member?(mine, Room.ref(&1)))
 
+    # without a filter, own rooms are listed above and not repeated; with a tag
+    # filter the list answers "which rooms are tagged X", own ones included
     public =
       case socket.assigns.tag_filter do
         nil ->
-          public
+          Enum.reject(Directory.public_rooms(), &MapSet.member?(mine, Room.ref(&1)))
 
         label ->
           tagged = MapSet.new(Directory.rooms_tagged(label))
-          Enum.filter(public, &MapSet.member?(tagged, Room.ref(&1)))
+          Enum.filter(Directory.public_rooms(), &MapSet.member?(tagged, Room.ref(&1)))
       end
 
     creators = Enum.map(created ++ joined ++ public, & &1.creator)
