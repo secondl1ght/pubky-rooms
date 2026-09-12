@@ -10,6 +10,7 @@ defmodule PubkyRooms.Rooms do
 
   alias PubkyRooms.{Events, Pubky, RateLimit}
   alias PubkyRooms.Events.Subscriptions
+  alias PubkyRooms.Profiles.LocalProfile
   alias PubkyRooms.Rooms.{Directory, Membership, Message, Paths, Room, RoomServer}
 
   @type sid :: String.t()
@@ -53,6 +54,28 @@ defmodule PubkyRooms.Rooms do
   def leave(sid, user, ref) do
     with :ok <- Pubky.delete(sid, Paths.member(ref)) do
       Directory.remove_member(ref, user)
+    end
+  end
+
+  @doc """
+  Sets the user's Rooms nickname (`/pub/pubky-rooms/profile.json`), shown when
+  they have no Pubky App profile.
+  """
+  @spec set_nickname(sid(), String.t()) :: :ok | {:error, String.t() | Pubky.reason()}
+  def set_nickname(sid, name) do
+    with {:ok, name} <- LocalProfile.validate(name),
+         :ok <- limit({:nickname, sid}, 10, :timer.minutes(10)) do
+      Pubky.put(sid, Paths.profile(), LocalProfile.encode(name))
+    end
+  end
+
+  @doc "Removes the user's Rooms nickname."
+  @spec clear_nickname(sid()) :: :ok | {:error, Pubky.reason()}
+  def clear_nickname(sid) do
+    case Pubky.delete(sid, Paths.profile()) do
+      :ok -> :ok
+      {:error, :not_found} -> :ok
+      error -> error
     end
   end
 

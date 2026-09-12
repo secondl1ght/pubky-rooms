@@ -101,6 +101,9 @@ defmodule PubkyRoomsWeb.AuthLive do
   defp describe(reason), do: "Sign-in failed (#{inspect(reason)})."
 
   @impl true
+  def handle_info(_msg, socket), do: {:noreply, socket}
+
+  @impl true
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash}>

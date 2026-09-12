@@ -89,14 +89,23 @@ defmodule PubkyRoomsWeb.LobbyLive do
 
   @impl true
   def handle_info({:directory, _event}, socket), do: {:noreply, load_rooms(socket)}
+
+  def handle_info({:profile_updated, z32, profile}, socket) do
+    if Map.has_key?(socket.assigns.profiles, z32),
+      do: {:noreply, assign(socket, profiles: Map.put(socket.assigns.profiles, z32, profile))},
+      else: {:noreply, socket}
+  end
+
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   defp load_rooms(%{assigns: %{current_user: nil}} = socket),
-    do: assign(socket, created: [], joined: [])
+    do: assign(socket, created: [], joined: [], profiles: %{})
 
   defp load_rooms(%{assigns: %{current_user: %{pubky: pubky}}} = socket) do
     %{created: created, joined: joined} = Directory.rooms_of(pubky)
-    assign(socket, created: created, joined: joined)
+    creators = Enum.map(created ++ joined, & &1.creator)
+    profiles = Map.new(creators, &{&1, Profiles.get(&1)})
+    assign(socket, created: created, joined: joined, profiles: profiles)
   end
 
   defp new_form, do: form_for(%{"name" => "", "topic" => "", "visibility" => "public"})
@@ -133,13 +142,13 @@ defmodule PubkyRoomsWeb.LobbyLive do
           <section :if={@created != []} class="flex flex-col gap-3">
             <.section_title>Your rooms</.section_title>
             <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:gap-6">
-              <.room_card :for={room <- @created} room={room} />
+              <.room_card :for={room <- @created} room={room} creator={@profiles[room.creator]} />
             </div>
           </section>
           <section :if={@joined != []} class="flex flex-col gap-3">
             <.section_title>Joined</.section_title>
             <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:gap-6">
-              <.room_card :for={room <- @joined} room={room} />
+              <.room_card :for={room <- @joined} room={room} creator={@profiles[room.creator]} />
             </div>
           </section>
           <.empty_state
@@ -251,6 +260,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
   end
 
   attr :room, Room, required: true
+  attr :creator, :map, required: true, doc: "the creator's profile"
 
   defp room_card(assigns) do
     ref = Room.ref(assigns.room)
@@ -258,8 +268,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
     assigns =
       assign(assigns,
         member_count: Directory.member_count(ref),
-        activity: Directory.last_activity(ref),
-        creator: Profiles.get(assigns.room.creator)
+        activity: Directory.last_activity(ref)
       )
 
     ~H"""

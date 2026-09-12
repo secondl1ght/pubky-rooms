@@ -7,7 +7,7 @@ defmodule PubkyRoomsWeb.UserAuth do
   controllers) and the `on_mount` hooks (for LiveViews) re-seed the in-memory
   session cache from it and assign:
 
-    * `:current_user` — `%{pubky, name, avatar_url}` or `nil`
+    * `:current_user` — `%{pubky, name, avatar_url, source}` or `nil`
     * `:sid` — the session id, used for homeserver writes
 
   Resolving a user never touches the network: the credential is only exercised
@@ -64,6 +64,9 @@ defmodule PubkyRoomsWeb.UserAuth do
       else: {:cont, socket}
   end
 
+  # Idempotent: a LiveView may run both the session-wide hook and its own.
+  defp mount_current_user(%{assigns: %{sid: _}} = socket, _session), do: socket
+
   defp mount_current_user(socket, session) do
     {sid, user} = resolve(session)
 
@@ -76,10 +79,23 @@ defmodule PubkyRoomsWeb.UserAuth do
       SessionStore.touch(sid)
       SessionStore.attach(sid)
       PubkyRooms.Rooms.on_user_connected(user.pubky)
+      Profiles.subscribe()
+      LiveView.attach_hook(socket, :own_profile, :handle_info, &own_profile_hook/2)
+    else
+      socket
     end
-
-    socket
   end
+
+  # Keeps `current_user` current when the user's own profile changes; the
+  # message continues to the LiveView, which may track other profiles too.
+  defp own_profile_hook(
+         {:profile_updated, z32, profile},
+         %{assigns: %{current_user: %{pubky: z32}}} = socket
+       ) do
+    {:cont, Phoenix.Component.assign(socket, :current_user, profile)}
+  end
+
+  defp own_profile_hook(_msg, socket), do: {:cont, socket}
 
   # Re-seeds the session cache from cookie values and returns `{sid, user}`.
   defp resolve(session) when is_map(session) do

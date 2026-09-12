@@ -7,6 +7,7 @@ defmodule PubkyRooms.RoomsCase do
   use ExUnit.CaseTemplate
 
   alias PubkyRooms.Events.Cursors
+  alias PubkyRooms.Profiles
   alias PubkyRooms.Pubky.Fake
   alias PubkyRooms.RateLimit
   alias PubkyRooms.Rooms.Directory
@@ -17,12 +18,13 @@ defmodule PubkyRooms.RoomsCase do
     end
   end
 
-  @doc "Clears the fake homeserver, directory, cursors and rate limits."
+  @doc "Clears the fake homeserver, directory, cursors, rate limits and profiles."
   def reset_state do
     Fake.reset()
     Directory.reset()
     Cursors.reset()
     RateLimit.reset()
+    Profiles.Cache.reset()
     :ok
   end
 end

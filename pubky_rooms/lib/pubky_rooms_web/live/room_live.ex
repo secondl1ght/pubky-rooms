@@ -253,6 +253,12 @@ defmodule PubkyRoomsWeb.RoomLive do
     {:noreply, socket |> assign(room_pid: nil, room_monitor: nil, status: :loading) |> attach()}
   end
 
+  def handle_info({:profile_updated, z32, profile}, socket) do
+    if Map.has_key?(socket.assigns.profiles, z32),
+      do: {:noreply, assign(socket, profiles: Map.put(socket.assigns.profiles, z32, profile))},
+      else: {:noreply, socket}
+  end
+
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   defp apply_room_event(socket, :ready), do: attach(socket)

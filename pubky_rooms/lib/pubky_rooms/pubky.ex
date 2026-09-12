@@ -34,6 +34,7 @@ defmodule PubkyRooms.Pubky do
   @callback latest_cursor(user(), String.t()) ::
               {:ok, non_neg_integer() | nil} | {:error, reason()}
   @callback homeserver_of(user()) :: {:ok, String.t()} | {:error, reason()}
+  @callback public_url(user(), String.t()) :: {:ok, String.t()} | {:error, reason()}
   @callback start_stream(keyword()) :: {:ok, pid()} | {:error, term()}
   @callback add_users(pid(), [{user(), non_neg_integer() | nil}]) :: :ok
   @callback remove_users(pid(), [user()]) :: :ok
@@ -61,6 +62,9 @@ defmodule PubkyRooms.Pubky do
 
   @doc "The user's current homeserver."
   def homeserver_of(user), do: backend().homeserver_of(user)
+
+  @doc "A URL a browser can load for one of the user's public files."
+  def public_url(user, path), do: backend().public_url(user, path)
 
   @doc "Starts an event stream (see `Pubky.Events.Stream` options)."
   def start_stream(opts), do: backend().start_stream(opts)

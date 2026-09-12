@@ -1,14 +1,82 @@
 defmodule PubkyRoomsWeb.MeLive do
-  @moduledoc "The signed-in user's page: identity, session, sign out."
+  @moduledoc """
+  The signed-in user's page: identity, display name, session, sign out.
+
+  The display name comes from the user's Pubky App profile when they have
+  one; otherwise they can set a Rooms nickname here, which is written to
+  `/pub/pubky-rooms/profile.json` on their homeserver.
+  """
   use PubkyRoomsWeb, :live_view
 
   alias PubkyRooms.Auth.GrantLogin
+  alias PubkyRooms.Profiles.LocalProfile
+  alias PubkyRooms.Rooms
 
   on_mount {PubkyRoomsWeb.UserAuth, :require_authenticated}
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, page_title: "You", capabilities: GrantLogin.capabilities())}
+    {:ok,
+     socket
+     |> assign(page_title: "You", capabilities: GrantLogin.capabilities(), saving: false)
+     |> assign(nickname: nickname_form(socket.assigns.current_user))}
+  end
+
+  @impl true
+  def handle_event("save_nickname", %{"nickname" => %{"name" => name}}, socket) do
+    sid = socket.assigns.sid
+
+    {:noreply,
+     socket
+     |> assign(saving: true, nickname: nickname_form(name))
+     |> start_async(:save, fn -> Rooms.set_nickname(sid, name) end)}
+  end
+
+  def handle_event("clear_nickname", _params, socket) do
+    sid = socket.assigns.sid
+
+    {:noreply,
+     socket |> assign(saving: true) |> start_async(:clear, fn -> Rooms.clear_nickname(sid) end)}
+  end
+
+  @impl true
+  def handle_async(:save, {:ok, :ok}, socket) do
+    {:noreply,
+     socket |> assign(saving: false) |> put_flash(:success, "Nickname saved to your homeserver.")}
+  end
+
+  def handle_async(:save, {:ok, {:error, reason}}, socket) when is_binary(reason) do
+    {:noreply,
+     assign(socket,
+       saving: false,
+       nickname: nickname_form(socket.assigns.nickname.params["name"], reason)
+     )}
+  end
+
+  def handle_async(:clear, {:ok, :ok}, socket) do
+    {:noreply,
+     socket
+     |> assign(saving: false, nickname: nickname_form(""))
+     |> put_flash(:info, "Nickname removed.")}
+  end
+
+  def handle_async(_name, {:ok, {:error, reason}}, socket) do
+    {:noreply, socket |> assign(saving: false) |> put_flash(:error, Rooms.explain(reason))}
+  end
+
+  def handle_async(_name, {:exit, reason}, socket) do
+    {:noreply, socket |> assign(saving: false) |> put_flash(:error, Rooms.explain(reason))}
+  end
+
+  @impl true
+  def handle_info(_msg, socket), do: {:noreply, socket}
+
+  defp nickname_form(%{source: :local, name: name}), do: nickname_form(name)
+  defp nickname_form(%{source: _}), do: nickname_form("")
+
+  defp nickname_form(name, error \\ nil) when is_binary(name) do
+    errors = if error, do: [name: {error, []}], else: []
+    to_form(%{"name" => name}, as: :nickname, errors: errors)
   end
 
   @impl true
@@ -33,8 +101,50 @@ defmodule PubkyRoomsWeb.MeLive do
                 >
                   {@current_user.pubky}
                 </p>
+                <p class="text-xs text-muted-foreground">
+                  <%= case @current_user.source do %>
+                    <% :pubky_app -> %>
+                      Name and picture from your Pubky App profile
+                    <% :local -> %>
+                      Rooms nickname (no Pubky App profile found)
+                    <% _ -> %>
+                      No profile found yet — shown as your shortened key
+                  <% end %>
+                </p>
               </div>
             </div>
+
+            <.form
+              :if={@current_user.source != :pubky_app}
+              for={@nickname}
+              id="nickname-form"
+              phx-submit="save_nickname"
+              class="flex flex-col gap-3 rounded-md border border-border/60 p-4"
+            >
+              <.input
+                field={@nickname[:name]}
+                label="Display name in Rooms"
+                hint={"Up to #{LocalProfile.name_max()} characters. Stored on your homeserver as /pub/pubky-rooms/profile.json; a Pubky App profile takes precedence."}
+                placeholder="How should people see you?"
+                maxlength={LocalProfile.name_max()}
+                autocomplete="nickname"
+              />
+              <div class="flex flex-wrap gap-2">
+                <.button variant="brand" type="submit" disabled={@saving}>
+                  <.spinner :if={@saving} class="size-4" />
+                  <.icon :if={!@saving} name="lucide-save" class="size-4" /> Save name
+                </.button>
+                <.button
+                  :if={@current_user.source == :local}
+                  variant="ghost"
+                  type="button"
+                  phx-click="clear_nickname"
+                  disabled={@saving}
+                >
+                  Remove
+                </.button>
+              </div>
+            </.form>
 
             <dl class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-[auto_1fr] sm:gap-x-6">
               <dt class="text-muted-foreground">Signed in with</dt>

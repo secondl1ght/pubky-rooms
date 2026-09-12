@@ -43,6 +43,10 @@ defmodule PubkyRooms.Pubky.Fake do
   def fail_next(path, reason),
     do: Agent.update(__MODULE__, &put_in(&1, [:failures, path], reason))
 
+  @doc "Makes the next file read for `user` fail with `reason`."
+  def fail_get(user, reason),
+    do: Agent.update(__MODULE__, &put_in(&1, [:failures, {:get, user}], reason))
+
   @doc "Makes the next directory listing for `user` fail with `reason`."
   def fail_list(user, reason),
     do: Agent.update(__MODULE__, &put_in(&1, [:failures, {:list, user}], reason))
@@ -60,9 +64,11 @@ defmodule PubkyRooms.Pubky.Fake do
 
   @impl true
   def get(user, path) do
-    case Agent.get(__MODULE__, &Map.fetch(&1.files, {user, path})) do
-      {:ok, body} -> {:ok, body}
-      :error -> {:error, :not_found}
+    with :ok <- maybe_fail({:get, user}) do
+      case Agent.get(__MODULE__, &Map.fetch(&1.files, {user, path})) do
+        {:ok, body} -> {:ok, body}
+        :error -> {:error, :not_found}
+      end
     end
   end
 
@@ -143,6 +149,10 @@ defmodule PubkyRooms.Pubky.Fake do
 
   @impl true
   def homeserver_of(_user), do: {:ok, @homeserver}
+
+  @impl true
+  def public_url(user, path),
+    do: {:ok, "http://fake.homeserver.test" <> path <> "?pubky-host=" <> user}
 
   @impl true
   def start_stream(opts) do

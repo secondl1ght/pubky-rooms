@@ -54,6 +54,9 @@ defmodule PubkyRooms.Pubky.Live do
   def homeserver_of(user), do: user |> Resolver.homeserver_of() |> Facade.normalize()
 
   @impl true
+  def public_url(user, path), do: user |> Storage.public_url(path) |> Facade.normalize()
+
+  @impl true
   def start_stream(opts), do: Events.start_stream(opts)
 
   @impl true

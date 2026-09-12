@@ -17,6 +17,7 @@ defmodule PubkyRooms.Application do
       PubkyRooms.RateLimit,
       PubkyRooms.Events.Cursors,
       PubkyRooms.Auth.SessionStore,
+      PubkyRooms.Profiles.Cache,
       PubkyRooms.Events.Subscriptions,
       PubkyRooms.Rooms.Directory,
       {Registry, keys: :unique, name: PubkyRooms.Rooms.Registry},
