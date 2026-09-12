@@ -57,6 +57,51 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     assert wait_for(fn -> render(lobby) end, &(&1 =~ "Signed-in people in the room"))
   end
 
+  test "public rooms are listed for everyone, most recent activity first; unlisted ones are not",
+       %{conn: conn} do
+    {sid, alice} = Fixtures.login("alice")
+
+    {:ok, quiet} =
+      PubkyRooms.Rooms.create_room(sid, alice, %{"name" => "Quiet room", "visibility" => "public"})
+
+    {:ok, _hidden} =
+      PubkyRooms.Rooms.create_room(sid, alice, %{
+        "name" => "Secret room",
+        "visibility" => "unlisted"
+      })
+
+    {:ok, busy} =
+      PubkyRooms.Rooms.create_room(sid, alice, %{"name" => "Busy room", "visibility" => "public"})
+
+    Directory.touch(PubkyRooms.Rooms.Room.ref(busy), System.os_time(:millisecond) + 10_000)
+
+    {:ok, view, html} = live(conn, ~p"/")
+    assert html =~ "Public rooms"
+    assert html =~ "Busy room"
+    assert html =~ "Quiet room"
+    refute html =~ "Secret room"
+
+    assert :binary.match(html, "Busy room") |> elem(0) <
+             :binary.match(html, "Quiet room") |> elem(0)
+
+    # activity elsewhere reorders live (debounced)
+    Directory.touch(PubkyRooms.Rooms.Room.ref(quiet), System.os_time(:millisecond) + 20_000)
+
+    html =
+      wait_for(
+        fn -> render(view) end,
+        &(:binary.match(&1, "Quiet room") |> elem(0) < :binary.match(&1, "Busy room") |> elem(0))
+      )
+
+    assert html =~ "Busy room"
+
+    # a signed-in creator sees their own rooms only once (under "Your rooms")
+    {:ok, _view, html} = live(init_test_session(conn, Fixtures.cookie(sid)), ~p"/")
+    assert html =~ "Your rooms"
+    assert length(Regex.scan(~r/Busy room/, html)) == 1
+    assert html =~ "No public rooms known to this server yet"
+  end
+
   test "creating a room requires sign-in", %{conn: conn} do
     assert {:error, {:redirect, %{to: "/login?return_to=/rooms/new"}}} =
              live(conn, ~p"/rooms/new")

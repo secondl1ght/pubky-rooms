@@ -27,6 +27,7 @@ defmodule PubkyRoomsWeb.Router do
       live "/", LobbyLive, :index
       live "/rooms/new", LobbyLive, :new
       live "/r/:creator/:room_id", RoomLive, :show
+      live "/r/:creator/:room_id/settings", RoomLive, :settings
       live "/login", AuthLive, :index
       live "/me", MeLive, :show
     end

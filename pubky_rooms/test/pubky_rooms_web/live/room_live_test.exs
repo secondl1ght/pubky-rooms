@@ -6,7 +6,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
 
   alias PubkyRooms.{Fixtures, Profiles, Rooms}
   alias PubkyRooms.Pubky.Fake
-  alias PubkyRooms.Rooms.{Message, Paths, Room, RoomServer}
+  alias PubkyRooms.Rooms.{Directory, Message, Paths, Room, RoomServer}
 
   setup %{conn: conn} do
     reset_state()
@@ -408,6 +408,53 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert html =~ "second from bob"
     # nothing was written anywhere for a mute
     refute Fake.files(ctx.alice) |> Map.keys() |> Enum.any?(&String.contains?(&1, "mute"))
+  end
+
+  test "the creator renames the room and can close it; others follow live", ctx do
+    {bob_sid, bob} = Fixtures.login("bob")
+    Rooms.join(bob_sid, bob, Room.ref(ctx.room))
+    bob_conn = init_test_session(ctx.conn, Fixtures.cookie(bob_sid))
+
+    # non-creators are sent back from /settings
+    {:ok, bob_view, _} = live(bob_conn, ctx.path <> "/settings")
+    refute has_element?(bob_view, "#room-settings-form")
+    refute has_element?(bob_view, "a[aria-label='Room settings']")
+
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    view |> element("a[aria-label='Room settings']") |> render_click()
+    assert_patch(view, ctx.path <> "/settings")
+    assert has_element?(view, "#room-settings-form")
+
+    view
+    |> form("#room-settings-form", room: %{name: "", topic: "x", visibility: "public"})
+    |> render_submit()
+
+    assert render(view) =~ "must be 1 to 64 characters"
+
+    view
+    |> form("#room-settings-form",
+      room: %{name: "Renamed", topic: "New topic", visibility: "unlisted"}
+    )
+    |> render_submit()
+
+    render_async(view)
+    assert_patch(view, ctx.path)
+    html = wait_for(fn -> render(view) end, &(&1 =~ "Renamed"))
+    assert html =~ "New topic"
+    assert html =~ "unlisted"
+
+    assert {:ok, %Room{name: "Renamed", visibility: "unlisted"}} =
+             Directory.fetch_room(Room.ref(ctx.room))
+
+    assert wait_for(fn -> render(bob_view) end, &(&1 =~ "Renamed"))
+
+    # closing deletes the definition; viewers learn the room is closed
+    view |> element("a[aria-label='Room settings']") |> render_click()
+    view |> element("#room-settings button", "Close room") |> render_click()
+    assert_redirect(view, "/", 2_000)
+    refute Map.has_key?(Fake.files(ctx.alice), Paths.room(ctx.room.id))
+    assert wait_for(fn -> render(bob_view) end, &(&1 =~ "closed"))
+    assert Directory.get(Room.ref(ctx.room)) == nil
   end
 
   test "anonymous viewers are counted, never identified", ctx do

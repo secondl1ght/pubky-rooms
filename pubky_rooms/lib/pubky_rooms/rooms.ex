@@ -40,6 +40,46 @@ defmodule PubkyRooms.Rooms do
     end
   end
 
+  @doc """
+  Updates a room's name, topic or visibility: the creator overwrites the room
+  definition on their homeserver (same id, `created_at` kept; 20 per hour).
+  """
+  @spec update_room(sid(), String.t(), Room.t(), map()) ::
+          {:ok, Room.t()} | {:error, keyword() | Pubky.reason() | :forbidden}
+  def update_room(sid, creator, %Room{creator: creator} = room, attrs) do
+    with {:ok, fields} <- Room.validate(attrs),
+         :ok <- limit({:room_updates, sid}, 20, :timer.hours(1)),
+         updated = %{room | name: fields.name, topic: fields.topic, visibility: fields.visibility},
+         :ok <- Pubky.put(sid, Paths.room(room.id), Room.encode(updated)) do
+      Directory.put_room(updated)
+      {:ok, updated}
+    end
+  end
+
+  def update_room(_sid, _user, _room, _attrs), do: {:error, :forbidden}
+
+  @doc """
+  Closes a room: the creator deletes the room definition. Members' messages
+  stay on their homeservers; the room just stops resolving.
+  """
+  @spec close_room(sid(), String.t(), Room.t()) :: :ok | {:error, Pubky.reason() | :forbidden}
+  def close_room(sid, creator, %Room{creator: creator} = room) do
+    case Pubky.delete(sid, Paths.room(room.id)) do
+      :ok ->
+        Directory.remove_room(Room.ref(room))
+        :ok
+
+      {:error, :not_found} ->
+        Directory.remove_room(Room.ref(room))
+        :ok
+
+      error ->
+        error
+    end
+  end
+
+  def close_room(_sid, _user, _room), do: {:error, :forbidden}
+
   @doc "Joins a room by writing a join marker on the user's homeserver."
   @spec join(sid(), String.t(), Paths.room_ref()) :: :ok | {:error, Pubky.reason()}
   def join(sid, user, ref) do

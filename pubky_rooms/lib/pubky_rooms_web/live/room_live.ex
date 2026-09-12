@@ -11,7 +11,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   use PubkyRoomsWeb, :live_view
 
   alias PubkyRooms.{Ids, Profiles, Rooms}
-  alias PubkyRooms.Rooms.{Ban, Message, Paths, Reaction, RoomServer}
+  alias PubkyRooms.Rooms.{Ban, Message, Paths, Reaction, Room, RoomServer}
   alias PubkyRoomsWeb.{Format, Presence}
 
   # a viewer is shown as typing for this long after their last keystroke event
@@ -41,6 +41,8 @@ defmodule PubkyRoomsWeb.RoomLive do
           banned?: false,
           banning: nil,
           ban_form: to_form(%{"reason" => ""}, as: :ban),
+          settings_form: nil,
+          saving: false,
           muted: MapSet.new(),
           failed: %{},
           sent: %{},
@@ -76,6 +78,33 @@ defmodule PubkyRoomsWeb.RoomLive do
       {:ok, socket |> put_flash(:error, "That room link is not valid.") |> redirect(to: ~p"/")}
     end
   end
+
+  # `/settings` opens the creator's settings dialog; anyone else is sent back.
+  @impl true
+  def handle_params(_params, _uri, %{assigns: %{live_action: :settings}} = socket) do
+    cond do
+      not connected?(socket) ->
+        {:noreply, socket}
+
+      socket.assigns.is_creator ->
+        {:noreply, assign(socket, settings_form: settings_form(socket))}
+
+      true ->
+        {:noreply, push_patch(socket, to: room_path(socket))}
+    end
+  end
+
+  def handle_params(_params, _uri, socket), do: {:noreply, assign(socket, settings_form: nil)}
+
+  defp settings_form(%{assigns: %{room: %Room{} = room}}),
+    do:
+      to_form(
+        %{"name" => room.name, "topic" => room.topic || "", "visibility" => room.visibility},
+        as: :room
+      )
+
+  defp settings_form(_socket),
+    do: to_form(%{"name" => "", "topic" => "", "visibility" => "public"}, as: :room)
 
   # Starts the room server if needed, attaches as a viewer and monitors it: if
   # the server crashes, `{:DOWN, …}` below re-attaches (which restarts it).
@@ -412,9 +441,46 @@ defmodule PubkyRoomsWeb.RoomLive do
     {:noreply, set_muted(socket, MapSet.delete(socket.assigns.muted, z32))}
   end
 
+  # Room settings (creator only): rename, topic, visibility, close.
+  def handle_event(
+        "validate_settings",
+        %{"room" => params},
+        %{assigns: %{is_creator: true}} = socket
+      ) do
+    {:noreply, assign(socket, settings_form: to_form(params, as: :room))}
+  end
+
+  def handle_event(
+        "save_settings",
+        %{"room" => params},
+        %{assigns: %{is_creator: true, room: %Room{} = room, sid: sid, creator: creator}} = socket
+      ) do
+    case Room.validate(params) do
+      {:ok, _fields} ->
+        {:noreply,
+         socket
+         |> assign(saving: true, settings_form: to_form(params, as: :room))
+         |> start_async(:save_settings, fn -> Rooms.update_room(sid, creator, room, params) end)}
+
+      {:error, errors} ->
+        {:noreply, assign(socket, settings_form: to_form(params, as: :room, errors: errors))}
+    end
+  end
+
+  def handle_event(
+        "close_room",
+        _params,
+        %{assigns: %{is_creator: true, room: %Room{} = room, sid: sid, creator: creator}} = socket
+      ) do
+    {:noreply,
+     socket
+     |> assign(saving: true)
+     |> start_async(:close_room, fn -> Rooms.close_room(sid, creator, room) end)}
+  end
+
   # signed-out, non-member or non-creator viewers cannot use these actions
   def handle_event(event, _params, socket)
-      when event in ~w(edit delete react start_ban ban unban mute unmute) do
+      when event in ~w(edit delete react start_ban ban unban mute unmute validate_settings save_settings close_room) do
     {:noreply, socket}
   end
 
@@ -491,6 +557,37 @@ defmodule PubkyRoomsWeb.RoomLive do
      |> assign(loading_older: false)
      |> push_event("older:loaded", %{count: 0})
      |> put_flash(:error, "Earlier messages could not be loaded right now.")}
+  end
+
+  def handle_async(:save_settings, {:ok, {:ok, %Room{} = room}}, socket) do
+    {:noreply,
+     socket
+     |> assign(saving: false, room: room, page_title: room.name)
+     |> put_flash(:success, "Room updated on your homeserver.")
+     |> push_patch(to: room_path(socket))}
+  end
+
+  def handle_async(:save_settings, {:ok, {:error, errors}}, socket) when is_list(errors) do
+    form = to_form(socket.assigns.settings_form.params, as: :room, errors: errors)
+    {:noreply, assign(socket, saving: false, settings_form: form)}
+  end
+
+  def handle_async(:save_settings, {:ok, {:error, reason}}, socket) do
+    {:noreply,
+     socket |> assign(saving: false) |> put_flash(:error, "Not saved: " <> Rooms.explain(reason))}
+  end
+
+  def handle_async(:close_room, {:ok, :ok}, socket) do
+    {:noreply,
+     socket
+     |> assign(saving: false)
+     |> put_flash(:info, "Room closed. Members' messages stay on their own homeservers.")
+     |> push_navigate(to: ~p"/")}
+  end
+
+  def handle_async(:close_room, {:ok, {:error, reason}}, socket) do
+    {:noreply,
+     socket |> assign(saving: false) |> put_flash(:error, "Not closed: " <> Rooms.explain(reason))}
   end
 
   def handle_async(:ban, {:ok, :ok}, socket) do
@@ -1133,6 +1230,69 @@ defmodule PubkyRoomsWeb.RoomLive do
         </div>
       </.container>
 
+      <.dialog
+        :if={@live_action == :settings and @settings_form}
+        id="room-settings"
+        show
+        on_cancel={JS.patch(room_path(assigns))}
+      >
+        <:title>Room settings</:title>
+        <:description>
+          Changes overwrite the room definition on your homeserver. All rooms stay public to read;
+          "Unlisted" only keeps a room out of discovery.
+        </:description>
+        <.form
+          for={@settings_form}
+          id="room-settings-form"
+          phx-change="validate_settings"
+          phx-submit="save_settings"
+          class="flex flex-col gap-4"
+        >
+          <.input field={@settings_form[:name]} label="Name" maxlength={Room.name_max()} />
+          <.input
+            field={@settings_form[:topic]}
+            type="textarea"
+            label="Topic"
+            rows="2"
+            maxlength={Room.topic_max()}
+          />
+          <.input
+            field={@settings_form[:visibility]}
+            type="select"
+            label="Visibility"
+            options={[
+              {"Public — listed for discovery", "public"},
+              {"Unlisted — not listed, still readable by anyone with the link", "unlisted"}
+            ]}
+          />
+        </.form>
+        <div class="flex flex-col gap-2 rounded-md border border-destructive/40 p-4 text-sm">
+          <p class="font-semibold">Close this room</p>
+          <p class="text-muted-foreground">
+            Deletes the room definition from your homeserver. The room stops resolving for everyone;
+            members' messages remain on their own homeservers.
+          </p>
+          <div>
+            <.button
+              variant="destructive-soft"
+              size="sm"
+              phx-click="close_room"
+              disabled={@saving}
+              data-confirm="Close this room for everyone? This deletes the room definition from your homeserver."
+            >
+              <.icon name="lucide-door-closed" class="size-4" /> Close room
+            </.button>
+          </div>
+        </div>
+        <:footer>
+          <.button variant="ghost" patch={room_path(assigns)}>Cancel</.button>
+          <.button variant="brand" type="submit" form="room-settings-form" disabled={@saving}>
+            <.spinner :if={@saving} class="size-4" />
+            <.icon :if={!@saving} name="lucide-save" class="size-4" /> Save
+          </.button>
+        </:footer>
+      </.dialog>
+
       <.dialog :if={@banning} id="ban-dialog" show on_cancel={JS.push("cancel_ban")}>
         <:title>Remove {profile_of(@profiles, @banning).name} from this room?</:title>
         <:description>
@@ -1338,6 +1498,17 @@ defmodule PubkyRoomsWeb.RoomLive do
           disabled={@joining}
         >
           Leave
+        </.button>
+        <.button
+          :if={@current_user && @current_user.pubky == @creator && @room}
+          variant="secondary"
+          size="icon"
+          patch={~p"/r/#{@creator}/#{@room_id}/settings"}
+          aria-label="Room settings"
+          data-tip="Settings"
+          class="tooltip"
+        >
+          <.icon name="lucide-settings" class="size-4" />
         </.button>
       </div>
     </header>

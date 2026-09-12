@@ -78,6 +78,20 @@ defmodule PubkyRooms.Rooms.Directory do
     }
   end
 
+  @doc """
+  Public rooms known to this node (visibility `public`), most recent activity
+  first, then most members; at most `limit`.
+  """
+  @spec public_rooms(pos_integer()) :: [Room.t()]
+  def public_rooms(limit \\ 100) do
+    @rooms
+    |> :ets.select([{{:_, :"$1", :"$2"}, [], [{{:"$1", :"$2"}}]}])
+    |> Enum.filter(fn {room, _activity} -> room.visibility == "public" end)
+    |> Enum.sort_by(fn {room, activity} -> {-activity, -member_count(Room.ref(room))} end)
+    |> Enum.take(limit)
+    |> Enum.map(fn {room, _} -> room end)
+  end
+
   @doc "Newest activity timestamp (ms) known for a room."
   def last_activity(ref) do
     case :ets.lookup(@rooms, ref) do

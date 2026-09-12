@@ -1,10 +1,12 @@
 defmodule PubkyRoomsWeb.LobbyLive do
   @moduledoc """
-  The lobby: the rooms you created and joined, and the "new room" dialog.
+  The lobby: the rooms you created and joined, the public rooms this node
+  knows about, and the "new room" dialog.
 
   Room lists come from `PubkyRooms.Rooms.Directory` and refresh live from
-  its broadcasts. Creating a room writes two files to the creator's homeserver
-  and then navigates into the room.
+  its broadcasts (debounced: every new message anywhere bumps a room's
+  activity). Creating a room writes two files to the creator's homeserver and
+  then navigates into the room.
   """
   use PubkyRoomsWeb, :live_view
 
@@ -21,7 +23,13 @@ defmodule PubkyRoomsWeb.LobbyLive do
 
     {:ok,
      socket
-     |> assign(page_title: "Rooms", form: new_form(), creating: false, stats_topics: MapSet.new())
+     |> assign(
+       page_title: "Rooms",
+       form: new_form(),
+       creating: false,
+       stats_topics: MapSet.new(),
+       reload_timer: nil
+     )
      |> load_rooms()
      |> load_presence()}
   end
@@ -92,7 +100,14 @@ defmodule PubkyRoomsWeb.LobbyLive do
   end
 
   @impl true
-  def handle_info({:directory, _event}, socket), do: {:noreply, load_rooms(socket)}
+  def handle_info({:directory, _event}, %{assigns: %{reload_timer: nil}} = socket),
+    do: {:noreply, assign(socket, reload_timer: Process.send_after(self(), :reload_rooms, 500))}
+
+  def handle_info({:directory, _event}, socket), do: {:noreply, socket}
+
+  def handle_info(:reload_rooms, socket),
+    do: {:noreply, socket |> assign(reload_timer: nil) |> load_rooms() |> load_presence()}
+
   def handle_info({:presence, _event}, socket), do: {:noreply, load_presence(socket)}
 
   def handle_info({:room_stats, ref, %{viewers: viewers}}, socket) do
@@ -107,18 +122,27 @@ defmodule PubkyRoomsWeb.LobbyLive do
 
   def handle_info(_msg, socket), do: {:noreply, socket}
 
-  defp load_rooms(%{assigns: %{current_user: nil}} = socket),
-    do: socket |> assign(created: [], joined: [], profiles: %{}) |> load_viewers()
+  defp load_rooms(socket) do
+    %{created: created, joined: joined} =
+      case socket.assigns.current_user do
+        nil -> %{created: [], joined: []}
+        %{pubky: pubky} -> Directory.rooms_of(pubky)
+      end
 
-  defp load_rooms(%{assigns: %{current_user: %{pubky: pubky}}} = socket) do
-    %{created: created, joined: joined} = Directory.rooms_of(pubky)
-    creators = Enum.map(created ++ joined, & &1.creator)
+    mine = MapSet.new(created ++ joined, &Room.ref/1)
+    public = Directory.public_rooms() |> Enum.reject(&MapSet.member?(mine, Room.ref(&1)))
+    creators = Enum.map(created ++ joined ++ public, & &1.creator)
     profiles = Map.new(creators, &{&1, Profiles.get(&1)})
-    socket |> assign(created: created, joined: joined, profiles: profiles) |> load_viewers()
+
+    socket
+    |> assign(created: created, joined: joined, public: public, profiles: profiles)
+    |> load_viewers()
   end
 
-  defp listed_refs(socket),
-    do: Enum.map(socket.assigns.created ++ socket.assigns.joined, &Room.ref/1)
+  defp listed_refs(socket) do
+    %{created: created, joined: joined, public: public} = socket.assigns
+    Enum.map(created ++ joined ++ public, &Room.ref/1)
+  end
 
   # Viewer totals (signed in or not) per listed room, kept live through each
   # room's low-volume stats topic and its presence topic; subscriptions follow
@@ -177,6 +201,9 @@ defmodule PubkyRoomsWeb.LobbyLive do
             <.sidebar_item patch={~p"/rooms/new"} icon="lucide-plus" active={@live_action == :new}>
               New room
             </.sidebar_item>
+            <.sidebar_item href="#public-rooms" icon="lucide-globe">
+              Public rooms
+            </.sidebar_item>
           </div>
           <div class="flex flex-col gap-1">
             <.section_title class="mb-2">Right now</.section_title>
@@ -231,7 +258,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
             </:actions>
           </.empty_state>
         <% else %>
-          <div class="flex flex-col gap-6 py-6 lg:py-16">
+          <div class="flex flex-col gap-6 py-6 lg:py-10">
             <.typography size="2xl" tag="h1" class="max-w-2xl">
               Live rooms.<br />Your <span class="text-brand">homeserver.</span>
             </.typography>
@@ -246,6 +273,25 @@ defmodule PubkyRoomsWeb.LobbyLive do
             </div>
           </div>
         <% end %>
+
+        <section id="public-rooms" class="flex flex-col gap-3">
+          <div class="flex items-baseline justify-between gap-3">
+            <.section_title>Public rooms</.section_title>
+            <span class="text-xs text-muted-foreground">Most recent activity first</span>
+          </div>
+          <div :if={@public != []} class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:gap-6">
+            <.room_card
+              :for={room <- @public}
+              room={room}
+              creator={@profiles[room.creator]}
+              online={@room_online[Room.ref(room)]}
+              viewers={@room_viewers[Room.ref(room)] || 0}
+            />
+          </div>
+          <p :if={@public == []} class="text-sm text-muted-foreground">
+            No public rooms known to this server yet. Rooms show up here as their creators and members sign in.
+          </p>
+        </section>
 
         <:aside>
           <.card class="gap-4 py-5">
