@@ -159,6 +159,43 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert wait_for(fn -> render(alice_view) end, &(&1 =~ "1 online"))
   end
 
+  test "earlier messages are loaded above the window on request, in order", ctx do
+    for i <- 1..12 do
+      {:ok, m} =
+        Message.new(
+          ctx.alice,
+          ctx.room |> Room.ref(),
+          "msg #{String.pad_leading("#{i}", 2, "0")}"
+        )
+
+      Fake.seed(ctx.alice, Message.path(m), Message.encode(m))
+    end
+
+    Application.put_env(:pubky_rooms, :page_size, 4)
+    on_exit(fn -> Application.delete_env(:pubky_rooms, :page_size) end)
+
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    html = wait_for(fn -> render(view) end, &(&1 =~ "msg 12"))
+    # test config: the newest 5 are shown, with the "earlier" control
+    refute html =~ "msg 07"
+    assert has_element?(view, "#messages-top button", "Load earlier messages")
+
+    view |> element("#messages-top button") |> render_click()
+    html = wait_for(fn -> render(view) end, &(&1 =~ "msg 04"))
+    assert ordered?(html, ["msg 04", "msg 05", "msg 07", "msg 08", "msg 12"])
+    refute html =~ "msg 03"
+
+    render_hook(view, "load_older", %{})
+    html = wait_for(fn -> render(view) end, &(&1 =~ "msg 01"))
+    assert ordered?(html, ["msg 01", "msg 02", "msg 03", "msg 04", "msg 08", "msg 12"])
+    assert html =~ ~r/id="messages-top" class="[^"]*hidden/
+  end
+
+  defp ordered?(html, needles) do
+    positions = Enum.map(needles, fn n -> :binary.match(html, n) |> elem(0) end)
+    positions == Enum.sort(positions)
+  end
+
   test "anonymous viewers are counted, never identified", ctx do
     {:ok, alice_view, _} = live(ctx.alice_conn, ctx.path)
     assert wait_for(fn -> render(alice_view) end, &(&1 =~ "1 online"))

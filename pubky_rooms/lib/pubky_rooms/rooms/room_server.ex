@@ -28,7 +28,13 @@ defmodule PubkyRooms.Rooms.RoomServer do
        reported as `{:live_unavailable, [z32]}` from `Subscriptions` status
        broadcasts. Nobody is ever dropped from a room.
 
-    6. **Viewers** — every attached viewer (signed in or not) is monitored;
+    6. **Paging** — listing entries that were not fetched at bootstrap stay
+       in memory per member (with the listing cursor for more); `older/3`
+       extends the in-memory window downwards from them, newest first, so a
+       viewer scrolling up always sees a complete, ordered history. Paged
+       messages are inserted silently (no broadcast): only the viewer who
+       asked prepends them.
+    7. **Viewers** — every attached viewer (signed in or not) is monitored;
        the total is announced as `{:room_stats, ref, %{viewers: n}}` on
        `stats_topic/1`, debounced to at most one broadcast per
        `viewers_debounce_ms`. Only a count, never who (ADR 0006).
@@ -52,6 +58,8 @@ defmodule PubkyRooms.Rooms.RoomServer do
   @default_budget 5_000
   @default_poll_ms 60_000
   @default_viewers_debounce 2_000
+  @history_limit 200
+  @max_paging_rounds 5
 
   @type ref :: Paths.room_ref()
   @type status :: :bootstrapping | :ready | :not_found | :closed | {:error, term()}
@@ -108,12 +116,23 @@ defmodule PubkyRooms.Rooms.RoomServer do
 
   @doc "Reads the newest `limit` messages from the room's ETS table, oldest first."
   @spec history(:ets.tid(), pos_integer()) :: [Message.t()]
-  def history(table, limit \\ 200) do
+  def history(table, limit \\ @history_limit) do
     case :ets.select_reverse(table, [{{:_, :"$1"}, [], [:"$1"]}], limit) do
       {msgs, _cont} -> Enum.reverse(msgs)
       :"$end_of_table" -> []
     end
   end
+
+  @doc "How many messages `history/2` returns at most (the initial window of a viewer)."
+  def history_limit, do: @history_limit
+
+  @doc """
+  The newest `limit` messages older than the message `before` (a key), oldest
+  first, fetching more from members' homeservers when the in-memory window
+  runs out. `more?` tells whether anything older may exist.
+  """
+  @spec older(ref(), Message.key(), pos_integer()) :: {:ok, [Message.t()], boolean()}
+  def older(ref, before, limit), do: GenServer.call(via(ref), {:older, before, limit}, 90_000)
 
   @doc "Records a message this node is about to write; its PUT event confirms it by hash."
   @spec register_pending(ref(), Message.t(), binary()) :: :ok
@@ -153,7 +172,10 @@ defmodule PubkyRooms.Rooms.RoomServer do
       retry_timer: nil,
       poll_timer: nil,
       viewers_timer: nil,
-      announced_viewers: 0
+      announced_viewers: 0,
+      older: %{},
+      paging: false,
+      waiters: []
     }
 
     {:ok, state, {:continue, :bootstrap}}
@@ -208,6 +230,20 @@ defmodule PubkyRooms.Rooms.RoomServer do
 
   def handle_call(:snapshot, _from, state), do: {:reply, {:ok, snapshot_of(state)}, state}
   def handle_call(:viewer_count, _from, state), do: {:reply, map_size(state.viewers), state}
+
+  def handle_call({:older, before, limit}, from, state) do
+    case older_from_table(state, before, limit) do
+      {:ok, msgs, _more?} = reply when length(msgs) >= limit ->
+        {:reply, reply, state}
+
+      {:ok, _msgs, false} = reply ->
+        {:reply, reply, state}
+
+      _ ->
+        waiters = [{from, before, limit, 0} | state.waiters]
+        {:noreply, start_paging(%{state | waiters: waiters}, limit)}
+    end
+  end
 
   def handle_call({:register_pending, msg, hash}, _from, state) do
     pending =
@@ -269,8 +305,9 @@ defmodule PubkyRooms.Rooms.RoomServer do
     {:noreply, apply_fetch(state, key, result)}
   end
 
-  def handle_info({:backfilled, members, {msgs, failed}}, state) do
+  def handle_info({:backfilled, members, {msgs, failed, leftovers}}, state) do
     state = Enum.reduce(msgs, state, fn msg, acc -> upsert(acc, msg) end)
+    state = merge_leftovers(state, leftovers, msgs)
 
     unreachable =
       state.unreachable
@@ -278,6 +315,33 @@ defmodule PubkyRooms.Rooms.RoomServer do
       |> MapSet.union(MapSet.new(failed))
 
     {:noreply, set_unreachable(state, unreachable)}
+  end
+
+  # A paging round finished: store the messages silently (the viewer who asked
+  # prepends them; nobody else is interested), then answer the waiters, some
+  # of whom may need another round.
+  def handle_info({:extended, {msgs, older, progress?}}, state) do
+    Enum.each(msgs, &insert_silently(state, &1))
+    state = %{state | older: older, paging: false}
+    {waiters, state} = {state.waiters, %{state | waiters: []}}
+
+    state =
+      Enum.reduce(waiters, state, fn {from, before, limit, rounds}, acc ->
+        {:ok, found, more?} = reply = older_from_table(acc, before, limit)
+
+        if length(found) >= limit or not more? or not progress? or
+             rounds + 1 >= @max_paging_rounds do
+          GenServer.reply(from, reply)
+          acc
+        else
+          %{acc | waiters: [{from, before, limit, rounds + 1} | acc.waiters]}
+        end
+      end)
+
+    case state.waiters do
+      [] -> {:noreply, state}
+      [{_, _, limit, _} | _] -> {:noreply, start_paging(state, limit)}
+    end
   end
 
   def handle_info(:retry_history, state) do
@@ -293,7 +357,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
     state = %{state | poll_timer: nil}
 
     if map_size(state.viewers) > 0 and MapSet.size(state.polled) > 0 do
-      backfill_async(state.ref, MapSet.to_list(state.polled))
+      backfill_async(state, MapSet.to_list(state.polled))
       {:noreply, schedule_poll(state)}
     else
       {:noreply, state}
@@ -396,7 +460,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
           state |> set_polled(MapSet.put(state.polled, z32)) |> schedule_poll()
         end
 
-      backfill_async(state.ref, [z32])
+      backfill_async(state, [z32])
       broadcast(state, {:member_joined, z32})
       state
     end
@@ -414,6 +478,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
     |> set_live_unavailable(MapSet.delete(state.live_unavailable, z32))
     |> Map.update!(:members, &MapSet.delete(&1, z32))
     |> Map.update!(:subscribed, &MapSet.delete(&1, z32))
+    |> Map.update!(:older, &Map.delete(&1, z32))
   end
 
   # ── live budget ────────────────────────────────────────────────────────────
@@ -539,22 +604,41 @@ defmodule PubkyRooms.Rooms.RoomServer do
 
   # Bootstrap: fetch every member's newest messages before announcing :ready.
   defp backfill_sync(state, members) do
-    {msgs, failed} = fetch_history(members, state.ref)
+    {msgs, failed, leftovers} = fetch_history(members, state.ref, MapSet.new())
     state = Enum.reduce(msgs, state, fn msg, acc -> upsert(acc, msg) end)
+    state = merge_leftovers(state, leftovers, msgs)
     set_unreachable(state, MapSet.new(failed))
   end
 
-  # Joins and retries: fetch in the background; the result comes back as `{:backfilled, …}`.
-  defp backfill_async(ref, members) do
+  # Joins, retries and polls: fetch in the background; the result comes back
+  # as `{:backfilled, …}`. Messages already in the table are not fetched again.
+  defp backfill_async(state, members) do
     server = self()
+    ref = state.ref
+    known = known_keys(state, members)
 
     Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn ->
-      send(server, {:backfilled, members, fetch_history(members, ref)})
+      send(server, {:backfilled, members, fetch_history(members, ref, known)})
     end)
   end
 
+  # Keys the room already holds (in the table or as unfetched listing entries).
+  defp known_keys(state, members) do
+    in_table =
+      for member <- members,
+          msg <- :ets.select(state.table, [{{{:_, member}, :"$1"}, [], [:"$1"]}]),
+          into: MapSet.new(),
+          do: msg.key
+
+    for member <- members,
+        %{entries: entries} <- [state.older[member]],
+        {msg_id, _path} <- entries,
+        into: in_table,
+        do: {msg_id, member}
+  end
+
   defp retry_unreachable(%{unreachable: unreachable} = state) do
-    if MapSet.size(unreachable) > 0, do: backfill_async(state.ref, MapSet.to_list(unreachable))
+    if MapSet.size(unreachable) > 0, do: backfill_async(state, MapSet.to_list(unreachable))
     state
   end
 
@@ -579,71 +663,235 @@ defmodule PubkyRooms.Rooms.RoomServer do
   defp schedule_retry(state), do: state
 
   # Lists every member's folder (one request each), merges the entries by
-  # message id (time-ordered), and fetches only the newest `bootstrap_messages`.
-  # Returns `{messages, members_whose_listing_failed}`.
+  # message id (time-ordered), and fetches only the newest `bootstrap_messages`
+  # that are not `known` already. Returns `{messages, members_whose_listing_failed,
+  # leftovers}` where `leftovers` maps each listed member to the entries that
+  # were not fetched (newest first) and the cursor for older ones.
   #
   # Cursors are captured before anything is listed: a message written after
   # the listing then always arrives through the event stream, and one written
   # before is in the listing. Overlap is idempotent.
-  defp fetch_history(members, ref) do
+  defp fetch_history(members, ref, known) do
     per_member = config(:bootstrap_per_member, 50)
     total = config(:bootstrap_messages, 100)
-    concurrency = config(:fetch_concurrency, 16)
 
     members
     |> Task.async_stream(&Subscriptions.capture_cursor/1,
-      max_concurrency: concurrency,
+      max_concurrency: concurrency(),
       timeout: 15_000,
       on_timeout: :kill_task
     )
     |> Stream.run()
 
-    {entries, failed} =
+    {listed, failed} =
       members
-      |> Task.async_stream(&list_recent(ref, &1, per_member),
-        max_concurrency: concurrency,
+      |> Task.async_stream(&list_recent(ref, &1, nil, per_member),
+        max_concurrency: concurrency(),
         timeout: 30_000,
         on_timeout: :kill_task
       )
       |> Enum.zip(members)
-      |> Enum.reduce({[], []}, fn
-        {{:ok, {:ok, entries}}, _member}, {acc, failed} -> {entries ++ acc, failed}
-        {_error_or_exit, member}, {acc, failed} -> {acc, [member | failed]}
+      |> Enum.reduce({%{}, []}, fn
+        {{:ok, {:ok, entries, next}}, member}, {acc, failed} ->
+          {Map.put(acc, member, %{entries: entries, cursor: next}), failed}
+
+        {_error_or_exit, member}, {acc, failed} ->
+          {acc, [member | failed]}
       end)
 
-    msgs =
-      entries
-      |> Enum.sort_by(fn {msg_id, _member, _path} -> msg_id end, :desc)
-      |> Enum.take(total)
-      |> Task.async_stream(
-        fn {msg_id, member, path} -> load_message(ref, member, path, msg_id) end,
-        max_concurrency: concurrency,
-        timeout: 15_000,
-        on_timeout: :kill_task
-      )
-      |> Enum.flat_map(fn
-        {:ok, {:ok, msg}} -> [msg]
-        _ -> []
+    # entries the room already holds are neither fetched again nor "unfetched"
+    listed =
+      Map.new(listed, fn {member, %{entries: entries} = m} ->
+        rest = Enum.reject(entries, fn {msg_id, _} -> MapSet.member?(known, {msg_id, member}) end)
+        {member, %{m | entries: rest}}
       end)
 
-    {msgs, failed}
+    picks = listed |> all_entries() |> Enum.take(total)
+    leftovers = without_picks(listed, picks)
+    {fetch_messages(ref, picks), failed, leftovers}
   end
 
-  defp list_recent(ref, member, limit) do
+  # Every unfetched entry across members as `{msg_id, member, path}`, newest first.
+  defp all_entries(per_member) do
+    per_member
+    |> Enum.flat_map(fn {member, %{entries: entries}} ->
+      Enum.map(entries, fn {msg_id, path} -> {msg_id, member, path} end)
+    end)
+    |> Enum.sort_by(&elem(&1, 0), :desc)
+  end
+
+  defp without_picks(per_member, picks) do
+    picked = MapSet.new(picks, fn {msg_id, member, _} -> {msg_id, member} end)
+
+    Map.new(per_member, fn {member, %{entries: entries} = m} ->
+      rest = Enum.reject(entries, fn {msg_id, _} -> MapSet.member?(picked, {msg_id, member}) end)
+      {member, %{m | entries: rest}}
+    end)
+  end
+
+  defp fetch_messages(ref, picks) do
+    picks
+    |> Task.async_stream(
+      fn {msg_id, member, path} -> load_message(ref, member, path, msg_id) end,
+      max_concurrency: concurrency(),
+      timeout: 15_000,
+      on_timeout: :kill_task
+    )
+    |> Enum.flat_map(fn
+      {:ok, {:ok, msg}} -> [msg]
+      _ -> []
+    end)
+  end
+
+  defp concurrency, do: config(:fetch_concurrency, 16)
+
+  # ── paging ─────────────────────────────────────────────────────────────────
+
+  # Per member: `entries` listed but not fetched (newest first), `cursor` for
+  # the page after them (nil when the folder is exhausted) and `floor`, the
+  # oldest message fetched so far. Everything newer than the *boundary* — the
+  # newest unfetched entry, or the floor of a member with only a cursor left —
+  # is complete in the table.
+  defp merge_leftovers(state, leftovers, fetched) do
+    floors = Enum.group_by(fetched, & &1.author, & &1.msg_id)
+
+    older =
+      Enum.reduce(leftovers, state.older, fn {member, %{entries: entries, cursor: cursor}}, acc ->
+        previous = acc[member] || %{entries: [], cursor: nil, floor: nil}
+        entries = merge_entries(previous.entries, entries)
+        floor = min_id(previous.floor, floors[member])
+
+        cursor =
+          if is_nil(previous.floor) and previous.entries == [], do: cursor, else: previous.cursor
+
+        Map.put(acc, member, %{entries: entries, cursor: cursor, floor: floor})
+      end)
+
+    %{state | older: older}
+  end
+
+  defp merge_entries(old, new), do: (old ++ new) |> Enum.uniq_by(&elem(&1, 0)) |> Enum.sort(:desc)
+
+  defp min_id(nil, nil), do: nil
+  defp min_id(floor, nil), do: floor
+  defp min_id(nil, ids), do: Enum.min(ids)
+  defp min_id(floor, ids), do: Enum.min([floor | ids])
+
+  defp boundary(older) do
+    older
+    |> Enum.map(fn
+      {_member, %{entries: [{msg_id, _} | _]}} -> msg_id
+      {_member, %{cursor: cursor, floor: floor}} when not is_nil(cursor) -> floor || "~"
+      _ -> nil
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.max(fn -> nil end)
+  end
+
+  # Messages older than `before` from the table, but never older than the
+  # boundary (below it the table may have gaps).
+  defp older_from_table(state, before, limit) do
+    guards =
+      case boundary(state.older) do
+        nil -> [{:<, :"$1", {before}}]
+        bound -> [{:andalso, {:<, :"$1", {before}}, {:>, {:element, 1, :"$1"}, bound}}]
+      end
+
+    msgs =
+      case :ets.select_reverse(state.table, [{{:"$1", :"$2"}, guards, [:"$2"]}], limit) do
+        {msgs, _cont} -> Enum.reverse(msgs)
+        :"$end_of_table" -> []
+      end
+
+    oldest = if msgs == [], do: before, else: hd(msgs).key
+    more? = boundary(state.older) != nil or table_has_older?(state.table, oldest)
+    {:ok, msgs, more?}
+  end
+
+  defp table_has_older?(table, key) do
+    match?(
+      {[_], _},
+      :ets.select_reverse(table, [{{:"$1", :_}, [{:<, :"$1", {key}}], [true]}], 1)
+    )
+  end
+
+  defp start_paging(%{paging: true} = state, _limit), do: state
+
+  defp start_paging(state, limit) do
+    server = self()
+    %{ref: ref, older: older} = state
+
+    Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn ->
+      send(server, {:extended, extend_history(ref, older, limit)})
+    end)
+
+    %{state | paging: true}
+  end
+
+  # One paging round: refill members whose unfetched entries ran out (one
+  # listing each, from their cursor), pick the newest `limit` entries across
+  # members, fetch them. `progress?` is false when nothing could be listed or
+  # fetched, so callers stop retrying.
+  defp extend_history(ref, older, limit) do
+    per_member = config(:bootstrap_per_member, 50)
+
+    refilled =
+      older
+      |> Enum.filter(fn {_member, %{entries: entries, cursor: cursor}} ->
+        entries == [] and not is_nil(cursor)
+      end)
+      |> Task.async_stream(
+        fn {member, %{cursor: cursor}} ->
+          {member, list_recent(ref, member, cursor, per_member)}
+        end,
+        max_concurrency: concurrency(),
+        timeout: 30_000,
+        on_timeout: :kill_task
+      )
+      |> Enum.reduce(older, fn
+        {:ok, {member, {:ok, entries, next}}}, acc ->
+          Map.update!(acc, member, &%{&1 | entries: entries, cursor: next})
+
+        _failed_or_exit, acc ->
+          acc
+      end)
+
+    picks = refilled |> all_entries() |> Enum.take(limit)
+    msgs = fetch_messages(ref, picks)
+    floors = Enum.group_by(msgs, & &1.author, & &1.msg_id)
+
+    older =
+      refilled
+      |> without_picks(picks)
+      |> Map.new(fn {member, m} -> {member, %{m | floor: min_id(m.floor, floors[member])}} end)
+
+    {msgs, older, refilled != older or msgs != []}
+  end
+
+  defp insert_silently(state, %Message{key: key} = msg) do
+    unless :ets.member(state.table, key), do: :ets.insert(state.table, {key, msg})
+  end
+
+  # One page of a member's folder, newest first: `{:ok, [{msg_id, path}], next_cursor}`.
+  defp list_recent(ref, member, cursor, limit) do
     case retrying(fn ->
-           Pubky.list(member, Paths.messages_dir(ref), reverse: true, limit: limit)
+           Pubky.list(member, Paths.messages_dir(ref),
+             reverse: true,
+             limit: limit,
+             cursor: cursor
+           )
          end) do
-      {:ok, %{entries: entries}} ->
+      {:ok, %{entries: entries, next_cursor: next}} ->
         {:ok,
          for(
            %{path: path} <- entries,
            {:message, _, _, msg_id} <- [Paths.parse(path)],
-           do: {msg_id, member, path}
-         )}
+           do: {msg_id, path}
+         ), next}
 
       # a member who never wrote in this room has no folder yet: nothing to load
       {:error, :not_found} ->
-        {:ok, []}
+        {:ok, [], nil}
 
       {:error, reason} ->
         Logger.debug("history of #{String.slice(member, 0, 8)}… unavailable: #{inspect(reason)}")
@@ -710,7 +958,8 @@ defmodule PubkyRooms.Rooms.RoomServer do
       unreachable: MapSet.to_list(state.unreachable),
       polled: MapSet.to_list(state.polled),
       live_unavailable: MapSet.to_list(state.live_unavailable),
-      viewers: map_size(state.viewers)
+      viewers: map_size(state.viewers),
+      more?: boundary(state.older) != nil or :ets.info(state.table, :size) > @history_limit
     }
   end
 

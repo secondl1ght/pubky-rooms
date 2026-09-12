@@ -233,6 +233,62 @@ defmodule PubkyRooms.Rooms.RoomServerTest do
     assert_receive {:room_stats, ^ref, %{viewers: 1}}, 1_000
   end
 
+  test "older/3 pages the whole history in order across members, then reports no more", ctx do
+    %{alice: alice, ref: ref} = ctx
+    bob = Fixtures.z32("pager-bob")
+    Directory.add_member(ref, bob)
+
+    # test config: bootstrap lists 10 per member and fetches the newest 5 overall;
+    # alice has more than one listing page, bob has one short page
+    seeded =
+      for {author, n} <- [{alice, 12}, {bob, 8}], i <- 1..n do
+        {:ok, m} = Message.new(author, ref, "#{String.slice(author, 0, 4)} #{i}")
+        Fake.seed(author, Message.path(m), Message.encode(m))
+        m.key
+      end
+
+    {:ok, _pid} = RoomServer.ensure(ref)
+    assert_receive {:room_event, ^ref, :ready}, 2_000
+    {:ok, %{table: table, more?: true}} = RoomServer.attach(ref)
+    first = RoomServer.history(table)
+    assert length(first) == 5
+    drain_mailbox()
+
+    pages = page_back(ref, hd(first).key, [])
+    all = Enum.concat(pages) ++ first
+    assert Enum.map(all, & &1.key) == Enum.sort(seeded)
+    assert length(all) == 20
+
+    # paging is silent: no broadcasts for old messages
+    refute_received {:room_event, ^ref, {:message_upserted, _}}
+
+    # a brand-new message still arrives live and the window is complete below it
+    {:ok, m} = Message.new(bob, ref, "newest")
+    Fake.write_as(bob, Message.path(m), Message.encode(m))
+    assert_receive {:room_event, ^ref, {:message_upserted, %Message{content: "newest"}}}, 1_000
+    assert {:ok, [], false} = RoomServer.older(ref, hd(all).key, 5)
+  end
+
+  defp drain_mailbox do
+    receive do
+      _ -> drain_mailbox()
+    after
+      0 -> :ok
+    end
+  end
+
+  defp page_back(ref, before, acc) do
+    case RoomServer.older(ref, before, 5) do
+      {:ok, [], false} ->
+        acc
+
+      {:ok, msgs, more?} ->
+        assert msgs == Enum.sort_by(msgs, & &1.key)
+        assert List.last(msgs).key < before
+        if more?, do: page_back(ref, hd(msgs).key, [msgs | acc]), else: [msgs | acc]
+    end
+  end
+
   test "a member without a message folder yet is not reported as unreachable", ctx do
     %{ref: ref} = ctx
     newcomer = Fixtures.z32("newcomer")

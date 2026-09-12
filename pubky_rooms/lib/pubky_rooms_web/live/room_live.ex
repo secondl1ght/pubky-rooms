@@ -47,6 +47,9 @@ defmodule PubkyRoomsWeb.RoomLive do
           joining: false,
           online: %{},
           viewers: 0,
+          oldest_key: nil,
+          has_more: false,
+          loading_older: false,
           typing: %{},
           typing_timer: nil,
           last_typing_at: nil
@@ -93,10 +96,17 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   defp apply_snapshot(socket, %{status: :ready, table: table} = snapshot) do
+    history = RoomServer.history(table)
+
     socket
-    |> assign(table: table)
+    |> assign(
+      table: table,
+      oldest_key: history != [] && hd(history).key,
+      has_more: Map.get(snapshot, :more?, false),
+      loading_older: false
+    )
     |> assign_room(snapshot)
-    |> stream(:messages, RoomServer.history(table), reset: true)
+    |> stream(:messages, history, reset: true)
   end
 
   defp apply_snapshot(socket, snapshot), do: assign_room(socket, snapshot)
@@ -199,6 +209,22 @@ defmodule PubkyRoomsWeb.RoomLive do
     {:noreply, socket}
   end
 
+  # The reader scrolled to the top (or pressed the button): extend the window.
+  def handle_event("load_older", _params, socket) do
+    %{ref: ref, oldest_key: before, has_more: more?, loading_older: loading?} = socket.assigns
+
+    if more? and not loading? and before do
+      limit = Application.get_env(:pubky_rooms, :page_size, 50)
+
+      {:noreply,
+       socket
+       |> assign(loading_older: true)
+       |> start_async(:older, fn -> RoomServer.older(ref, before, limit) end)}
+    else
+      {:noreply, socket}
+    end
+  end
+
   # The composer reports keystrokes; at most one broadcast every 2 s per viewer.
   def handle_event("typing", _params, %{assigns: %{current_user: %{pubky: z32}}} = socket) do
     now = System.monotonic_time(:millisecond)
@@ -260,6 +286,31 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   def handle_async({:publish, key}, {:exit, reason}, socket) do
     {:noreply, fail_message(socket, key, {:unexpected, reason})}
+  end
+
+  def handle_async(:older, {:ok, {:ok, msgs, more?}}, socket) do
+    socket = assign(socket, loading_older: false, has_more: more?)
+
+    case msgs do
+      [] ->
+        {:noreply, push_event(socket, "older:loaded", %{count: 0})}
+
+      [oldest | _] ->
+        # items are inserted one by one at index 0, so the batch goes in reversed
+        {:noreply,
+         socket
+         |> assign(oldest_key: oldest.key)
+         |> stream(:messages, Enum.reverse(msgs), at: 0)
+         |> push_event("older:loaded", %{count: length(msgs)})}
+    end
+  end
+
+  def handle_async(:older, {:exit, _reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(loading_older: false)
+     |> push_event("older:loaded", %{count: 0})
+     |> put_flash(:error, "Earlier messages could not be loaded right now.")}
   end
 
   def handle_async(:join, {:ok, :ok}, socket) do
@@ -526,9 +577,26 @@ defmodule PubkyRoomsWeb.RoomLive do
               id="messages"
               phx-update="stream"
               phx-hook="ScrollToBottom"
+              data-has-more={to_string(@has_more)}
               class="flex flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto px-4 py-4 sm:px-6"
               aria-live="polite"
             >
+              <div
+                id="messages-top"
+                class={["flex shrink-0 justify-center py-1", !@has_more && "hidden"]}
+              >
+                <.button
+                  variant="ghost"
+                  size="sm"
+                  phx-click="load_older"
+                  disabled={@loading_older}
+                  class="text-muted-foreground"
+                >
+                  <.spinner :if={@loading_older} class="size-4" />
+                  <.icon :if={!@loading_older} name="lucide-history" class="size-4" />
+                  {if @loading_older, do: "Loading earlier messages…", else: "Load earlier messages"}
+                </.button>
+              </div>
               <div
                 id="messages-empty"
                 class="hidden only:flex flex-1 flex-col items-center justify-center gap-2 py-16 text-center text-sm text-muted-foreground"
