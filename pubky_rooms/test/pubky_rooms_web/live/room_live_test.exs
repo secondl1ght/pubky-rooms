@@ -82,10 +82,18 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     {:ok, bob_view, html} = live(bob_conn, ctx.path)
     assert html =~ "Join room"
 
+    # before joining, the creator's message shows no reply/react actions
+    creator_view |> form("#composer", message: %{content: "welcome"}) |> render_submit()
+    render_async(creator_view)
+    wait_for(fn -> render(bob_view) end, &(&1 =~ "welcome"))
+    refute has_element?(bob_view, "button[aria-label=Reply]")
+
     bob_view |> element("button", "Join room") |> render_click()
     render_async(bob_view)
     assert wait_for(fn -> render(bob_view) end, &has_composer?/1)
     assert Map.has_key?(Fake.files(bob), Paths.member(Room.ref(ctx.room)))
+    # …and the existing rows gain them without a reload
+    assert has_element?(bob_view, "button[aria-label=Reply]")
 
     assert wait_for(fn -> render(creator_view) end, &(&1 =~ "Members · 2"))
 
@@ -375,6 +383,20 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     refute has_element?(bob_view, "#composer")
     assert Map.has_key?(Fake.files(ctx.alice), Paths.ban(ctx.room.id, bob))
 
+    # every write is off for the banned member: reactions, replies, tags, typing
+    refute has_element?(bob_view, "button[aria-label=React]")
+    refute has_element?(bob_view, "button[aria-label=Reply]")
+    refute has_element?(bob_view, "#tag-form")
+    assert html =~ ~r/<button[^>]*disabled[^>]*phx-value-label="room"/
+    render_click(bob_view, "react", %{"id" => "msg-#{ctx.alice}-0000000000000", "key" => "up"})
+    render_hook(bob_view, "add_tag", %{"tag" => %{"label" => "sneaky"}})
+    render_hook(bob_view, "toggle_tag", %{"label" => "room"})
+    render_hook(bob_view, "typing", %{})
+    render_async(bob_view)
+    refute Fake.files(bob) |> Map.keys() |> Enum.any?(&String.contains?(&1, "/tags/"))
+    refute Fake.files(bob) |> Map.keys() |> Enum.any?(&String.contains?(&1, "/reactions/"))
+    refute render(alice_view) =~ "is typing"
+
     alice_view |> element("#banned-#{bob} button", "Restore") |> render_click()
     render_async(alice_view)
     wait_for(fn -> render(bob_view) end, &has_composer?/1)
@@ -449,13 +471,34 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
 
     assert wait_for(fn -> render(bob_view) end, &(&1 =~ "Renamed"))
 
+    # bob has a message of his own he could edit before the room closes
+    bob_view |> form("#composer", message: %{content: "bob before close"}) |> render_submit()
+    render_async(bob_view)
+    [bobs] = messages_on_homeserver(bob, ctx.room)
+    bob_id = "msg-#{bob}-#{bobs.msg_id}"
+    wait_for(fn -> render(bob_view) end, &(&1 =~ "bob before close"))
+    assert has_element?(bob_view, "##{bob_id} button[aria-label=Edit]")
+
     # closing deletes the definition; viewers learn the room is closed
     view |> element("a[aria-label='Room settings']") |> render_click()
     view |> element("#room-settings button", "Close room") |> render_click()
     assert_redirect(view, "/", 2_000)
     refute Map.has_key?(Fake.files(ctx.alice), Paths.room(ctx.room.id))
-    assert wait_for(fn -> render(bob_view) end, &(&1 =~ "closed"))
+    html = wait_for(fn -> render(bob_view) end, &(&1 =~ "read-only now"))
     assert Directory.get(Room.ref(ctx.room)) == nil
+
+    # …and the room is read-only for everyone: no composer, no row actions, no tags
+    assert html =~ "bob before close"
+    refute has_element?(bob_view, "#composer")
+    refute has_element?(bob_view, "##{bob_id} button[aria-label=Edit]")
+    refute has_element?(bob_view, "##{bob_id} button[aria-label=Delete]")
+    refute has_element?(bob_view, "button[aria-label=React]")
+    refute has_element?(bob_view, "#tag-form")
+    render_click(bob_view, "delete", %{"id" => bob_id})
+    render_hook(bob_view, "add_tag", %{"tag" => %{"label" => "late"}})
+    render_async(bob_view)
+    assert [%Message{content: "bob before close"}] = messages_on_homeserver(bob, ctx.room)
+    refute Fake.files(bob) |> Map.keys() |> Enum.any?(&String.contains?(&1, "/tags/"))
   end
 
   test "room tags are shown to everyone; signed-in users toggle their own", ctx do

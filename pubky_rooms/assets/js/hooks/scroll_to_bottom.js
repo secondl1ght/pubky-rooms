@@ -13,10 +13,12 @@ const ScrollToBottom = {
       this.pinned = this.distanceFromBottom() < BOTTOM_THRESHOLD
       this.maybeLoadOlder()
     })
-    this.handleEvent("older:loaded", () => {
+    this.handleEvent("older:loaded", ({count}) => {
       this.loadingOlder = false
-      // still at the top with more to load (short pages): keep going
-      this.maybeLoadOlder()
+      // still at the top with more to load (short pages): keep going — but an
+      // empty page (a member's homeserver is down) waits for the reader to
+      // scroll or press the button, so we never hammer a dead homeserver
+      if (count > 0) this.maybeLoadOlder()
     })
     this.observer = new MutationObserver(() => this.afterUpdate())
     this.observer.observe(this.el, {childList: true, subtree: true})

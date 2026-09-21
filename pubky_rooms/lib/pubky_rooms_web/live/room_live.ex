@@ -154,6 +154,32 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   defp load_tags(socket), do: assign(socket, tags: Directory.tags_of(socket.assigns.ref))
 
+  # Whether the viewer may write anything room-related right now: signed in,
+  # the room is open (not closed, missing or loading) and they are not banned.
+  # Posting and reacting additionally require membership (`can_post?/1`).
+  defp can_write?(%{assigns: assigns}), do: can_write?(assigns)
+
+  defp can_write?(%{current_user: user, status: status, banned?: banned?}),
+    do: user != nil and status == :ready and not banned?
+
+  defp can_post?(%{assigns: assigns}), do: can_post?(assigns)
+  defp can_post?(%{is_member: member?} = assigns), do: member? and can_write?(assigns)
+
+  # Stream rows keep the gating they were rendered with (action buttons, chip
+  # state), so whenever this viewer's permissions change — membership, ban,
+  # the room closing — every row in the loaded window is re-inserted.
+  defp refresh_rows(%{assigns: %{table: nil}} = socket), do: socket
+
+  defp refresh_rows(%{assigns: %{table: table, oldest_key: oldest}} = socket) do
+    if :ets.info(table) == :undefined do
+      socket
+    else
+      guards = if oldest, do: [{:>=, :"$1", {oldest}}], else: []
+      msgs = :ets.select(table, [{{:"$1", :"$2"}, guards, [:"$2"]}])
+      Enum.reduce(unmuted(socket, msgs), socket, &stream_insert(&2, :messages, &1))
+    end
+  end
+
   # Session-local mute: hides an author's messages in this view only.
   defp unmuted(%{assigns: %{muted: muted}}, msgs),
     do: Enum.reject(msgs, &MapSet.member?(muted, &1.author))
@@ -236,7 +262,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   # the composer, delete removes the file from the author's homeserver (shown
   # optimistically; the DEL event confirms, a failure restores the row).
   def handle_event("reply", %{"id" => id}, socket) do
-    case lookup_message(socket, id) do
+    case can_post?(socket) and lookup_message(socket, id) do
       %Message{} = msg ->
         {:noreply,
          socket
@@ -249,7 +275,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   def handle_event("edit", %{"id" => id}, %{assigns: %{current_user: %{pubky: me}}} = socket) do
-    case lookup_message(socket, id) do
+    case can_write?(socket) and lookup_message(socket, id) do
       %Message{author: ^me} = msg ->
         {:noreply,
          socket
@@ -273,7 +299,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         %{"id" => id},
         %{assigns: %{current_user: %{pubky: me}, sid: sid}} = socket
       ) do
-    case lookup_message(socket, id) do
+    case can_write?(socket) and lookup_message(socket, id) do
       %Message{author: ^me} = msg ->
         {:noreply,
          socket
@@ -292,7 +318,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         %{assigns: %{current_user: %{pubky: me}, sid: sid, is_member: true, banned?: false}} =
           socket
       ) do
-    case lookup_message(socket, id) do
+    case can_post?(socket) and lookup_message(socket, id) do
       %Message{reactions: reactions} = msg ->
         mine? = reactions |> Map.get(key, MapSet.new()) |> MapSet.member?(me)
 
@@ -362,7 +388,7 @@ defmodule PubkyRoomsWeb.RoomLive do
     now = System.monotonic_time(:millisecond)
     last = socket.assigns.last_typing_at
 
-    if socket.assigns.is_member and (is_nil(last) or now - last >= @typing_throttle) do
+    if can_post?(socket) and (is_nil(last) or now - last >= @typing_throttle) do
       Rooms.broadcast_typing(socket.assigns.ref, z32, true)
       {:noreply, assign(socket, last_typing_at: now)}
     else
@@ -455,14 +481,18 @@ defmodule PubkyRoomsWeb.RoomLive do
         %{"label" => label},
         %{assigns: %{current_user: %{pubky: me}, sid: sid, ref: ref}} = socket
       ) do
-    mine? = Directory.tagged_by?(ref, label, me)
+    if can_write?(socket) do
+      mine? = Directory.tagged_by?(ref, label, me)
 
-    {:noreply,
-     start_async(socket, {:tag, label}, fn ->
-       if mine?,
-         do: Rooms.untag_room(sid, me, ref, label),
-         else: Rooms.tag_room(sid, me, ref, label)
-     end)}
+      {:noreply,
+       start_async(socket, {:tag, label}, fn ->
+         if mine?,
+           do: Rooms.untag_room(sid, me, ref, label),
+           else: Rooms.tag_room(sid, me, ref, label)
+       end)}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event(
@@ -470,18 +500,21 @@ defmodule PubkyRoomsWeb.RoomLive do
         %{"tag" => %{"label" => label}},
         %{assigns: %{current_user: %{pubky: me}, sid: sid, ref: ref}} = socket
       ) do
-    case Tag.normalize(label) do
-      {:ok, normalized} ->
+    case {can_write?(socket), Tag.normalize(label)} do
+      {true, {:ok, normalized}} ->
         {:noreply,
          socket
          |> assign(tag_form: to_form(%{"label" => ""}, as: :tag))
          |> start_async({:tag, normalized}, fn -> Rooms.tag_room(sid, me, ref, normalized) end)}
 
-      {:error, error} ->
+      {true, {:error, error}} ->
         {:noreply,
          assign(socket,
            tag_form: to_form(%{"label" => label}, as: :tag, errors: [label: {error, []}])
          )}
+
+      {false, _} ->
+        {:noreply, socket}
     end
   end
 
@@ -674,6 +707,7 @@ defmodule PubkyRoomsWeb.RoomLive do
     {:noreply,
      socket
      |> assign(joining: false, is_member: true)
+     |> refresh_rows()
      |> put_flash(:success, "You joined the room.")}
   end
 
@@ -683,7 +717,10 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   def handle_async(:leave, {:ok, :ok}, socket) do
     {:noreply,
-     socket |> assign(joining: false, is_member: false) |> put_flash(:info, "You left the room.")}
+     socket
+     |> assign(joining: false, is_member: false)
+     |> refresh_rows()
+     |> put_flash(:info, "You left the room.")}
   end
 
   def handle_async(:leave, {:ok, {:error, reason}}, socket) do
@@ -820,7 +857,9 @@ defmodule PubkyRoomsWeb.RoomLive do
       bans: Map.put(socket.assigns.bans, z32, reason),
       typing: Map.delete(socket.assigns.typing, z32)
     )
-    |> then(fn s -> if me?, do: assign(s, banned?: true, composer_mode: :new), else: s end)
+    |> then(fn s ->
+      if me?, do: s |> assign(banned?: true, composer_mode: :new) |> refresh_rows(), else: s
+    end)
   end
 
   defp apply_room_event(socket, {:member_unbanned, z32}) do
@@ -828,7 +867,7 @@ defmodule PubkyRoomsWeb.RoomLive do
 
     socket
     |> assign(bans: Map.delete(socket.assigns.bans, z32))
-    |> then(fn s -> if me?, do: assign(s, banned?: false), else: s end)
+    |> then(fn s -> if me?, do: s |> assign(banned?: false) |> refresh_rows(), else: s end)
   end
 
   defp apply_room_event(socket, {:message_deleted, key}) do
@@ -854,7 +893,10 @@ defmodule PubkyRoomsWeb.RoomLive do
     do: assign(socket, room: room, page_title: room.name)
 
   defp apply_room_event(socket, :room_closed) do
-    socket |> assign(status: :closed) |> put_flash(:info, "The creator closed this room.")
+    socket
+    |> assign(status: :closed, composer_mode: :new, banning: nil)
+    |> refresh_rows()
+    |> put_flash(:info, "The creator closed this room.")
   end
 
   defp apply_room_event(socket, {:unavailable, status}), do: assign(socket, status: status)
@@ -867,7 +909,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   defp apply_room_event(socket, _other), do: socket
 
   defp maybe_set_member(%{assigns: %{current_user: %{pubky: z32}}} = socket, z32, value),
-    do: assign(socket, is_member: value)
+    do: socket |> assign(is_member: value) |> refresh_rows()
 
   defp maybe_set_member(socket, _z32, _value), do: socket
 
@@ -998,9 +1040,10 @@ defmodule PubkyRoomsWeb.RoomLive do
           room_id={@room_id}
         />
         <.tag_row
-          :if={@room && (@tags != [] or @current_user)}
+          :if={@room && (@tags != [] or can_write?(assigns))}
           tags={@tags}
           viewer={@current_user && @current_user.pubky}
+          writer={can_write?(assigns)}
           form={@tag_form}
         />
 
@@ -1081,7 +1124,10 @@ defmodule PubkyRoomsWeb.RoomLive do
                 msg={msg}
                 profile={Map.get(@profiles, msg.author) || Profiles.get(msg.author)}
                 own={@current_user != nil && @current_user.pubky == msg.author}
-                can_reply={@is_member and not @banned? and @status == :ready}
+                can_edit={
+                  @current_user != nil && @current_user.pubky == msg.author && can_write?(assigns)
+                }
+                can_reply={can_post?(assigns)}
                 viewer={@current_user && @current_user.pubky}
                 quote={quote_of(assigns, msg)}
               />
@@ -1097,6 +1143,18 @@ defmodule PubkyRoomsWeb.RoomLive do
                     <.button navigate={~p"/login?return_to=#{room_path(assigns)}"}>
                       <.icon name="lucide-key-round" class="size-4" /> Sign in
                     </.button>
+                  </div>
+                <% @status in [:closed, :not_found] -> %>
+                  <div
+                    id="closed-notice"
+                    class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+                    role="status"
+                  >
+                    <.icon name="lucide-door-closed" class="size-4 text-destructive" />
+                    <span>
+                      This room was closed by its creator and is read-only now. Messages stay on
+                      their authors' homeservers.
+                    </span>
                   </div>
                 <% @banned? -> %>
                   <div
@@ -1582,7 +1640,8 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   attr :tags, :list, required: true, doc: "`Directory.tags_of/1` result"
-  attr :viewer, :string, default: nil
+  attr :viewer, :string, default: nil, doc: "marks the viewer's own tags"
+  attr :writer, :boolean, default: false, doc: "whether the viewer may add or remove tags"
   attr :form, Phoenix.HTML.Form, required: true
 
   # Universal tags on the room: click to add or remove your own; the input
@@ -1596,13 +1655,13 @@ defmodule PubkyRoomsWeb.RoomLive do
         count={t.count}
         size="sm"
         selected={@viewer != nil and @viewer in t.taggers}
-        disabled={is_nil(@viewer)}
+        disabled={!@writer}
         phx-click="toggle_tag"
         phx-value-label={t.label}
         title={if @viewer in t.taggers, do: "Remove your tag", else: "Tag this room too"}
       />
       <.form
-        :if={@viewer}
+        :if={@writer}
         for={@form}
         id="tag-form"
         phx-submit="add_tag"
@@ -1668,7 +1727,8 @@ defmodule PubkyRoomsWeb.RoomLive do
   attr :id, :string, required: true
   attr :msg, Message, required: true
   attr :profile, :map, required: true
-  attr :own, :boolean, default: false
+  attr :own, :boolean, default: false, doc: "shows the delivery state"
+  attr :can_edit, :boolean, default: false, doc: "own message in an open room, not banned"
   attr :can_reply, :boolean, default: false, doc: "also gates reacting"
   attr :viewer, :string, default: nil, doc: "the viewer's z32, to mark their own reactions"
   attr :quote, :any, default: nil, doc: "nil | :unavailable | %{id, name, content}"
@@ -1680,7 +1740,7 @@ defmodule PubkyRoomsWeb.RoomLive do
       class="group relative flex gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-white/[0.03]"
     >
       <div
-        :if={@msg.state == :confirmed and (@can_reply or @own)}
+        :if={@msg.state == :confirmed and (@can_reply or @can_edit)}
         class="absolute -top-3 right-2 flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5 shadow-xs sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
       >
         <button
@@ -1706,7 +1766,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           <.icon name="lucide-reply" class="size-4" />
         </button>
         <button
-          :if={@own}
+          :if={@can_edit}
           type="button"
           phx-click="edit"
           phx-value-id={@id}
@@ -1717,7 +1777,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           <.icon name="lucide-pencil" class="size-4" />
         </button>
         <button
-          :if={@own}
+          :if={@can_edit}
           type="button"
           phx-click="delete"
           phx-value-id={@id}
