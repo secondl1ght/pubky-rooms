@@ -111,6 +111,8 @@ Source of truth for scope: `docs/PLAN.md` + `docs/notes/rooms-app-design.md`. At
 | Members card and moderation controls (mute, remove) are hidden below the `xl` breakpoint: a members sheet/dialog for narrow screens | M7 | open |
 | Nexus "tagged by people you follow" (`viewer_id` on resource/tag queries) and Nexus taggers shown as people | M8 | open |
 | Message search / jump to a quoted message outside the loaded window (quote link only works when the original is loaded) | M7 | open |
+| Mutes persist only per tab (M6 choice); a non-creator wants them across sessions/devices. Options: browser `localStorage` (private, per device) or homeserver `mutes/<z32>` under `/pub/pubky-rooms/` (syncs, public like Pubky App's `/pub/pubky.app/mutes/`, and Rooms could honor the Pubky App mute list read-only too). Decision pending with the user | M7 | open |
+| Publish the on-homeserver contract as a spec (`docs/spec.md`: paths, JSON shapes, limits, validation rules, ban/tag semantics, ids) so other clients can interoperate; today it lives only in the design note | M7 | open |
 | Pubky App profile changes are only noticed at TTL (streams carry `/pub/pubky-rooms/` only); consider a second stream path `/pub/pubky.app/profile.json` for signed-in users | M7 | open |
 | `AuthLive` test with a fake grant flow (Mox or `PubkyRooms.Pubky`-style behaviour) | M7 | open |
 | `@tag :testnet` end-to-end app test (sign-in via LocalSigner, create, send, confirm, restart) | M7 | open |
