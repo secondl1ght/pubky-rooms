@@ -367,7 +367,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
           </p>
         </section>
 
-        <.how_it_works class="xl:hidden" />
+        <.how_it_works class="mt-6 xl:hidden" />
 
         <:aside>
           <.how_it_works />
