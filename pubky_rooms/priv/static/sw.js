@@ -8,9 +8,11 @@
 //     when the network fails the static offline page is shown instead
 //   * everything else (long-poll fallback, health, API) is left to the network
 // The LiveView websocket is not a fetch and is never touched. Bumping VERSION
-// drops every old cache on activation. No push handling yet: web push for
+// drops every old cache on activation (v2: v1 had been registered in dev, where
+// asset names are not hashed; the bump makes those browsers refetch app.js,
+// whose dev build unregisters the worker). No push handling yet: web push for
 // mentions/replies can be added here later without changing the strategy.
-const VERSION = "pubky-rooms-v1"
+const VERSION = "pubky-rooms-v2"
 const OFFLINE_URL = "/offline.html"
 const ASSET_PREFIXES = ["/assets/", "/fonts/", "/images/"]
 

@@ -44,10 +44,19 @@ liveSocket.connect()
 // Installable app shell: the worker caches digested assets and shows a static
 // offline page when a navigation fails; it never caches LiveView pages or
 // touches the websocket (see priv/static/sw.js). Registered from the stable
-// root path so its scope covers the whole app.
+// root path so its scope covers the whole app. Not in development: asset names
+// are not content-hashed there, so a cache-first worker would serve stale code
+// after every edit — any leftover dev registration is removed instead.
 if ("serviceWorker" in navigator && window.isSecureContext) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js", {scope: "/"}).catch(() => {})
+    if (process.env.NODE_ENV === "development") {
+      navigator.serviceWorker.getRegistrations()
+        .then(regs => regs.forEach(reg => reg.unregister()))
+        .catch(() => {})
+      caches.keys().then(keys => keys.forEach(key => caches.delete(key))).catch(() => {})
+    } else {
+      navigator.serviceWorker.register("/sw.js", {scope: "/"}).catch(() => {})
+    }
   })
 }
 

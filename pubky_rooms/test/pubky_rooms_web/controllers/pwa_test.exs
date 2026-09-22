@@ -19,7 +19,7 @@ defmodule PubkyRoomsWeb.PwaTest do
 
     sw = get(build_conn(), "/sw.js")
     assert sw.status == 200
-    assert sw.resp_body =~ "pubky-rooms-v1"
+    assert sw.resp_body =~ ~r/const VERSION = "pubky-rooms-v\d+"/
     # navigations are never cached, only assets and the offline page
     assert sw.resp_body =~ ~s(request.mode === "navigate")
     assert sw.resp_body =~ "/offline.html"
