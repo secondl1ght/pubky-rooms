@@ -60,7 +60,11 @@ config :pubky_rooms,
   nexus_url: System.get_env("NEXUS_URL"),
   nexus_cdn_url: System.get_env("NEXUS_CDN_URL"),
   simulator_url:
-    System.get_env("PUBKY_SIMULATOR_URL") || Application.get_env(:pubky_rooms, :simulator_url)
+    System.get_env("PUBKY_SIMULATOR_URL") || Application.get_env(:pubky_rooms, :simulator_url),
+  pubky_app_url:
+    System.get_env("PUBKY_APP_URL") || Application.get_env(:pubky_rooms, :pubky_app_url),
+  pubky_ring_url:
+    System.get_env("PUBKY_RING_URL") || Application.get_env(:pubky_rooms, :pubky_ring_url)
 
 config :pubky_rooms, PubkyRoomsWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]

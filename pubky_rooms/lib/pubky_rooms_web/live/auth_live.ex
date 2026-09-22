@@ -30,8 +30,11 @@ defmodule PubkyRoomsWeb.AuthLive do
         auth_url: nil,
         qr_svg: nil,
         error: nil,
+        no_account: false,
         network: Pubky.Config.get().network,
         simulator_url: Application.get_env(:pubky_rooms, :simulator_url),
+        pubky_app_url: Application.get_env(:pubky_rooms, :pubky_app_url),
+        pubky_ring_url: Application.get_env(:pubky_rooms, :pubky_ring_url),
         # connect info is only readable during mount; "New code" needs it later.
         # Only a keyed hash of the client address is kept, and only in memory
         # for the rate-limit window (ADR 0006: no addresses stored or logged).
@@ -60,11 +63,12 @@ defmodule PubkyRoomsWeb.AuthLive do
   end
 
   def handle_async(:await, {:ok, {:error, reason}}, socket) do
-    {:noreply, assign(socket, state: :error, error: describe(reason))}
+    {:noreply,
+     assign(socket, state: :error, error: describe(reason), no_account: no_account?(reason))}
   end
 
   def handle_async(:await, {:exit, reason}, socket) do
-    {:noreply, assign(socket, state: :error, error: describe(reason))}
+    {:noreply, assign(socket, state: :error, error: describe(reason), no_account: false)}
   end
 
   defp start_flow(socket) do
@@ -75,7 +79,13 @@ defmodule PubkyRoomsWeb.AuthLive do
         url = login.authorization_url(flow)
 
         socket
-        |> assign(state: :waiting, auth_url: url, qr_svg: qr_svg(url), error: nil)
+        |> assign(
+          state: :waiting,
+          auth_url: url,
+          qr_svg: qr_svg(url),
+          error: nil,
+          no_account: false
+        )
         |> start_async(:await, fn -> login.await(flow, @approval_timeout) end)
 
       {:error, {:rate_limited, _}} ->
@@ -116,12 +126,38 @@ defmodule PubkyRoomsWeb.AuthLive do
     |> Phoenix.HTML.raw()
   end
 
+  # `Pubky.Auth.GrantFlow` failures, in the words of someone signing in. The
+  # two "no account" cases point at the onboarding hint below the card.
   defp describe(:expired), do: "The code expired."
+
+  defp describe(:homeserver_unresolved),
+    do:
+      "This key has no homeserver yet, so there is no account to sign in to. " <>
+        "Rooms cannot create one: set up your identity with Pubky Ring and Pubky App first (see below), then try again."
+
+  defp describe({:exchange, {:http, status, _}}) when status in [401, 403, 404],
+    do:
+      "Your homeserver did not accept the sign-in (status #{status}). " <>
+        "If this key never signed up there, do that in Pubky App first (see below)."
+
+  defp describe({:exchange, {:http, status, _}}),
+    do: "Your homeserver answered with status #{status}. Try again in a moment."
+
+  defp describe({:exchange, {:transport, _}}), do: "Your homeserver could not be reached."
+  defp describe({:exchange, reason}), do: describe(reason)
+  defp describe({:relay, _}), do: "The Pubky Ring relay could not be reached. Try again."
+  defp describe(:decrypt), do: "Pubky Ring's answer could not be read. Generate a new code."
+  defp describe(:grant_mismatch), do: "Pubky Ring answered for a different request."
   defp describe({:http, status, _}), do: "The homeserver answered with status #{status}."
   defp describe({:transport, _}), do: "The homeserver could not be reached."
   defp describe(:cnf_mismatch), do: "Pubky Ring answered for a different request."
   defp describe(:client_id_mismatch), do: "Pubky Ring answered for a different app."
   defp describe(reason), do: "Sign-in failed (#{inspect(reason)})."
+
+  # Sign-in failed because the key has no usable account: highlight onboarding.
+  defp no_account?(:homeserver_unresolved), do: true
+  defp no_account?({:exchange, {:http, status, _}}) when status in [401, 403, 404], do: true
+  defp no_account?(_reason), do: false
 
   @impl true
   def handle_info(_msg, socket), do: {:noreply, socket}
@@ -231,6 +267,36 @@ defmodule PubkyRoomsWeb.AuthLive do
                 </.button>
               </div>
             </.card_content>
+
+            <.card_footer
+              id="onboarding"
+              class={[
+                "flex-col items-start gap-2 rounded-lg p-4 text-sm",
+                @no_account && "bg-brand/10 ring-1 ring-brand/40",
+                !@no_account && "bg-secondary/40"
+              ]}
+            >
+              <p class="flex items-center gap-2 font-semibold text-secondary-foreground">
+                <.icon name="lucide-sparkles" class="size-4 text-brand" /> New to Pubky?
+              </p>
+              <p class="text-muted-foreground">
+                Rooms cannot create accounts. Get your keys with the
+                <a
+                  href={@pubky_ring_url}
+                  target="_blank"
+                  rel="noopener"
+                  class="text-brand hover:underline"
+                >Pubky Ring</a>
+                app, sign up for a homeserver in
+                <a
+                  href={@pubky_app_url}
+                  target="_blank"
+                  rel="noopener"
+                  class="text-brand hover:underline"
+                >Pubky App</a>
+                (Ring approves it), then come back and scan this code. One identity works in every Pubky app.
+              </p>
+            </.card_footer>
 
             <.card_footer :if={@network == :testnet} class="text-xs text-muted-foreground">
               <p>

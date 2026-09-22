@@ -43,7 +43,10 @@ config :pubky_rooms,
   # closed rooms (read-only archives) nobody opened for this long are forgotten
   closed_room_ttl_ms: 7_776_000_000,
   nexus_cdn_url: nil,
-  simulator_url: nil
+  simulator_url: nil,
+  # where /login sends people who have no Pubky identity or homeserver yet
+  pubky_app_url: "https://pubky.app",
+  pubky_ring_url: "https://pubkyring.app"
 
 # Pubky client defaults; config/runtime.exs overrides these from the environment.
 config :pubky,

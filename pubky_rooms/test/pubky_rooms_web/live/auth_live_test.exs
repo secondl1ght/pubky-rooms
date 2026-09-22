@@ -54,6 +54,40 @@ defmodule PubkyRoomsWeb.AuthLiveTest do
     assert wait_for(fn -> render(view) end, &(&1 =~ "different request"))
   end
 
+  test "people without an account get an onboarding hint, highlighted when the key has no homeserver",
+       %{conn: conn} do
+    {:ok, view, html} = live(conn, ~p"/login")
+    # the hint is always there, quietly
+    assert has_element?(view, "#onboarding", "New to Pubky?")
+    assert html =~ ~s(href="https://pubky.app")
+    assert html =~ ~s(href="https://pubkyring.app")
+    refute has_element?(view, "#onboarding.ring-1")
+
+    # Ring approved with a key that never signed up anywhere
+    FakeGrantLogin.resolve({:error, :homeserver_unresolved})
+    html = wait_for(fn -> render(view) end, &(&1 =~ "no homeserver yet"))
+    assert html =~ "Rooms cannot create one"
+    assert has_element?(view, "#onboarding.ring-1")
+
+    # the homeserver does not know the key either
+    view |> element("button", "New code") |> render_click()
+    refute has_element?(view, "#onboarding.ring-1")
+    FakeGrantLogin.resolve({:error, {:exchange, {:http, 404, "unknown user"}}})
+    html = wait_for(fn -> render(view) end, &(&1 =~ "did not accept the sign-in"))
+    assert html =~ "status 404"
+    assert has_element?(view, "#onboarding.ring-1")
+
+    # other failures are explained without pointing at onboarding
+    view |> element("button", "New code") |> render_click()
+    FakeGrantLogin.resolve({:error, {:exchange, {:transport, :timeout}}})
+    assert wait_for(fn -> render(view) end, &(&1 =~ "could not be reached"))
+    refute has_element?(view, "#onboarding.ring-1")
+
+    view |> element("button", "New code") |> render_click()
+    FakeGrantLogin.resolve({:error, {:relay, :econnrefused}})
+    assert wait_for(fn -> render(view) end, &(&1 =~ "relay could not be reached"))
+  end
+
   test "sign-in starts are rate-limited per client (20 per minute)", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/login")
 
