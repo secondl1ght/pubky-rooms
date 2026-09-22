@@ -387,12 +387,16 @@ defmodule PubkyRoomsWeb.LobbyLive do
                 <span>A check mark means your homeserver stored it</span>
               </p>
               <p class="flex gap-2">
-                <.icon name="lucide-server-off" class="mt-0.5 size-4 shrink-0 text-brand" />
-                <span>This server only relays. It never stores your chats.</span>
+                <.icon name="lucide-lock-open" class="mt-0.5 size-4 shrink-0 text-brand" />
+                <span>
+                  Nothing is locked in: your rooms live on your homeserver and work in any other Pubky client
+                </span>
               </p>
               <p class="flex gap-2">
                 <.icon name="lucide-globe" class="mt-0.5 size-4 shrink-0 text-brand" />
-                <span>All rooms are public, like posts on Pubky App</span>
+                <span>
+                  All rooms are public for now, like posts on Pubky App. Private rooms come with private homeserver storage.
+                </span>
               </p>
             </.card_content>
           </.card>
