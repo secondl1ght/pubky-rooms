@@ -1275,7 +1275,7 @@ defmodule PubkyRoomsWeb.RoomLive do
               </div>
               <div
                 id="messages-empty"
-                class="hidden only:flex flex-1 flex-col items-center justify-center gap-2 py-16 text-center text-sm text-muted-foreground"
+                class="hidden flex-1 flex-col items-center justify-center gap-2 py-16 text-center text-sm text-muted-foreground [#messages:not(:has(>_[id^=msg-]))_&]:flex"
               >
                 <.icon :if={@status == :ready} name="lucide-message-square-dashed" class="size-8" />
                 <.spinner :if={@status in [:loading, :bootstrapping]} class="size-6" />

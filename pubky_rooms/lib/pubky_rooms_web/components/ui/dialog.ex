@@ -63,7 +63,7 @@ defmodule PubkyRoomsWeb.UI.Dialog do
             phx-key="escape"
             phx-click-away={JS.exec("data-cancel", to: "##{@id}")}
             class={[
-              "relative flex w-full max-h-[calc(100dvh-2rem)] flex-col gap-6 overflow-y-auto border border-b-0",
+              "relative flex w-full max-h-[calc(100dvh-2rem)] flex-col gap-6 overflow-x-hidden overflow-y-auto border border-b-0",
               "bg-background p-6 shadow-lg rounded-t-xl",
               "sm:w-auto sm:min-w-[28rem] sm:max-w-[calc(100vw-2rem)] sm:rounded-xl sm:border-b sm:p-8",
               @class

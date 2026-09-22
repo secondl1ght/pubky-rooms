@@ -45,6 +45,7 @@ defmodule PubkyRooms.Events.Subscriptions do
               hs: nil,
               stream: nil,
               cursor: nil,
+              failures: 0,
               timer: nil
   end
 
@@ -306,22 +307,30 @@ defmodule PubkyRooms.Events.Subscriptions do
         state = update_in(state.streams[key].users, &MapSet.put(&1, user))
 
         entry = set_status(user, entry, :attached)
-        put_in(state.users[user], %{entry | hs: hs, stream: key, cursor: cursor})
+        put_in(state.users[user], %{entry | hs: hs, stream: key, cursor: cursor, failures: 0})
 
       {:error, reason, state} ->
         attach(state, user, entry, {:error, reason})
     end
   end
 
+  # One warning per outage (the first failure), then debug on every retry: a
+  # member whose key never resolves would otherwise warn every 30 s for as
+  # long as a room with them stays open.
   defp attach(state, user, entry, {:error, reason}) do
     Logger.debug(
       "events for #{String.slice(user, 0, 8)}… unavailable: #{inspect(reason)}; retrying"
     )
 
-    Logger.warning("a member's homeserver events are unavailable (#{inspect(reason)}); retrying")
+    if entry.failures == 0,
+      do:
+        Logger.warning(
+          "a member's homeserver events are unavailable (#{inspect(reason)}); retrying every #{div(retry_delay(), 1000)} s"
+        )
 
     Process.send_after(self(), {:retry, user}, retry_delay())
-    put_in(state.users[user], set_status(user, entry, {:error, reason}))
+    entry = %{set_status(user, entry, {:error, reason}) | failures: entry.failures + 1}
+    put_in(state.users[user], entry)
   end
 
   # Records a status change and announces it (only actual changes are broadcast).
