@@ -41,6 +41,16 @@ window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 // connect if there are any LiveViews on the page
 liveSocket.connect()
 
+// Installable app shell: the worker caches digested assets and shows a static
+// offline page when a navigation fails; it never caches LiveView pages or
+// touches the websocket (see priv/static/sw.js). Registered from the stable
+// root path so its scope covers the whole app.
+if ("serviceWorker" in navigator && window.isSecureContext) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js", {scope: "/"}).catch(() => {})
+  })
+}
+
 // expose liveSocket on window for web console debug logs and latency simulation:
 // >> liveSocket.enableDebug()
 // >> liveSocket.enableLatencySim(1000)  // enabled for duration of browser session

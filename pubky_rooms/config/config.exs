@@ -92,6 +92,11 @@ config :tailwind,
   ]
 
 # Configure Elixir's Logger
+# Request logs never show the sign-in handoff token or the session cookie
+# fields, whatever the level (ADR 0005/0006). LiveView still inspects the raw
+# session map in its debug MOUNT log, which only exists in dev.
+config :phoenix, :filter_parameters, ["password", "cred", "sid", "token"]
+
 config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]

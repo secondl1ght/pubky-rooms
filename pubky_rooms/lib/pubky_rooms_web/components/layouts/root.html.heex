@@ -6,7 +6,14 @@
     <meta name="csrf-token" content={get_csrf_token()} />
     <meta name="theme-color" content="#05050A" />
     <meta name="color-scheme" content="dark" />
+    <meta name="application-name" content="Pubky Rooms" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Rooms" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" href={~p"/images/pubky-favicon.svg"} type="image/svg+xml" />
+    <link rel="apple-touch-icon" href={~p"/images/icons/apple-touch-icon.png"} />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <.live_title default="Pubky Rooms" suffix=" · Pubky Rooms" phx-no-format>{assigns[:page_title]}</.live_title>
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
     <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>

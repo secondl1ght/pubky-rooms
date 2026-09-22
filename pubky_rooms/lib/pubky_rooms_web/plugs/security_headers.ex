@@ -10,7 +10,8 @@ defmodule PubkyRoomsWeb.Plugs.SecurityHeaders do
   from ourselves, `data:` URIs and any `https:` host (avatars live on
   homeservers and the Nexus CDN; `csp_img_src` adds `http:` for the local
   testnet); connections only to ourselves, including the LiveView websocket
-  (`ws(s)://<host>`); fonts self-hosted; no framing at all; a service worker
+  (`ws(s)://<host>`); fonts self-hosted (plus `data:` for LiveDashboard's
+  embedded icon font in dev); no framing at all; a service worker
   and a manifest from ourselves. There is no third-party script, style,
   font, frame or beacon anywhere (ADR 0006).
   """
@@ -45,7 +46,7 @@ defmodule PubkyRoomsWeb.Plugs.SecurityHeaders do
       "script-src 'self' 'nonce-#{nonce}'",
       "style-src 'self' 'unsafe-inline'",
       "img-src #{img}",
-      "font-src 'self'",
+      "font-src 'self' data:",
       "connect-src 'self' #{socket_origins(conn)}",
       "frame-src 'self'",
       "frame-ancestors 'none'",

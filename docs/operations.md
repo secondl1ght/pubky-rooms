@@ -31,6 +31,7 @@ Everything here is one node (no clustering in v1). Costs scale **per room and pe
 - **Memory climbing:** count viewers and warm rooms (LiveDashboard); lower `max_idle_rooms` or move to a bigger machine.
 - **Deploy / restart:** safe at any time. Sessions survive via the cookie; rooms re-bootstrap lazily on first open; the directory reloads from DETS. Expect a burst of homeserver reads as popular rooms reopen.
 - **Homeserver down:** rooms whose creator's homeserver is unreachable show an error state; other rooms are unaffected. Members on a down homeserver are marked unreachable and retried every minute.
+- **Stale assets after a deploy:** the service worker caches digested asset URLs only, so new deploys are picked up by the next page load; if a change to `sw.js` itself must reach installed apps immediately, bump its `VERSION` (old caches are deleted on activation).
 - **`/healthz` returns 503:** the body names the missing process; the supervisor restarts it, so a persistent 503 means a crash loop — read the logs for that process and restart the machine if it does not recover.
 
 ## Telemetry and health (ADR 0006: aggregates only)

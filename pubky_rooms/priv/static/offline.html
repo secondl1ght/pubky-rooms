@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#05050A" />
+    <meta name="color-scheme" content="dark" />
+    <title>Offline · Pubky Rooms</title>
+    <link rel="icon" href="/images/pubky-favicon.svg" type="image/svg+xml" />
+    <style>
+      html { color-scheme: dark; }
+      body {
+        margin: 0; min-height: 100dvh; display: grid; place-items: center;
+        background: #05050A; color: #d4d4db;
+        font-family: "Inter Tight", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        padding: 1.5rem; box-sizing: border-box; text-align: center;
+      }
+      main { max-width: 26rem; display: flex; flex-direction: column; gap: 1rem; align-items: center; }
+      img { width: 4rem; height: 4rem; }
+      h1 { margin: 0; font-size: 1.75rem; font-weight: 700; color: #ffffff; }
+      p { margin: 0; line-height: 1.5; color: #89898f; }
+      button {
+        cursor: pointer; border: 1px solid #c8ff00; border-radius: 9999px; padding: 0.625rem 1.25rem;
+        background: rgba(200, 255, 0, 0.16); color: #c8ff00; font: inherit; font-weight: 600;
+      }
+      button:hover { background: rgba(200, 255, 0, 0.3); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/images/pubky-favicon.svg" alt="" width="64" height="64" />
+      <h1>You are offline</h1>
+      <p>
+        Rooms are live: messages come straight from their authors' homeservers, so there is nothing to
+        show without a connection. Your own messages are safe on your homeserver.
+      </p>
+      <button type="button" onclick="location.reload()">Try again</button>
+    </main>
+  </body>
+</html>
