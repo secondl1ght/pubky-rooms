@@ -32,7 +32,7 @@ defmodule PubkyRoomsWeb.Layouts do
     <header class="sticky top-0 z-(--z-sticky-header) hidden w-full bg-linear-to-b from-background from-50% to-transparent lg:block lg:py-6">
       <nav class="mx-auto flex h-24 max-w-(--container-max-width) items-center justify-between gap-6 px-6 xl:px-0">
         <.logo navigate={~p"/"} />
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-3">
           <.nav_button navigate={~p"/"} icon="lucide-house" label="Rooms" active={@active == :lobby} />
           <.nav_button
             navigate={~p"/rooms/new"}

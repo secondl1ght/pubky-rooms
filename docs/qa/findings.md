@@ -5,6 +5,7 @@ Seeded on 2026-09-21 from Claude's browser pass over the finish-phase work; the 
 ## Design (user's run-through, 2026-09-22)
 - Header wordmark: "Rooms" not vertically aligned with "Pubky". Cause: the product name was set at 28 px and centred on the 36 px image box, while the SVG letters sit on a baseline 29 px from the top with the x-height of 26 px Inter Tight; "Rooms" rendered larger and ~1 px high. Fix: 26 px, bottom-aligned with a 33 px line-height so both baselines land on 29 px (geometry documented in `UI.Icon.logo/1`); the word gap is 6 px (a word space is 5 px, the SVG "y" runs to the image edge). — fixed
 - Header circle buttons (Rooms, New room): hover should match Pubky App. Theirs is the secondary icon button: `bg-white/5` + border inactive, `bg-secondary` active, hover to solid `bg-accent` with the icon colour unchanged, `transition-all`. Ours went to `white/10` and brightened the icon. Tooltips kept. — fixed
+- Header buttons: horizontal gap should match Pubky App (`gap-3`, 12 px); ours was 16 px. — fixed
 
 ## Bugs
 - (none open)
