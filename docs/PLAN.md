@@ -96,6 +96,7 @@ members/<creator>/<room_id>             {v,joined_at,room:"pubky://<creator>/pub
 messages/<creator>/<room_id>/<msg_id>   {v,kind:"text",content(1..2000),reply_to(uri|null, same room),created_at,edited_at|null}  PUT overwrite = edit, DELETE = delete
 reactions/<creator>/<room_id>/<author>/<msg_id>/<key>   {v,created_at}   key ^[a-z0-9_]{1,16}$ ; DELETE = un-react
 bans/<room_id>/<banned_z32>             {v,created_at,reason(≤140)}       honored only from the creator's homeserver
+mutes/<muted_z32>                       {v,created_at}                    the viewer's own mute list (Pubky App's /pub/pubky.app/mutes/ honored read-only)
 profile.json                            {v,name(1..32)}  optional local nickname (later)
 ```
 `PubkyRooms.Rooms.Paths.parse/1` → `{:room,id} | {:member,c,id} | {:message,c,id,msg_id} | {:reaction,…} | {:ban,id,z32} | :profile | :ignore` with strict segment regexes.

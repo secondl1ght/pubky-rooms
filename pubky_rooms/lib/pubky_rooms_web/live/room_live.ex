@@ -10,7 +10,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   """
   use PubkyRoomsWeb, :live_view
 
-  alias PubkyRooms.{Ids, Profiles, Rooms}
+  alias PubkyRooms.{Ids, Mutes, Profiles, Rooms}
   alias PubkyRooms.Rooms.{Ban, Directory, Message, Paths, Reaction, Room, RoomServer}
   alias PubkyRooms.Tags.Tag
   alias PubkyRoomsWeb.{Format, Linkify, Presence}
@@ -47,6 +47,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           tags: [],
           tag_form: to_form(%{"label" => ""}, as: :tag),
           muted: MapSet.new(),
+          app_muted: MapSet.new(),
           failed: %{},
           sent: %{},
           unreachable: [],
@@ -75,7 +76,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         Phoenix.PubSub.subscribe(PubkyRooms.PubSub, Rooms.typing_topic(ref))
         Directory.subscribe()
         Directory.refresh_nexus_tags(ref)
-        {:ok, socket |> attach() |> track_presence() |> load_tags()}
+        {:ok, socket |> load_mutes() |> attach() |> track_presence() |> load_tags()}
       else
         {:ok, socket}
       end
@@ -182,9 +183,19 @@ defmodule PubkyRoomsWeb.RoomLive do
     end
   end
 
-  # Session-local mute: hides an author's messages in this view only.
+  # Mutes hide an author's messages from this viewer (see `PubkyRooms.Mutes`).
   defp unmuted(%{assigns: %{muted: muted}}, msgs),
     do: Enum.reject(msgs, &MapSet.member?(muted, &1.author))
+
+  # The viewer's mute lists (Rooms + Pubky App) are read before the history
+  # is streamed and followed live, so a mute made on another device applies.
+  defp load_mutes(%{assigns: %{current_user: %{pubky: z32}}} = socket) do
+    Mutes.subscribe(z32)
+    %{own: own, app: app} = Mutes.of(z32)
+    assign(socket, muted: MapSet.union(own, app), app_muted: app)
+  end
+
+  defp load_mutes(socket), do: socket
 
   defp assign_room(socket, %{status: status, room: room, members: members} = snapshot) do
     user = socket.assigns.current_user
@@ -428,7 +439,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   # Moderation: the creator removes (bans) and restores members; anyone
-  # signed in can mute an author for themselves, in this tab only.
+  # signed in mutes an author for themselves (a marker on their homeserver).
   def handle_event("start_ban", %{"z32" => z32}, %{assigns: %{is_creator: true}} = socket) do
     {:noreply, assign(socket, banning: z32, ban_form: to_form(%{"reason" => ""}, as: :ban))}
   end
@@ -468,12 +479,33 @@ defmodule PubkyRoomsWeb.RoomLive do
      |> start_async(:unban, fn -> Rooms.unban(sid, creator, ref, z32) end)}
   end
 
-  def handle_event("mute", %{"z32" => z32}, %{assigns: %{current_user: %{}}} = socket) do
-    {:noreply, set_muted(socket, MapSet.put(socket.assigns.muted, z32))}
+  # Mutes apply at once and are written in the background; a failed write
+  # puts the previous state back.
+  def handle_event(
+        "mute",
+        %{"z32" => z32},
+        %{assigns: %{current_user: %{pubky: user}, sid: sid}} = socket
+      )
+      when z32 != user do
+    {:noreply,
+     socket
+     |> set_muted(MapSet.put(socket.assigns.muted, z32))
+     |> start_async({:mute, z32}, fn -> Mutes.mute(sid, user, z32) end)}
   end
 
-  def handle_event("unmute", %{"z32" => z32}, %{assigns: %{current_user: %{}}} = socket) do
-    {:noreply, set_muted(socket, MapSet.delete(socket.assigns.muted, z32))}
+  def handle_event(
+        "unmute",
+        %{"z32" => z32},
+        %{assigns: %{current_user: %{pubky: user}, sid: sid, app_muted: app_muted}} = socket
+      ) do
+    if MapSet.member?(app_muted, z32) do
+      {:noreply, put_flash(socket, :info, "You muted them in Pubky App; unmute them there.")}
+    else
+      {:noreply,
+       socket
+       |> set_muted(MapSet.delete(socket.assigns.muted, z32))
+       |> start_async({:unmute, z32}, fn -> Mutes.unmute(sid, user, z32) end)}
+    end
   end
 
   # Tags: any signed-in user toggles their own tag on the room (a chip they
@@ -723,6 +755,23 @@ defmodule PubkyRoomsWeb.RoomLive do
      |> put_flash(:error, "Not restored: " <> Rooms.explain(reason))}
   end
 
+  def handle_async({:mute, _z32}, {:ok, :ok}, socket), do: {:noreply, socket}
+  def handle_async({:unmute, _z32}, {:ok, :ok}, socket), do: {:noreply, socket}
+
+  def handle_async({:mute, z32}, {:ok, {:error, reason}}, socket) do
+    {:noreply,
+     socket
+     |> set_muted(MapSet.delete(socket.assigns.muted, z32))
+     |> put_flash(:error, "Not muted: " <> Rooms.explain(reason))}
+  end
+
+  def handle_async({:unmute, z32}, {:ok, {:error, reason}}, socket) do
+    {:noreply,
+     socket
+     |> set_muted(MapSet.put(socket.assigns.muted, z32))
+     |> put_flash(:error, "Not unmuted: " <> Rooms.explain(reason))}
+  end
+
   def handle_async(:join, {:ok, :ok}, socket) do
     {:noreply,
      socket
@@ -760,6 +809,17 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   def handle_info({:room_stats, ref, %{viewers: viewers}}, %{assigns: %{ref: ref}} = socket) do
     {:noreply, assign(socket, viewers: viewers)}
+  end
+
+  # The viewer's mute list changed (this tab, another tab or another device).
+  def handle_info({:mutes_updated, z32}, %{assigns: %{current_user: %{pubky: z32}}} = socket) do
+    %{own: own, app: app} = Mutes.of(z32)
+    muted = MapSet.union(own, app)
+    socket = assign(socket, app_muted: app)
+
+    if MapSet.equal?(muted, socket.assigns.muted),
+      do: {:noreply, socket},
+      else: {:noreply, set_muted(socket, muted)}
   end
 
   def handle_info({:directory, {:tags_updated, ref}}, %{assigns: %{ref: ref}} = socket),
@@ -1304,8 +1364,8 @@ defmodule PubkyRoomsWeb.RoomLive do
                   <span
                     :if={MapSet.member?(@muted, z32)}
                     class="tooltip text-muted-foreground"
-                    data-tip="Muted for you"
-                    aria-label="Muted for you"
+                    data-tip={mute_label(@app_muted, z32)}
+                    aria-label={mute_label(@app_muted, z32)}
                   >
                     <.icon name="lucide-volume-x" class="size-4" />
                   </span>
@@ -1313,6 +1373,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                     :if={@current_user && @current_user.pubky != z32}
                     z32={z32}
                     muted={MapSet.member?(@muted, z32)}
+                    app_muted={MapSet.member?(@app_muted, z32)}
                     can_ban={@is_creator and z32 != @creator}
                     busy={@joining}
                   />
@@ -1472,8 +1533,12 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   defp active_members(members, bans), do: Enum.reject(members, &Map.has_key?(bans, &1))
 
+  defp mute_label(app_muted, z32),
+    do: if(MapSet.member?(app_muted, z32), do: "Muted in Pubky App", else: "Muted for you")
+
   attr :z32, :string, required: true
   attr :muted, :boolean, required: true
+  attr :app_muted, :boolean, default: false, doc: "muted through Pubky App (read-only here)"
   attr :can_ban, :boolean, required: true
   attr :busy, :boolean, default: false
 
@@ -1482,12 +1547,13 @@ defmodule PubkyRoomsWeb.RoomLive do
     ~H"""
     <span class="flex shrink-0 items-center gap-0.5 sm:opacity-0 sm:group-hover/member:opacity-100 sm:group-focus-within/member:opacity-100">
       <button
+        :if={!@app_muted}
         type="button"
         phx-click={if @muted, do: "unmute", else: "mute"}
         phx-value-z32={@z32}
         class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
         aria-label={if @muted, do: "Unmute", else: "Mute for me"}
-        title={if @muted, do: "Unmute", else: "Mute for me (this tab only)"}
+        title={if @muted, do: "Unmute", else: "Mute for me (saved to your homeserver, all devices)"}
       >
         <.icon name={if @muted, do: "lucide-volume-2", else: "lucide-volume-x"} class="size-4" />
       </button>

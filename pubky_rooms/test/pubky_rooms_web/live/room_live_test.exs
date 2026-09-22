@@ -403,7 +403,8 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert wait_for(fn -> render(alice_view) end, &(&1 =~ "bob speaks"))
   end
 
-  test "muting hides an author's messages in this tab only", ctx do
+  test "muting hides an author's messages everywhere the viewer is signed in and is saved on their homeserver",
+       ctx do
     {bob_sid, bob} = Fixtures.login("bob")
     Rooms.join(bob_sid, bob, Room.ref(ctx.room))
     bob_conn = init_test_session(ctx.conn, Fixtures.cookie(bob_sid))
@@ -415,22 +416,64 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     {:ok, alice_view, _} = live(ctx.alice_conn, ctx.path)
     {:ok, other_tab, _} = live(ctx.alice_conn, ctx.path)
     wait_for(fn -> render(alice_view) end, &(&1 =~ "first from bob"))
+    wait_for(fn -> render(other_tab) end, &(&1 =~ "first from bob"))
 
     alice_view |> element("#member-#{bob} button[aria-label='Mute for me']") |> render_click()
     refute render(alice_view) =~ "first from bob"
     assert has_element?(alice_view, "#member-#{bob} button[aria-label=Unmute]")
 
+    # the marker lands on alice's homeserver and her other tab follows
+    render_async(alice_view)
+    assert wait_for(fn -> Fake.files(ctx.alice) end, &Map.has_key?(&1, Paths.mute(bob)))
+    assert wait_for(fn -> render(other_tab) end, &(not (&1 =~ "first from bob")))
+
     bob_view |> form("#composer", message: %{content: "second from bob"}) |> render_submit()
     render_async(bob_view)
-    assert wait_for(fn -> render(other_tab) end, &(&1 =~ "second from bob"))
+    assert wait_for(fn -> render(bob_view) end, &(&1 =~ "second from bob"))
     refute render(alice_view) =~ "second from bob"
+    refute render(other_tab) =~ "second from bob"
+
+    # a fresh visit reads the list from the homeserver before showing history
+    {:ok, fresh, _} = live(ctx.alice_conn, ctx.path)
+    wait_for(fn -> render(fresh) end, &(&1 =~ "member-#{bob}"))
+    refute render(fresh) =~ "first from bob"
+    assert render(fresh) =~ "Muted for you"
 
     alice_view |> element("#member-#{bob} button[aria-label=Unmute]") |> render_click()
-    html = render(alice_view)
+    render_async(alice_view)
+    html = wait_for(fn -> render(alice_view) end, &(&1 =~ "second from bob"))
     assert html =~ "first from bob"
-    assert html =~ "second from bob"
-    # nothing was written anywhere for a mute
-    refute Fake.files(ctx.alice) |> Map.keys() |> Enum.any?(&String.contains?(&1, "mute"))
+    assert wait_for(fn -> Fake.files(ctx.alice) end, &(not Map.has_key?(&1, Paths.mute(bob))))
+    assert wait_for(fn -> render(other_tab) end, &(&1 =~ "second from bob"))
+  end
+
+  test "mutes made in Pubky App are honored read-only", ctx do
+    {bob_sid, bob} = Fixtures.login("bob")
+    Rooms.join(bob_sid, bob, Room.ref(ctx.room))
+    bob_conn = init_test_session(ctx.conn, Fixtures.cookie(bob_sid))
+    {:ok, bob_view, _} = live(bob_conn, ctx.path)
+    bob_view |> form("#composer", message: %{content: "bob from the app"}) |> render_submit()
+    render_async(bob_view)
+
+    Fake.seed(ctx.alice, PubkyRooms.Mutes.app_mutes_dir() <> bob, ~s({"created_at":1}))
+
+    {:ok, alice_view, _} = live(ctx.alice_conn, ctx.path)
+    wait_for(fn -> render(alice_view) end, &(&1 =~ "member-#{bob}"))
+    html = render(alice_view)
+    refute html =~ "bob from the app"
+    assert html =~ "Muted in Pubky App"
+    refute has_element?(alice_view, "#member-#{bob} button[aria-label=Unmute]")
+    refute has_element?(alice_view, "#member-#{bob} button[aria-label='Mute for me']")
+
+    # nothing is written for a Pubky App mute; unmute is refused politely
+    render_click(alice_view, "unmute", %{"z32" => bob})
+    assert render(alice_view) =~ "unmute them there"
+
+    refute Fake.files(ctx.alice)
+           |> Map.keys()
+           |> Enum.any?(&String.starts_with?(&1, Paths.mutes_dir()))
+
+    refute render(alice_view) =~ "bob from the app"
   end
 
   test "the creator renames the room and can close it; others follow live", ctx do

@@ -7,6 +7,7 @@ defmodule PubkyRooms.Rooms.Paths do
       messages/<creator>/<room_id>/<msg_id>                  Message
       reactions/<creator>/<room_id>/<author>/<msg_id>/<key>  Reaction marker
       bans/<room_id>/<banned>                                Ban marker (creator only)
+      mutes/<muted>                                          Mute marker (the viewer's own list)
       tags/<hash_id>                                         PubkyAppTag (Nexus discovery)
       profile.json                                           local nickname
 
@@ -28,6 +29,7 @@ defmodule PubkyRooms.Rooms.Paths do
           | {:message, String.t(), String.t(), String.t()}
           | {:reaction, String.t(), String.t(), String.t(), String.t(), String.t()}
           | {:ban, String.t(), String.t()}
+          | {:mute, String.t()}
           | {:tag, String.t()}
           | :profile
           | :ignore
@@ -41,6 +43,7 @@ defmodule PubkyRooms.Rooms.Paths do
   def messages_dir({creator, room_id}), do: @ns <> "messages/#{creator}/#{room_id}/"
   def reactions_dir({creator, room_id}), do: @ns <> "reactions/#{creator}/#{room_id}/"
   def bans_dir(room_id), do: @ns <> "bans/#{room_id}/"
+  def mutes_dir, do: @ns <> "mutes/"
   def tags_dir, do: @ns <> "tags/"
 
   def room(room_id), do: @ns <> "rooms/#{room_id}"
@@ -51,6 +54,7 @@ defmodule PubkyRooms.Rooms.Paths do
     do: @ns <> "reactions/#{creator}/#{room_id}/#{author}/#{msg_id}/#{key}"
 
   def ban(room_id, banned), do: @ns <> "bans/#{room_id}/#{banned}"
+  def mute(muted), do: @ns <> "mutes/#{muted}"
   def tag(id), do: @ns <> "tags/#{id}"
   def profile, do: @ns <> "profile.json"
 
@@ -116,6 +120,9 @@ defmodule PubkyRooms.Rooms.Paths do
 
   defp classify(["bans", id, banned]),
     do: if(Ids.valid_id?(id) and Ids.valid_z32?(banned), do: {:ban, id, banned}, else: :ignore)
+
+  defp classify(["mutes", muted]),
+    do: if(Ids.valid_z32?(muted), do: {:mute, muted}, else: :ignore)
 
   defp classify(["tags", id]), do: if(Regex.match?(@tag_re, id), do: {:tag, id}, else: :ignore)
   defp classify(["profile.json"]), do: :profile

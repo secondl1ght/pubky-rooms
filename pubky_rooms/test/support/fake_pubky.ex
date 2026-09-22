@@ -202,6 +202,11 @@ defmodule PubkyRooms.Pubky.Fake do
   @doc "The pids of the fake streams that are alive."
   def live_streams, do: Agent.get(__MODULE__, & &1.streams) |> Enum.filter(&Process.alive?/1)
 
+  @doc "The live fake stream carrying `user`, or nil."
+  def stream_of(user), do: Enum.find(live_streams(), &carries?(&1, user))
+
+  defp carries?(pid, user), do: Agent.get(pid, &List.keymember?(&1, user, 0))
+
   # ── internals ──────────────────────────────────────────────────────────────
 
   defp session_user(sid) do

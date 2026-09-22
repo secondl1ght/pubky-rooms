@@ -104,14 +104,16 @@ defmodule PubkyRooms.Events.SubscriptionsTest do
     user = Fixtures.z32("crashy")
     Subscriptions.acquire([user], self())
     assert_receive {:subscription_status, ^user, :attached}, 2_000
-    [stream] = Fake.live_streams()
+    # streams of other tests' stragglers may coexist: follow this user's stream
+    stream = Fake.stream_of(user)
+    assert is_pid(stream)
 
     Process.exit(stream, :kill)
     assert_receive {:subscription_status, ^user, {:error, :killed}}, 2_000
     assert_receive {:subscription_status, ^user, :attached}, 2_000
-    [new_stream] = Fake.live_streams()
+    new_stream = Fake.stream_of(user)
+    assert is_pid(new_stream)
     assert new_stream != stream
-    assert user in Fake.stream_users()
     Subscriptions.release([user], self())
   end
 
