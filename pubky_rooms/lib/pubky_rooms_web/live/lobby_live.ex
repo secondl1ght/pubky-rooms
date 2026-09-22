@@ -359,12 +359,20 @@ defmodule PubkyRoomsWeb.LobbyLive do
               tags={@room_tags[Room.ref(room)] || []}
             />
           </div>
-          <p :if={@public == [] and @tag_filter} class="text-sm text-muted-foreground">
-            No public room is tagged "{@tag_filter}" yet.
-          </p>
-          <p :if={@public == [] and !@tag_filter} class="text-sm text-muted-foreground">
-            No rooms yet. Open the first one.
-          </p>
+          <.empty_state
+            :if={@public == [] and @tag_filter}
+            icon="lucide-tag"
+            title={"Nothing tagged #{@tag_filter}"}
+          >
+            No room carries this tag yet.
+          </.empty_state>
+          <.empty_state
+            :if={@public == [] and !@tag_filter}
+            icon="lucide-signpost"
+            title="No rooms yet"
+          >
+            Open the first one.
+          </.empty_state>
         </section>
 
         <.how_it_works class="mt-6 xl:hidden" />

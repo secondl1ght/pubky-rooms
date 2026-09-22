@@ -120,7 +120,7 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     {:ok, _view, html} = live(init_test_session(conn, Fixtures.cookie(sid)), ~p"/")
     assert html =~ "Your rooms"
     assert length(Regex.scan(~r/Busy room/, html)) == 1
-    assert html =~ "No rooms yet. Open the first one."
+    assert html =~ "No rooms yet"
   end
 
   test "rooms can be created with tags; the lobby lists popular tags and filters by one",
@@ -176,7 +176,7 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     assert render(lobby) =~ "Bitcoin devs"
 
     {:ok, _lobby, html} = live(build_conn(), ~p"/?tag=nothing-here")
-    assert html =~ "No public room is tagged"
+    assert html =~ "Nothing tagged"
     assert html =~ "nothing-here"
   end
 
