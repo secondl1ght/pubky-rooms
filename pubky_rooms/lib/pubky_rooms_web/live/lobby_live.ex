@@ -40,7 +40,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
   def handle_params(_params, _uri, %{assigns: %{live_action: :new, current_user: nil}} = socket) do
     {:noreply,
      socket
-     |> put_flash(:info, "Sign in to create a room.")
+     |> put_flash(:info, "Sign in to open a room.")
      |> redirect(to: ~p"/login?return_to=/rooms/new")}
   end
 
@@ -309,10 +309,10 @@ defmodule PubkyRoomsWeb.LobbyLive do
             icon="lucide-messages-square"
             title="No rooms yet"
           >
-            Create a room and share its link. Rooms live on your homeserver, so they are yours to keep.
+            Open a room and share its link. It is written to your homeserver, so it is yours to keep.
             <:actions>
               <.button variant="brand" patch={~p"/rooms/new"}>
-                <.icon name="lucide-plus" class="size-4" /> Create a room
+                <.icon name="lucide-plus" class="size-4" /> Open a room
               </.button>
             </:actions>
           </.empty_state>
@@ -322,8 +322,8 @@ defmodule PubkyRoomsWeb.LobbyLive do
               Live rooms.<br />Your <span class="text-brand">homeserver.</span>
             </.typography>
             <.typography size="md" class="max-w-xl text-muted-foreground">
-              Pubky Rooms are chat rooms where every message is a file on its author's own homeserver.
-              Sign in with Pubky Ring, create a room, and share the link. Nothing here is locked in.
+              Group chat where every message is yours to keep. Sign in with Pubky Ring, open a room,
+              share the link. Nothing here is locked in.
             </.typography>
             <div class="flex flex-wrap gap-3">
               <.button variant="brand" size="lg" navigate={~p"/login"}>
