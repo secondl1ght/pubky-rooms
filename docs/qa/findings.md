@@ -13,6 +13,7 @@ Seeded on 2026-09-21 from Claude's browser pass over the finish-phase work; the 
 
 ## Bugs
 - (none open)
+- Room page tab title seemed stuck on "Room · Pubky Rooms" in Claude's browser tabs while the room name rendered. LiveView applies `page_title` inside `requestAnimationFrame`, which never fires in a hidden tab (both automation tabs report `visibilityState: hidden`); the server diff carries the title (traced) and visible tabs update. Also, `Phoenix.LiveViewTest.page_title/1` ignores the title in the join payload, so tests must assert it after a later change. — not a bug
 
 ## Polish
 - Flash toasts never auto-dismiss: "Room created on your homeserver", "You joined the room", "The creator closed this room" stay until clicked or navigated away. Pubky App's toasts fade. Decision: success/info dismiss themselves after 5 s (`AutoDismiss` hook, paused while hovered or focused), errors stay until clicked. — fixed
