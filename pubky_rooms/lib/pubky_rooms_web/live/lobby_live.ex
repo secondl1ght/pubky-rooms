@@ -234,8 +234,8 @@ defmodule PubkyRoomsWeb.LobbyLive do
             <.sidebar_item patch={~p"/rooms/new"} icon="lucide-plus" active={@live_action == :new}>
               New room
             </.sidebar_item>
-            <.sidebar_item href="#public-rooms" icon="lucide-globe">
-              Public rooms
+            <.sidebar_item href="#discover" icon="lucide-compass">
+              Discover
             </.sidebar_item>
           </div>
           <div :if={@popular_tags != []} class="flex flex-col gap-2" id="popular-tags">
@@ -342,10 +342,10 @@ defmodule PubkyRoomsWeb.LobbyLive do
           </div>
         <% end %>
 
-        <section id="public-rooms" class="flex flex-col gap-3">
+        <section id="discover" class="flex flex-col gap-3">
           <div class="flex flex-wrap items-baseline justify-between gap-3">
             <.section_title>
-              Public rooms<span :if={@tag_filter} class="text-muted-foreground"> · {@tag_filter}</span>
+              Discover<span :if={@tag_filter} class="text-muted-foreground"> · {@tag_filter}</span>
             </.section_title>
             <span :if={!@tag_filter} class="text-xs text-muted-foreground">Most recent activity first</span>
             <.link
@@ -370,7 +370,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
             No public room is tagged "{@tag_filter}" yet.
           </p>
           <p :if={@public == [] and !@tag_filter} class="text-sm text-muted-foreground">
-            No public rooms known to this server yet. Rooms show up here as their creators and members sign in.
+            No rooms to discover on this server yet. They show up here as their creators and members sign in.
           </p>
         </section>
 

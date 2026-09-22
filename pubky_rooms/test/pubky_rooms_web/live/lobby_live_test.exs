@@ -80,7 +80,7 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     Directory.touch(Room.ref(busy), System.os_time(:millisecond) + 10_000)
 
     {:ok, view, html} = live(conn, ~p"/")
-    assert html =~ "Public rooms"
+    assert has_element?(view, "#discover h2", "Discover")
     assert html =~ "Busy room"
     assert html =~ "Quiet room"
     refute html =~ "Secret room"
@@ -103,7 +103,7 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     {:ok, _view, html} = live(init_test_session(conn, Fixtures.cookie(sid)), ~p"/")
     assert html =~ "Your rooms"
     assert length(Regex.scan(~r/Busy room/, html)) == 1
-    assert html =~ "No public rooms known to this server yet"
+    assert html =~ "No rooms to discover on this server yet"
   end
 
   test "rooms can be created with tags; the lobby lists popular tags and filters by one",

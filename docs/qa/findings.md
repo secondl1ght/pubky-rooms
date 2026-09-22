@@ -8,6 +8,7 @@ Seeded on 2026-09-21 from Claude's browser pass over the finish-phase work; the 
 - Header buttons: horizontal gap should match Pubky App (`gap-3`, 12 px); ours was 16 px. — fixed
 - Header avatar: drop the lime ring on hover (Pubky App's avatar has no hover state). The ring still marks the avatar as the active item on `/me`, like the other buttons' active background. — fixed
 - Lobby sidebar: "Your rooms" shown to signed-out visitors, who cannot have rooms. The item links to the lobby itself, so it is now "Lobby" with a door icon (sidebar, header tooltip, mobile tab, page title); the sidebar heading "Rooms" above the links is dropped. "Home" was tried first and discussed; "Lobby" fits the product better. The "Your rooms" section heading over created rooms stays. Test added. — fixed
+- Lobby: "Public rooms" (sidebar item and section) implies private rooms exist and repeats "rooms". Renamed to "Discover" with a compass icon; empty state "No rooms to discover on this server yet." Unlisted rooms still carry their badge. Tests updated. — fixed
 
 ## Bugs
 - (none open)
