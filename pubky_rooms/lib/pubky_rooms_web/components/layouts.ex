@@ -109,9 +109,9 @@ defmodule PubkyRoomsWeb.Layouts do
       aria-current={@active && "page"}
       data-tip={@label}
       class={[
-        "tooltip flex size-12 items-center justify-center rounded-full border shadow-xs backdrop-blur-md transition-colors",
-        "border-border text-secondary-foreground hover:text-foreground",
-        (@active && "bg-secondary") || "bg-white/5 hover:bg-white/10"
+        "tooltip flex size-12 items-center justify-center rounded-full border border-border shadow-xs backdrop-blur-md transition-all",
+        "text-secondary-foreground hover:bg-accent",
+        (@active && "bg-secondary") || "bg-white/5"
       ]}
     >
       <.icon name={@icon} class="size-6" />
