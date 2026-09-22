@@ -32,6 +32,14 @@ defmodule PubkyRoomsWeb.UI.Icon do
   @doc """
   The Pubky wordmark with the lime key, followed by a product name.
 
+  The product name is typeset to sit on the wordmark's own baseline. In the
+  36 px SVG the letters of "Pubky" have their baseline 29 px from the top and
+  an x-height of 14 px, which is Inter Tight Bold at 26 px. The text box is
+  bottom-aligned to the image with a line-height of 33 px (2.0625 rem): with
+  the font's ascent (0.969 em, 25 px) and descent (0.241 em, 6 px) the
+  browser puts the text baseline at 36 - 33 + (33 - 31) / 2 + 25 = 29 px.
+  Change the three numbers together if the logo SVG or the typeface changes.
+
       <.logo />                 # Pubky Rooms
       <.logo product={nil} />   # Pubky only
   """
@@ -41,9 +49,12 @@ defmodule PubkyRoomsWeb.UI.Icon do
 
   def logo(assigns) do
     ~H"""
-    <.link class={["inline-flex items-center gap-2 select-none", @class]} {@rest}>
+    <.link class={["inline-flex items-end gap-1 select-none", @class]} {@rest}>
       <img src={~p"/images/pubky-logo.svg"} alt="Pubky" width="109" height="36" class="h-9 w-auto" />
-      <span :if={@product} class="text-brand text-[1.75rem] font-bold leading-none tracking-tight">
+      <span
+        :if={@product}
+        class="text-brand text-[1.625rem] leading-[2.0625rem] font-bold tracking-tight"
+      >
         {@product}
       </span>
     </.link>
