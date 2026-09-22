@@ -95,6 +95,7 @@ Source of truth for scope: `docs/PLAN.md` + `docs/notes/rooms-app-design.md`. At
 | Room UI marker + notice for members whose *live stream* is unavailable (stream failures are retried but not yet shown; only history failures are) | M5 | done ✓ (`Subscriptions` broadcasts `{:subscription_status, z32, status}`; `RoomServer` tracks `live_unavailable`) |
 | `docs/operations.md` kept current with every limit/config change | every session | rule |
 | CSP + secure headers; CORS for the API | M7/M8 | open |
+| Deploy check: behind Fly's proxy the websocket peer is the proxy, so the sign-in limiter reads `fly-client-ip` from the connect headers (done); confirm on production that the header arrives and that `check_origin`/`url host` are set for the Fly hostname | M7 deploy | open |
 | `mix phx.gen.release --docker`, Fly deploy, `PUBKY_DATA_DIR`, secrets, mainnet test with real Ring | M7 | open |
 | PWA: manifest, minimal service worker, icons, theme color (push-ready) | M7 | open |
 | `PUBKY_SERVICE_CREDENTIAL` authenticated reads (operator: whitelist first, service account if bandwidth throttle bites) | after launch | deferred (2026-09-21): homeserver throttles only slow reads and the app degrades instead of failing; revisit if production shows it |

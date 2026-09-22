@@ -54,10 +54,10 @@ defmodule PubkyRoomsWeb.AuthLiveTest do
     assert wait_for(fn -> render(view) end, &(&1 =~ "different request"))
   end
 
-  test "sign-in starts are rate-limited per client", %{conn: conn} do
+  test "sign-in starts are rate-limited per client (20 per minute)", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/login")
 
-    for _ <- 1..9 do
+    for _ <- 1..19 do
       FakeGrantLogin.resolve({:error, :expired})
       wait_for(fn -> render(view) end, &(&1 =~ "This code expired"))
       view |> element("button", "New code") |> render_click()

@@ -100,7 +100,7 @@ Event handling: message PUT with pending hash match → `:confirmed` (no GET); e
 ETS `:rooms_directory {ref, %RoomSummary{ref, creator, room_id, name, topic, visibility, created_at, member_count, last_activity_at}}`, `:room_members` (bag), `:user_rooms` (bag `{z32, ref, :created | :joined}`), write-through to DETS `directory.dets`. Sources: `sync_user/1` (list `rooms/` + `members/` on the user's homeserver), `pubky:all` room/member events, RoomServer activity casts, and on mainnet Nexus `GET /v0/stream/resources?app=pubky-rooms&sorting=timeline|taggers_count`. Broadcasts `{:directory_updated, summary}` / `{:directory_removed, ref}` on `"directory"`.
 
 ## Moderation and limits
-Creator ban/unban via ban markers (RoomServer hides messages; banned user's composer disabled); local mute (session-local); content 2000 / topic 280 / name 64; per-sid limits: messages 5/5 s, reactions 20/10 s, rooms 5/h, joins 20/h; per-IP login starts 10/min; bootstrap concurrency 16; `max_members_subscribed` 5 000 per room with polling beyond it (see Implementation notes M5).
+Creator ban/unban via ban markers (RoomServer hides messages; banned user's composer disabled); local mute (session-local); content 2000 / topic 280 / name 64; per-sid limits: messages 5/5 s, reactions 20/10 s, rooms 5/h, joins 20/h; per-client sign-in starts 20/min (HMAC of the address, memory only); bootstrap concurrency 16; `max_members_subscribed` 5 000 per room with polling beyond it (see Implementation notes M5).
 
 ## PubSub topics
 | topic | payloads |

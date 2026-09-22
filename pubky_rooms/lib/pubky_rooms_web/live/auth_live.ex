@@ -32,8 +32,10 @@ defmodule PubkyRoomsWeb.AuthLive do
         error: nil,
         network: Pubky.Config.get().network,
         simulator_url: Application.get_env(:pubky_rooms, :simulator_url),
-        # connect info is only readable during mount; "New code" needs it later
-        peer_ip: peer_ip(socket)
+        # connect info is only readable during mount; "New code" needs it later.
+        # Only a keyed hash of the client address is kept, and only in memory
+        # for the rate-limit window (ADR 0006: no addresses stored or logged).
+        client_key: client_key(socket)
       )
 
     if connected?(socket), do: {:ok, start_flow(socket)}, else: {:ok, socket}
@@ -66,7 +68,7 @@ defmodule PubkyRoomsWeb.AuthLive do
   end
 
   defp start_flow(socket) do
-    case RateLimit.check({:login, socket.assigns.peer_ip}, 10, 60_000) do
+    case RateLimit.check({:login, socket.assigns.client_key}, 20, 60_000) do
       :ok ->
         login = grant_login()
         flow = login.start()
@@ -81,11 +83,26 @@ defmodule PubkyRoomsWeb.AuthLive do
     end
   end
 
-  defp peer_ip(socket) do
-    case get_connect_info(socket, :peer_data) do
-      %{address: address} -> address
-      _ -> :unknown
-    end
+  # Behind a proxy (Fly) the peer is the proxy: prefer the client header it
+  # sets, then fall back to the peer address. Hashed with the app secret so the
+  # address itself never sits in the rate-limit table.
+  defp client_key(socket) do
+    headers = get_connect_info(socket, :x_headers) || []
+
+    address =
+      case List.keyfind(headers, "fly-client-ip", 0) do
+        {_, ip} when is_binary(ip) and ip != "" ->
+          ip
+
+        _ ->
+          case get_connect_info(socket, :peer_data) do
+            %{address: address} -> :inet.ntoa(address) |> to_string()
+            _ -> "unknown"
+          end
+      end
+
+    secret = PubkyRoomsWeb.Endpoint.config(:secret_key_base)
+    :crypto.mac(:hmac, :sha256, secret, address) |> binary_part(0, 16)
   end
 
   # `<.link>` only accepts known schemes as strings; custom ones are passed as a tuple.
