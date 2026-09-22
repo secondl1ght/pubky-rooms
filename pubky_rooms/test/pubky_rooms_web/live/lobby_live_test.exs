@@ -16,8 +16,9 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     {:ok, view, html} = live(conn, ~p"/")
     assert html =~ "Sign in with Pubky Ring"
     refute has_element?(view, "#new-room")
-    # the house item is the lobby itself, never "your rooms" (a visitor has none)
-    assert has_element?(view, "a[href='/']", "Home")
+    # the first nav item is the lobby itself, never "your rooms" (a visitor has none)
+    assert has_element?(view, "a[href='/']", "Lobby")
+    assert page_title(view) =~ "Lobby"
     refute html =~ "Your rooms"
   end
 

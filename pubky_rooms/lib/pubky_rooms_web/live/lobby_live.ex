@@ -25,7 +25,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
     {:ok,
      socket
      |> assign(
-       page_title: "Rooms",
+       page_title: "Lobby",
        form: new_form(),
        creating: false,
        stats_topics: MapSet.new(),
@@ -228,9 +228,8 @@ defmodule PubkyRoomsWeb.LobbyLive do
       <.page>
         <:sidebar>
           <div class="flex flex-col gap-1">
-            <.section_title class="mb-2">Rooms</.section_title>
-            <.sidebar_item navigate={~p"/"} icon="lucide-house" active={@live_action == :index}>
-              Home
+            <.sidebar_item navigate={~p"/"} icon="lucide-door-open" active={@live_action == :index}>
+              Lobby
             </.sidebar_item>
             <.sidebar_item patch={~p"/rooms/new"} icon="lucide-plus" active={@live_action == :new}>
               New room

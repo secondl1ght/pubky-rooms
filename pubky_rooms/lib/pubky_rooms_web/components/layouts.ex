@@ -33,7 +33,12 @@ defmodule PubkyRoomsWeb.Layouts do
       <nav class="mx-auto flex h-24 max-w-(--container-max-width) items-center justify-between gap-6 px-6 xl:px-0">
         <.logo navigate={~p"/"} />
         <div class="flex items-center gap-3">
-          <.nav_button navigate={~p"/"} icon="lucide-house" label="Home" active={@active == :lobby} />
+          <.nav_button
+            navigate={~p"/"}
+            icon="lucide-door-open"
+            label="Lobby"
+            active={@active == :lobby}
+          />
           <.nav_button
             navigate={~p"/rooms/new"}
             icon="lucide-plus"
@@ -68,7 +73,7 @@ defmodule PubkyRoomsWeb.Layouts do
 
     <nav class="fixed bottom-0 z-40 w-full bg-linear-to-t from-background via-background/95 to-transparent px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 lg:hidden">
       <div class="mx-auto flex max-w-[380px] items-center justify-around sm:max-w-[600px]">
-        <.tab_item navigate={~p"/"} icon="lucide-house" label="Home" active={@active == :lobby} />
+        <.tab_item navigate={~p"/"} icon="lucide-door-open" label="Lobby" active={@active == :lobby} />
         <.tab_item
           navigate={~p"/rooms/new"}
           icon="lucide-plus"
