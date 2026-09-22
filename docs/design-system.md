@@ -38,7 +38,7 @@ https://pubky.app. Reference data: `docs/notes/pubky-app-design-system.md`, `doc
 | `<.live_dot class>` | the "n online" indicator: brand-lime dot with a slow outward ring (`--animate-live-ping`, still under reduced motion); decorative, always next to text |
 | `<.flash kind dismiss_after>`, `Layouts.flash_group` | bottom-right toasts (info/success/error); info and success dismiss themselves after 5 s (`AutoDismiss` hook, paused on hover/focus), errors stay |
 | `<.spinner>`, `<.skeleton>`, `<.empty_state icon title>` | feedback |
-| `<.typography size tag>` | xs/sm/md (500) · lg/xl/2xl (700); `<.section_title>` = 24px light grey |
+| `<.typography size tag>` | xs/sm/md (500) · lg/xl/2xl (700); `<.section_title>` = 24px light, foreground colour (supporting text under it is muted; pass `text-muted-foreground` to de-emphasise a group) |
 | `<.container>`, `<.page>` (slots sidebar/aside), `<.sidebar_item>` | 1200px container; sticky 180px sidebar ≥ lg; aside ≥ xl |
 | `Layouts.app current_user active back` | desktop header (logo, icon nav, avatar/sign-in), mobile header, mobile tab bar, flash |
 

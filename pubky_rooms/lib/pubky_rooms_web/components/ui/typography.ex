@@ -37,14 +37,19 @@ defmodule PubkyRoomsWeb.UI.Typography do
     """
   end
 
-  @doc "A light grey section title used above sidebar lists (24px, weight 300)."
+  @doc """
+  A section title: 24px, weight 300, in the foreground colour. Hierarchy comes
+  from colour as well as size: titles are white, the supporting text under
+  them is muted. Pass `text-muted-foreground` to de-emphasise a group (the
+  lobby's collapsed "Closed" archives do).
+  """
   attr :class, :any, default: nil
   attr :rest, :global
   slot :inner_block, required: true
 
   def section_title(assigns) do
     ~H"""
-    <h2 class={["text-2xl font-light text-muted-foreground", @class]} {@rest}>
+    <h2 class={["text-2xl font-light text-foreground", @class]} {@rest}>
       {render_slot(@inner_block)}
     </h2>
     """

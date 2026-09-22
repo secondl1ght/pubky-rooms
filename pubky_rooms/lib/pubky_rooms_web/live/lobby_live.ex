@@ -370,7 +370,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
             <.card_header>
               <.section_title class="text-xl">How it works</.section_title>
             </.card_header>
-            <.card_content class="flex flex-col gap-3 text-sm text-secondary-foreground">
+            <.card_content class="flex flex-col gap-3 text-sm text-muted-foreground">
               <p class="flex gap-2">
                 <.icon name="lucide-braces" class="mt-0.5 size-4 shrink-0 text-brand" />
                 <span>
