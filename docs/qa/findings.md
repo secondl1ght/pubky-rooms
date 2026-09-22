@@ -9,7 +9,7 @@ Seeded on 2026-09-21 from Claude's browser pass over the finish-phase work; the 
 - Header avatar: drop the lime ring on hover (Pubky App's avatar has no hover state). The ring still marks the avatar as the active item on `/me`, like the other buttons' active background. — fixed
 - Lobby sidebar: "Your rooms" shown to signed-out visitors, who cannot have rooms. The item links to the lobby itself, so it is now "Lobby" with a door icon (sidebar, header tooltip, mobile tab, page title); the sidebar heading "Rooms" above the links is dropped. "Home" was tried first and discussed; "Lobby" fits the product better. The "Your rooms" section heading over created rooms stays. Test added. — fixed
 - Lobby: "Public rooms" (sidebar item and section) implies private rooms exist and repeats "rooms". Renamed to "Directory" with a signpost icon (the lobby's room list; "Discover" + compass was tried and felt generic and off-theme; "Concierge" kept for a future search/suggestions feature); empty state "No rooms in the directory yet." Unlisted rooms still carry their badge. Tests updated. — fixed
-- "New room" → "Start a room" everywhere it is a call to action (sidebar, header tooltip, mobile tab, FAB, dialog title; submit button "Start room"); "Open room" was rejected because rooms already have an open/closed state. — fixed
+- "New room" → "Open a room" everywhere it is a call to action (sidebar, header tooltip, mobile tab, FAB, dialog title; submit "Open room"; toast "Room opened. It lives on your homeserver."). "Start a room" was tried first; "open" lines up with the existing close/reopen vocabulary. — fixed
 
 ## Bugs
 - (none open)

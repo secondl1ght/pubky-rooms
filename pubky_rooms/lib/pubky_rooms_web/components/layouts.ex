@@ -42,7 +42,7 @@ defmodule PubkyRoomsWeb.Layouts do
           <.nav_button
             navigate={~p"/rooms/new"}
             icon="lucide-plus"
-            label="Start a room"
+            label="Open a room"
             active={@active == :new}
           />
           <.user_menu current_user={@current_user} active={@active == :profile} />
@@ -77,7 +77,7 @@ defmodule PubkyRoomsWeb.Layouts do
         <.tab_item
           navigate={~p"/rooms/new"}
           icon="lucide-plus"
-          label="Start a room"
+          label="Open a room"
           active={@active == :new}
         />
         <.tab_item
