@@ -1,7 +1,7 @@
 defmodule PubkyRooms.Events.SubscriptionsTest do
   use PubkyRooms.RoomsCase, async: false
 
-  alias PubkyRooms.Events.Subscriptions
+  alias PubkyRooms.Events.{Cursors, Subscriptions}
   alias PubkyRooms.Fixtures
   alias PubkyRooms.Pubky.Fake
 
@@ -121,7 +121,7 @@ defmodule PubkyRooms.Events.SubscriptionsTest do
     Fake.write_as(user, "/pub/pubky-rooms/profile.json", ~s({"v":1,"name":"x"}))
     # the write advanced the fake cursor; the captured value stays what it was
     assert {:ok, captured} = Subscriptions.capture_cursor(user)
-    assert captured == PubkyRooms.Events.Cursors.get(user)
+    assert captured == Cursors.get(user)
   end
 
   defp wait_until(fun, tries \\ 100) do

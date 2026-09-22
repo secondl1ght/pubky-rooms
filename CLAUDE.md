@@ -33,7 +33,7 @@ pubky_rooms/   Phoenix 1.8 LiveView app, --no-ecto ({:pubky, path: "../pubky_ex"
 - Every homeserver write is validated with the same limits the reader enforces. Author identity always comes from the path/event owner, never from JSON bodies.
 - Telemetry/logging (ADR 0006): aggregate counts and durations only, no identifiers in metric tags, nothing exported to third parties, no client-side analytics; logs at info+ carry no public keys, IPs or message content (truncated pubkeys at debug only).
 - Scale story: cost is per room (bootstrap lists every member once and fetches only the newest `bootstrap_messages`), never per viewer; homeservers throttle anonymous reads per IP by bandwidth and may add 429 count limits — honor `Retry-After`, cap concurrency per fetch, keep rooms warm.
-- Tests must stay green at every commit: `mix test` in each project. Testnet integration tests are tagged `:testnet` and excluded by default.
+- Tests must stay green at every commit: `mix test` in each project. Testnet integration tests are tagged `:testnet` and excluded by default. CI (`.github/workflows/ci.yml`) runs format, credo strict, warnings-as-errors, tests and dialyzer for both projects on every push. Test doubles live in `test/support`: `Pubky.Fake` (homeserver), `Auth.FakeGrantLogin` (Ring flow, `config :grant_login`), `Req.Test` for Nexus.
 - Formatting/lint: `mix format`, `mix credo --strict`. Document public functions with `@doc`; every module has a `@moduledoc` explaining its role.
 - Commit per completed step with descriptive messages. Never commit secrets, `.sess` files, or anything from `~/CODE/keys`.
 
@@ -44,7 +44,9 @@ pubky_rooms/   Phoenix 1.8 LiveView app, --no-ecto ({:pubky, path: "../pubky_ex"
 cd pubky_ex && mix deps.get && mix test                 # library
 cd pubky_rooms && mix setup && mix phx.server           # app at http://localhost:4000 (styleguide: /dev/ui)
 cd pubky_rooms && mix test && mix credo --strict        # app tests + lint
+cd pubky_rooms && mix test --include testnet test/integration   # whole app against pubky-docker (real homeserver, SSE, sessions)
 PUBKY_TESTNET=1 mix test --include testnet              # pubky_ex integration tests against pubky-docker
+mix test --cover                                        # coverage (app ~83 %, library ~82 %); MIX_ENV=dev mix dialyzer (clean)
 # in-app browser dev servers: .claude/launch.json (gitignored) → "pubky-rooms" (4000), "ring-simulator" (5173)
 ```
 
