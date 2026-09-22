@@ -48,6 +48,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           tag_form: to_form(%{"label" => ""}, as: :tag),
           muted: MapSet.new(),
           app_muted: MapSet.new(),
+          members_open: false,
           failed: %{},
           sent: %{},
           unreachable: [],
@@ -437,6 +438,13 @@ defmodule PubkyRoomsWeb.RoomLive do
      |> assign(joining: true)
      |> start_async(:leave, fn -> Rooms.leave(sid, user.pubky, ref) end)}
   end
+
+  # Below the `xl` breakpoint the members list lives in a sheet.
+  def handle_event("open_members", _params, socket),
+    do: {:noreply, assign(socket, members_open: true)}
+
+  def handle_event("close_members", _params, socket),
+    do: {:noreply, assign(socket, members_open: false)}
 
   # Moderation: the creator removes (bans) and restores members; anyone
   # signed in mutes an author for themselves (a marker on their homeserver).
@@ -1306,137 +1314,60 @@ defmodule PubkyRoomsWeb.RoomLive do
           </div>
 
           <aside class="hidden w-64 shrink-0 flex-col gap-4 xl:flex">
-            <.card class="gap-3 py-5">
-              <.card_header>
-                <.section_title class="text-xl">Members · {length(@members)}</.section_title>
-                <p class="text-xs text-muted-foreground">
-                  <span class="mr-1 inline-block size-2 rounded-full bg-[#00FF5D] align-middle"></span>
-                  {map_size(@online)} online<span
-                    :if={Rooms.anonymous_count(@viewers, @online) > 0}
-                    title="Viewers who are not signed in"
-                  > · {Rooms.anonymous_count(@viewers, @online)} anonymous</span>
-                </p>
-              </.card_header>
-              <.card_content class="flex flex-col gap-3">
-                <div
-                  :for={z32 <- sort_members(active_members(@members, @bans), @online, @profiles)}
-                  class="group/member flex items-center gap-3"
-                  id={"member-#{z32}"}
-                >
-                  <.avatar
-                    src={profile_of(@profiles, z32).avatar_url}
-                    name={profile_of(@profiles, z32).name}
-                    pubky={z32}
-                    size="md"
-                    online={Map.has_key?(@online, z32)}
-                  />
-                  <span class={[
-                    "min-w-0 flex-1 truncate text-sm font-semibold",
-                    !Map.has_key?(@online, z32) && "text-muted-foreground"
-                  ]}>
-                    {profile_of(@profiles, z32).name}
-                  </span>
-                  <.badge :if={z32 == @creator} variant="brand-soft">creator</.badge>
-                  <span
-                    :if={z32 in @unreachable}
-                    class="tooltip text-destructive"
-                    data-tip="Homeserver unreachable"
-                    aria-label="Homeserver unreachable"
-                  >
-                    <.icon name="lucide-cloud-off" class="size-4" />
-                  </span>
-                  <span
-                    :if={z32 in @live_unavailable and z32 not in @unreachable}
-                    class="tooltip text-muted-foreground"
-                    data-tip="Live updates unavailable, retrying"
-                    aria-label="Live updates unavailable, retrying"
-                  >
-                    <.icon name="lucide-wifi-off" class="size-4" />
-                  </span>
-                  <span
-                    :if={z32 in @polled}
-                    class="tooltip text-muted-foreground"
-                    data-tip="Checked once a minute (over the live budget)"
-                    aria-label="Checked once a minute (over the live budget)"
-                  >
-                    <.icon name="lucide-timer" class="size-4" />
-                  </span>
-                  <span
-                    :if={MapSet.member?(@muted, z32)}
-                    class="tooltip text-muted-foreground"
-                    data-tip={mute_label(@app_muted, z32)}
-                    aria-label={mute_label(@app_muted, z32)}
-                  >
-                    <.icon name="lucide-volume-x" class="size-4" />
-                  </span>
-                  <.member_actions
-                    :if={@current_user && @current_user.pubky != z32}
-                    z32={z32}
-                    muted={MapSet.member?(@muted, z32)}
-                    app_muted={MapSet.member?(@app_muted, z32)}
-                    can_ban={@is_creator and z32 != @creator}
-                    busy={@joining}
-                  />
-                </div>
-              </.card_content>
-              <.card_content
-                :if={@is_creator and @bans != %{}}
-                class="flex flex-col gap-3 border-t border-border/60 pt-4"
-              >
-                <p class="text-xs font-semibold text-muted-foreground">Removed by you</p>
-                <div
-                  :for={{z32, reason} <- Enum.sort(@bans)}
-                  class="flex items-center gap-3"
-                  id={"banned-#{z32}"}
-                >
-                  <.avatar
-                    src={profile_of(@profiles, z32).avatar_url}
-                    name={profile_of(@profiles, z32).name}
-                    pubky={z32}
-                    size="md"
-                    class="opacity-60"
-                  />
-                  <span class="flex min-w-0 flex-1 flex-col">
-                    <span class="truncate text-sm font-semibold text-muted-foreground">
-                      {profile_of(@profiles, z32).name}
-                    </span>
-                    <span :if={reason} class="truncate text-xs text-muted-foreground">{reason}</span>
-                  </span>
-                  <.button
-                    variant="ghost"
-                    size="sm"
-                    phx-click="unban"
-                    phx-value-z32={z32}
-                    disabled={@joining}
-                  >
-                    Restore
-                  </.button>
-                </div>
-              </.card_content>
-            </.card>
-            <.card :if={visitors(@online, @members) != []} class="gap-3 py-5">
-              <.card_header>
-                <.section_title class="text-xl">Also here</.section_title>
-                <p class="text-xs text-muted-foreground">Signed in, not (yet) members</p>
-              </.card_header>
-              <.card_content class="flex flex-col gap-3">
-                <div :for={z32 <- visitors(@online, @members)} class="flex items-center gap-3">
-                  <.avatar
-                    src={profile_of(@profiles, z32).avatar_url}
-                    name={profile_of(@profiles, z32).name}
-                    pubky={z32}
-                    size="md"
-                    online
-                  />
-                  <span class="min-w-0 flex-1 truncate text-sm font-semibold">
-                    {profile_of(@profiles, z32).name}
-                  </span>
-                </div>
-              </.card_content>
-            </.card>
+            <.members_panel
+              id_prefix=""
+              members={@members}
+              bans={@bans}
+              online={@online}
+              viewers={@viewers}
+              profiles={@profiles}
+              creator={@creator}
+              current_user={@current_user}
+              is_creator={@is_creator}
+              unreachable={@unreachable}
+              live_unavailable={@live_unavailable}
+              polled={@polled}
+              muted={@muted}
+              app_muted={@app_muted}
+              busy={@joining}
+            />
           </aside>
         </div>
       </.container>
+
+      <.dialog
+        :if={@members_open}
+        id="members-sheet"
+        show
+        on_cancel={JS.push("close_members")}
+        class="xl:hidden"
+      >
+        <:title>Members · {length(@members)}</:title>
+        <:description>
+          {map_size(@online)} online<span :if={Rooms.anonymous_count(@viewers, @online) > 0}> · {Rooms.anonymous_count(
+            @viewers,
+            @online
+          )} anonymous</span>
+        </:description>
+        <.members_panel
+          id_prefix="sheet-"
+          heading={false}
+          members={@members}
+          bans={@bans}
+          online={@online}
+          viewers={@viewers}
+          profiles={@profiles}
+          creator={@creator}
+          current_user={@current_user}
+          is_creator={@is_creator}
+          unreachable={@unreachable}
+          live_unavailable={@live_unavailable}
+          polled={@polled}
+          muted={@muted}
+          app_muted={@app_muted}
+          busy={@joining}
+        />
+      </.dialog>
 
       <.dialog
         :if={@live_action == :settings and @settings_form}
@@ -1532,6 +1463,162 @@ defmodule PubkyRoomsWeb.RoomLive do
   defp profile_of(profiles, z32), do: Map.get(profiles, z32) || Profiles.fallback(z32)
 
   defp active_members(members, bans), do: Enum.reject(members, &Map.has_key?(bans, &1))
+
+  attr :id_prefix, :string,
+    required: true,
+    doc: "keeps row ids unique when the panel is shown twice"
+
+  attr :heading, :boolean, default: true
+  attr :members, :list, required: true
+  attr :bans, :map, required: true
+  attr :online, :map, required: true
+  attr :viewers, :integer, required: true
+  attr :profiles, :map, required: true
+  attr :creator, :string, required: true
+  attr :current_user, :any, required: true
+  attr :is_creator, :boolean, required: true
+  attr :unreachable, :list, required: true
+  attr :live_unavailable, :list, required: true
+  attr :polled, :list, required: true
+  attr :muted, MapSet, required: true
+  attr :app_muted, MapSet, required: true
+  attr :busy, :boolean, default: false
+
+  # The members list with per-member status markers and actions, the
+  # creator's "Removed by you" list and the signed-in visitors. Shown in the
+  # sidebar from `xl` and inside `#members-sheet` on narrower screens.
+  defp members_panel(assigns) do
+    ~H"""
+    <.card class="gap-3 py-5">
+      <.card_header :if={@heading}>
+        <.section_title class="text-xl">Members · {length(@members)}</.section_title>
+        <p class="text-xs text-muted-foreground">
+          <span class="mr-1 inline-block size-2 rounded-full bg-[#00FF5D] align-middle"></span>
+          {map_size(@online)} online<span
+            :if={Rooms.anonymous_count(@viewers, @online) > 0}
+            title="Viewers who are not signed in"
+          > · {Rooms.anonymous_count(@viewers, @online)} anonymous</span>
+        </p>
+      </.card_header>
+      <.card_content class="flex flex-col gap-3">
+        <div
+          :for={z32 <- sort_members(active_members(@members, @bans), @online, @profiles)}
+          class="group/member flex items-center gap-3"
+          id={"#{@id_prefix}member-#{z32}"}
+        >
+          <.avatar
+            src={profile_of(@profiles, z32).avatar_url}
+            name={profile_of(@profiles, z32).name}
+            pubky={z32}
+            size="md"
+            online={Map.has_key?(@online, z32)}
+          />
+          <span class={[
+            "min-w-0 flex-1 truncate text-sm font-semibold",
+            !Map.has_key?(@online, z32) && "text-muted-foreground"
+          ]}>
+            {profile_of(@profiles, z32).name}
+          </span>
+          <.badge :if={z32 == @creator} variant="brand-soft">creator</.badge>
+          <span
+            :if={z32 in @unreachable}
+            class="tooltip text-destructive"
+            data-tip="Homeserver unreachable"
+            aria-label="Homeserver unreachable"
+          >
+            <.icon name="lucide-cloud-off" class="size-4" />
+          </span>
+          <span
+            :if={z32 in @live_unavailable and z32 not in @unreachable}
+            class="tooltip text-muted-foreground"
+            data-tip="Live updates unavailable, retrying"
+            aria-label="Live updates unavailable, retrying"
+          >
+            <.icon name="lucide-wifi-off" class="size-4" />
+          </span>
+          <span
+            :if={z32 in @polled}
+            class="tooltip text-muted-foreground"
+            data-tip="Checked once a minute (over the live budget)"
+            aria-label="Checked once a minute (over the live budget)"
+          >
+            <.icon name="lucide-timer" class="size-4" />
+          </span>
+          <span
+            :if={MapSet.member?(@muted, z32)}
+            class="tooltip text-muted-foreground"
+            data-tip={mute_label(@app_muted, z32)}
+            aria-label={mute_label(@app_muted, z32)}
+          >
+            <.icon name="lucide-volume-x" class="size-4" />
+          </span>
+          <.member_actions
+            :if={@current_user && @current_user.pubky != z32}
+            z32={z32}
+            muted={MapSet.member?(@muted, z32)}
+            app_muted={MapSet.member?(@app_muted, z32)}
+            can_ban={@is_creator and z32 != @creator}
+            busy={@busy}
+          />
+        </div>
+      </.card_content>
+      <.card_content
+        :if={@is_creator and @bans != %{}}
+        class="flex flex-col gap-3 border-t border-border/60 pt-4"
+      >
+        <p class="text-xs font-semibold text-muted-foreground">Removed by you</p>
+        <div
+          :for={{z32, reason} <- Enum.sort(@bans)}
+          class="flex items-center gap-3"
+          id={"#{@id_prefix}banned-#{z32}"}
+        >
+          <.avatar
+            src={profile_of(@profiles, z32).avatar_url}
+            name={profile_of(@profiles, z32).name}
+            pubky={z32}
+            size="md"
+            class="opacity-60"
+          />
+          <span class="flex min-w-0 flex-1 flex-col">
+            <span class="truncate text-sm font-semibold text-muted-foreground">
+              {profile_of(@profiles, z32).name}
+            </span>
+            <span :if={reason} class="truncate text-xs text-muted-foreground">{reason}</span>
+          </span>
+          <.button
+            variant="ghost"
+            size="sm"
+            phx-click="unban"
+            phx-value-z32={z32}
+            disabled={@busy}
+          >
+            Restore
+          </.button>
+        </div>
+      </.card_content>
+    </.card>
+    <.card :if={visitors(@online, @members) != []} class="gap-3 py-5">
+      <.card_header>
+        <.section_title class="text-xl">Also here</.section_title>
+        <p class="text-xs text-muted-foreground">Signed in, not (yet) members</p>
+      </.card_header>
+      <.card_content class="flex flex-col gap-3">
+        <div :for={z32 <- visitors(@online, @members)} class="flex items-center gap-3">
+          <.avatar
+            src={profile_of(@profiles, z32).avatar_url}
+            name={profile_of(@profiles, z32).name}
+            pubky={z32}
+            size="md"
+            online
+          />
+          <span class="min-w-0 flex-1 truncate text-sm font-semibold">
+            {profile_of(@profiles, z32).name}
+          </span>
+        </div>
+      </.card_content>
+    </.card>
+    """
+  end
 
   defp mute_label(app_muted, z32),
     do: if(MapSet.member?(app_muted, z32), do: "Muted in Pubky App", else: "Muted for you")
@@ -1673,8 +1760,18 @@ defmodule PubkyRoomsWeb.RoomLive do
         </.badge>
       </div>
       <div class="flex shrink-0 items-center gap-2">
+        <button
+          type="button"
+          id="members-button"
+          phx-click="open_members"
+          class="flex cursor-pointer items-center gap-1 rounded-full px-2 py-1 text-xs text-muted-foreground hover:bg-white/5 hover:text-foreground xl:hidden"
+          title="Members"
+          aria-label="Show members"
+        >
+          <.icon name="lucide-users" class="size-3.5" /> {length(@members)}
+        </button>
         <span
-          class="hidden items-center gap-1 text-xs text-muted-foreground sm:flex"
+          class="hidden items-center gap-1 text-xs text-muted-foreground xl:flex"
           title="Members"
         >
           <.icon name="lucide-users" class="size-3.5" /> {length(@members)}

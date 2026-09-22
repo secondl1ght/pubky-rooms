@@ -447,6 +447,44 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert wait_for(fn -> render(other_tab) end, &(&1 =~ "second from bob"))
   end
 
+  test "below xl the members list opens as a sheet with the same actions", ctx do
+    {bob_sid, bob} = Fixtures.login("bob")
+    Rooms.join(bob_sid, bob, Room.ref(ctx.room))
+    {:ok, bob_view, _} = live(init_test_session(ctx.conn, Fixtures.cookie(bob_sid)), ctx.path)
+    bob_view |> form("#composer", message: %{content: "sheet me"}) |> render_submit()
+    render_async(bob_view)
+
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    wait_for(fn -> render(view) end, &(&1 =~ "sheet me"))
+    assert has_element?(view, "#members-button", "2")
+    refute has_element?(view, "#members-sheet")
+
+    view |> element("#members-button") |> render_click()
+    assert has_element?(view, "#members-sheet")
+    assert has_element?(view, "#members-sheet h2", "Members · 2")
+    assert has_element?(view, "#sheet-member-#{bob}")
+    # the sidebar rows keep their ids; nothing is duplicated
+    assert has_element?(view, "#member-#{bob}")
+
+    view |> element("#sheet-member-#{bob} button[aria-label='Mute for me']") |> render_click()
+    refute render(view) =~ "sheet me"
+    assert has_element?(view, "#sheet-member-#{bob} button[aria-label=Unmute]")
+    assert has_element?(view, "#member-#{bob} button[aria-label=Unmute]")
+
+    # the creator can remove from the sheet too
+    assert has_element?(view, "#sheet-member-#{bob} button[aria-label='Remove from room']")
+
+    render_click(view, "close_members")
+    refute has_element?(view, "#members-sheet")
+
+    # anonymous readers can open it as well (members are public); no actions
+    {:ok, anon, _} = live(ctx.conn, ctx.path)
+    wait_for(fn -> render(anon) end, &(&1 =~ "sheet me"))
+    anon |> element("#members-button") |> render_click()
+    assert has_element?(anon, "#sheet-member-#{bob}")
+    refute has_element?(anon, "#sheet-member-#{bob} button")
+  end
+
   test "mutes made in Pubky App are honored read-only", ctx do
     {bob_sid, bob} = Fixtures.login("bob")
     Rooms.join(bob_sid, bob, Room.ref(ctx.room))
