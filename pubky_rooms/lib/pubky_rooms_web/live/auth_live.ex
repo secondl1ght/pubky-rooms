@@ -17,6 +17,9 @@ defmodule PubkyRoomsWeb.AuthLive do
 
   @approval_timeout 180_000
 
+  # `config :pubky_rooms, :grant_login` swaps in a test double for the Ring flow.
+  defp grant_login, do: Application.get_env(:pubky_rooms, :grant_login, GrantLogin)
+
   @impl true
   def mount(params, _session, socket) do
     socket =
@@ -28,7 +31,9 @@ defmodule PubkyRoomsWeb.AuthLive do
         qr_svg: nil,
         error: nil,
         network: Pubky.Config.get().network,
-        simulator_url: Application.get_env(:pubky_rooms, :simulator_url)
+        simulator_url: Application.get_env(:pubky_rooms, :simulator_url),
+        # connect info is only readable during mount; "New code" needs it later
+        peer_ip: peer_ip(socket)
       )
 
     if connected?(socket), do: {:ok, start_flow(socket)}, else: {:ok, socket}
@@ -61,14 +66,15 @@ defmodule PubkyRoomsWeb.AuthLive do
   end
 
   defp start_flow(socket) do
-    case RateLimit.check({:login, peer_ip(socket)}, 10, 60_000) do
+    case RateLimit.check({:login, socket.assigns.peer_ip}, 10, 60_000) do
       :ok ->
-        flow = GrantLogin.start()
-        url = GrantLogin.authorization_url(flow)
+        login = grant_login()
+        flow = login.start()
+        url = login.authorization_url(flow)
 
         socket
         |> assign(state: :waiting, auth_url: url, qr_svg: qr_svg(url), error: nil)
-        |> start_async(:await, fn -> GrantLogin.await(flow, @approval_timeout) end)
+        |> start_async(:await, fn -> login.await(flow, @approval_timeout) end)
 
       {:error, {:rate_limited, _}} ->
         assign(socket, state: :error, error: "Too many sign-in attempts. Please wait a minute.")

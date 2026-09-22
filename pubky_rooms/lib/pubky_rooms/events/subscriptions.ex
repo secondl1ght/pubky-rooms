@@ -27,8 +27,16 @@ defmodule PubkyRooms.Events.Subscriptions do
   alias PubkyRooms.Rooms.Paths
 
   @max_per_stream 50
-  @detach_grace 60_000
-  @retry_delay 30_000
+  @default_detach_grace 60_000
+  @default_retry_delay 30_000
+
+  # A user with no owners is dropped after this grace (a reload re-acquires in time).
+  defp detach_grace,
+    do: Application.get_env(:pubky_rooms, :subscription_detach_grace_ms, @default_detach_grace)
+
+  # A user whose stream failed is retried after this delay.
+  defp retry_delay,
+    do: Application.get_env(:pubky_rooms, :subscription_retry_ms, @default_retry_delay)
 
   defmodule User do
     @moduledoc false
@@ -237,7 +245,10 @@ defmodule PubkyRooms.Events.Subscriptions do
 
         entry =
           if MapSet.size(owners) == 0 and is_nil(entry.timer),
-            do: %{entry | timer: Process.send_after(self(), {:maybe_detach, user}, @detach_grace)},
+            do: %{
+              entry
+              | timer: Process.send_after(self(), {:maybe_detach, user}, detach_grace())
+            },
             else: entry
 
         put_in(state.users[user], entry)
@@ -309,7 +320,7 @@ defmodule PubkyRooms.Events.Subscriptions do
 
     Logger.warning("a member's homeserver events are unavailable (#{inspect(reason)}); retrying")
 
-    Process.send_after(self(), {:retry, user}, @retry_delay)
+    Process.send_after(self(), {:retry, user}, retry_delay())
     put_in(state.users[user], set_status(user, entry, {:error, reason}))
   end
 
@@ -364,7 +375,7 @@ defmodule PubkyRooms.Events.Subscriptions do
           users = MapSet.delete(stream.users, user)
 
           if MapSet.size(users) == 0,
-            do: Process.send_after(self(), {:maybe_stop_stream, key}, @detach_grace)
+            do: Process.send_after(self(), {:maybe_stop_stream, key}, detach_grace())
 
           put_in(state.streams[key], %{stream | users: users})
 
@@ -387,7 +398,7 @@ defmodule PubkyRooms.Events.Subscriptions do
             users
 
           entry ->
-            Process.send_after(self(), {:retry, user}, @retry_delay)
+            Process.send_after(self(), {:retry, user}, retry_delay())
             entry = set_status(user, entry, {:error, reason})
             Map.put(users, user, %{entry | stream: nil})
         end

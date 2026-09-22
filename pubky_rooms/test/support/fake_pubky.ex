@@ -26,8 +26,8 @@ defmodule PubkyRooms.Pubky.Fake do
 
   defp initial, do: %{files: %{}, cursor: 0, failures: %{}, streams: []}
 
-  @doc "Clears all files and counters."
-  def reset, do: Agent.update(__MODULE__, fn _ -> initial() end)
+  @doc "Clears all files and counters (live streams are kept: `Subscriptions` still holds them)."
+  def reset, do: Agent.update(__MODULE__, fn s -> %{initial() | streams: s.streams} end)
 
   @doc "Writes a file directly (no session, no event), e.g. to seed history."
   def seed(user, path, body),
@@ -46,6 +46,10 @@ defmodule PubkyRooms.Pubky.Fake do
   @doc "Makes the next file read for `user` fail with `reason`."
   def fail_get(user, reason),
     do: Agent.update(__MODULE__, &put_in(&1, [:failures, {:get, user}], reason))
+
+  @doc "Makes the next homeserver resolution for `user` fail with `reason`."
+  def fail_resolve(user, reason),
+    do: Agent.update(__MODULE__, &put_in(&1, [:failures, {:resolve, user}], reason))
 
   @doc "Makes the next directory listing for `user` fail with `reason`."
   def fail_list(user, reason),
@@ -160,7 +164,9 @@ defmodule PubkyRooms.Pubky.Fake do
   end
 
   @impl true
-  def homeserver_of(_user), do: {:ok, @homeserver}
+  def homeserver_of(user) do
+    with :ok <- maybe_fail({:resolve, user}), do: {:ok, @homeserver}
+  end
 
   @impl true
   def public_url(user, path),
@@ -168,7 +174,7 @@ defmodule PubkyRooms.Pubky.Fake do
 
   @impl true
   def start_stream(opts) do
-    {:ok, pid} = Agent.start_link(fn -> Keyword.get(opts, :users, []) end)
+    {:ok, pid} = Agent.start(fn -> Keyword.get(opts, :users, []) end)
     Agent.update(__MODULE__, &%{&1 | streams: [pid | &1.streams]})
     {:ok, pid}
   end
@@ -185,10 +191,12 @@ defmodule PubkyRooms.Pubky.Fake do
 
   @doc "Users currently attached to fake streams."
   def stream_users do
-    Agent.get(__MODULE__, & &1.streams)
-    |> Enum.filter(&Process.alive?/1)
+    live_streams()
     |> Enum.flat_map(&Agent.get(&1, fn users -> Enum.map(users, fn {u, _} -> u end) end))
   end
+
+  @doc "The pids of the fake streams that are alive."
+  def live_streams, do: Agent.get(__MODULE__, & &1.streams) |> Enum.filter(&Process.alive?/1)
 
   # ── internals ──────────────────────────────────────────────────────────────
 

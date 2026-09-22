@@ -21,7 +21,7 @@ defmodule PubkyRooms.Rooms.Membership do
   def decode(bytes, ref) when is_binary(bytes) do
     with :ok <- Room.size_ok(bytes),
          {:ok, %{"v" => 1} = map} <- Room.decode_json(bytes),
-         {:ok, ^ref} <- Paths.parse_room_uri(map["room"]) || {:error, :room_mismatch},
+         {:ok, ^ref} <- Paths.parse_room_uri(map["room"]),
          {:ok, joined_at} <- Room.timestamp(map["joined_at"]) do
       {:ok, %{joined_at: joined_at}}
     else

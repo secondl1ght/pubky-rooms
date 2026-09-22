@@ -170,10 +170,16 @@ defmodule PubkyRooms.Rooms.Directory do
     |> Enum.take(limit)
   end
 
-  @doc "Records a tag `tagger` wrote (file id `id`) on a room."
-  @spec add_tag(Paths.room_ref(), String.t(), String.t(), String.t()) :: :ok
-  def add_tag(ref, label, tagger, id),
-    do: GenServer.call(__MODULE__, {:add_tag, ref, label, tagger, id})
+  @doc """
+  Records a tag `tagger` wrote (file id `id`) on a room. `read_at:` (a native
+  `System.monotonic_time/0` timestamp) says when the tag file was read; a tag
+  removed at or after that moment wins over the stale read.
+  """
+  @spec add_tag(Paths.room_ref(), String.t(), String.t(), String.t(), keyword()) :: :ok
+  def add_tag(ref, label, tagger, id, opts \\ []) do
+    read_at = Keyword.get(opts, :read_at, System.monotonic_time())
+    GenServer.call(__MODULE__, {:add_tag, ref, label, tagger, id, read_at})
+  end
 
   @doc "Forgets the tag file `id` of `tagger` (whatever room and label it carried)."
   @spec remove_tag(String.t(), String.t()) :: :ok
@@ -254,7 +260,7 @@ defmodule PubkyRooms.Rooms.Directory do
 
     Events.subscribe_all()
     if Nexus.enabled?(), do: schedule_nexus_sync(1_000)
-    {:ok, %{dets: dets, synced: %{}, nexus_refreshed: %{}}}
+    {:ok, %{dets: dets, synced: %{}, nexus_refreshed: %{}, removed_tags: %{}}}
   end
 
   defp load(dets) do
@@ -294,8 +300,8 @@ defmodule PubkyRooms.Rooms.Directory do
   def handle_call({:remove_member, ref, z32}, _from, state),
     do: {:reply, :ok, do_remove_member(state, ref, z32)}
 
-  def handle_call({:add_tag, ref, label, tagger, id}, _from, state),
-    do: {:reply, :ok, do_add_tag(state, ref, label, tagger, id)}
+  def handle_call({:add_tag, ref, label, tagger, id, read_at}, _from, state),
+    do: {:reply, :ok, do_add_tag(state, ref, label, tagger, id, read_at)}
 
   def handle_call({:remove_tag, tagger, id}, _from, state),
     do: {:reply, :ok, do_remove_tag(state, tagger, id)}
@@ -305,7 +311,7 @@ defmodule PubkyRooms.Rooms.Directory do
         do: :ets.delete_all_objects(t)
 
     :ok = :dets.delete_all_objects(state.dets)
-    {:reply, :ok, %{state | synced: %{}, nexus_refreshed: %{}}}
+    {:reply, :ok, %{state | synced: %{}, nexus_refreshed: %{}, removed_tags: %{}}}
   end
 
   @impl true
@@ -442,8 +448,16 @@ defmodule PubkyRooms.Rooms.Directory do
     state
   end
 
-  defp do_add_tag(state, ref, label, tagger, id) do
-    if :ets.lookup(@tag_ids, {tagger, id}) == [] do
+  # A tag file read before its deletion must not resurrect the tag: removals
+  # are remembered for a while and compared with the read time.
+  defp do_add_tag(state, ref, label, tagger, id, read_at) do
+    stale? =
+      case state.removed_tags[{tagger, id}] do
+        nil -> false
+        removed_at -> removed_at >= read_at
+      end
+
+    if not stale? and :ets.lookup(@tag_ids, {tagger, id}) == [] do
       insert_tag(ref, label, tagger, id)
       :ok = :dets.insert(state.dets, {{:tag, tagger, id}, ref, label})
       broadcast({:tags_updated, ref})
@@ -464,7 +478,20 @@ defmodule PubkyRooms.Rooms.Directory do
         :ok
     end
 
-    state
+    remember_removal(state, {tagger, id})
+  end
+
+  defp remember_removal(state, key) do
+    now = System.monotonic_time()
+    memory = System.convert_time_unit(:timer.minutes(5), :millisecond, :native)
+    removed = Map.put(state.removed_tags, key, now)
+
+    removed =
+      if map_size(removed) > 1_000,
+        do: :maps.filter(fn _k, at -> now - at < memory end, removed),
+        else: removed
+
+    %{state | removed_tags: removed}
   end
 
   # Nexus counts for a room replace the previous ones; rooms Nexus knows but
@@ -534,11 +561,12 @@ defmodule PubkyRooms.Rooms.Directory do
   # Reads one tag file; only tags on rooms are recorded (the room is learned too).
   defp learn_tag(tagger, id) do
     path = Paths.tag(id)
+    read_at = System.monotonic_time()
 
     with {:ok, bytes} <- Pubky.get(tagger, path),
          {:ok, %{room_ref: ref, label: label}} when not is_nil(ref) <- Tag.decode(bytes, path) do
       unless get(ref), do: learn_room(ref)
-      add_tag(ref, label, tagger, id)
+      add_tag(ref, label, tagger, id, read_at: read_at)
     else
       _ -> :ok
     end

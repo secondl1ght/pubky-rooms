@@ -27,9 +27,6 @@ defmodule PubkyRooms.Rooms.Ban do
       nil ->
         {:ok, nil}
 
-      text when not is_binary(text) ->
-        {:error, "is invalid"}
-
       text ->
         cond do
           String.length(text) > @reason_max ->

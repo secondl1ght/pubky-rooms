@@ -20,7 +20,10 @@ config :pubky_rooms,
   bootstrap_per_member: 10,
   bootstrap_messages: 5,
   member_poll_ms: 100,
-  viewers_debounce_ms: 50
+  viewers_debounce_ms: 50,
+  subscription_detach_grace_ms: 100,
+  subscription_retry_ms: 100,
+  grant_login: PubkyRooms.Auth.FakeGrantLogin
 
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
