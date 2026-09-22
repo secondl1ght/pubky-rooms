@@ -232,7 +232,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
               Lobby
             </.sidebar_item>
             <.sidebar_item patch={~p"/rooms/new"} icon="lucide-plus" active={@live_action == :new}>
-              New room
+              Start a room
             </.sidebar_item>
             <.sidebar_item href="#directory" icon="lucide-signpost">
               Directory
@@ -401,10 +401,10 @@ defmodule PubkyRoomsWeb.LobbyLive do
         </:aside>
       </.page>
 
-      <.fab :if={@current_user} patch={~p"/rooms/new"} label="New room" />
+      <.fab :if={@current_user} patch={~p"/rooms/new"} label="Start a room" />
 
       <.dialog :if={@live_action == :new} id="new-room" show on_cancel={JS.patch(~p"/")}>
-        <:title>New room</:title>
+        <:title>Start a room</:title>
         <:description>
           The room definition is written to your homeserver; you can rename or close it later.
           All rooms are public: anyone with the link can read them. "Unlisted" only keeps a room out of discovery.
@@ -453,7 +453,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
           <.button variant="ghost" phx-click={JS.patch(~p"/")}>Cancel</.button>
           <.button variant="brand" type="submit" form="new-room-form" disabled={@creating}>
             <.spinner :if={@creating} class="size-4" />
-            <.icon :if={!@creating} name="lucide-plus" class="size-4" /> Create room
+            <.icon :if={!@creating} name="lucide-plus" class="size-4" /> Start room
           </.button>
         </:footer>
       </.dialog>
