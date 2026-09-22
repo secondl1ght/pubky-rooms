@@ -393,6 +393,10 @@ defmodule PubkyRoomsWeb.LobbyLive do
                 </span>
               </p>
               <p class="flex gap-2">
+                <.icon name="lucide-tag" class="mt-0.5 size-4 shrink-0 text-brand" />
+                <span>Tag a room and people find it by tag, here and in Pubky App</span>
+              </p>
+              <p class="flex gap-2">
                 <.icon name="lucide-globe" class="mt-0.5 size-4 shrink-0 text-brand" />
                 <span>
                   All rooms are public for now, like posts on Pubky App. Private rooms come with private homeserver storage.
