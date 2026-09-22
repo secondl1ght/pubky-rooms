@@ -230,7 +230,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
           <div class="flex flex-col gap-1">
             <.section_title class="mb-2">Rooms</.section_title>
             <.sidebar_item navigate={~p"/"} icon="lucide-house" active={@live_action == :index}>
-              Your rooms
+              Home
             </.sidebar_item>
             <.sidebar_item patch={~p"/rooms/new"} icon="lucide-plus" active={@live_action == :new}>
               New room
