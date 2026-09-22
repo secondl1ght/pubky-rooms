@@ -49,7 +49,7 @@ defmodule PubkyRoomsWeb.UI.Icon do
 
   def logo(assigns) do
     ~H"""
-    <.link class={["inline-flex items-end gap-1 select-none", @class]} {@rest}>
+    <.link class={["inline-flex items-end gap-1.5 select-none", @class]} {@rest}>
       <img src={~p"/images/pubky-logo.svg"} alt="Pubky" width="109" height="36" class="h-9 w-auto" />
       <span
         :if={@product}
