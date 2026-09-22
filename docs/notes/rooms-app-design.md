@@ -32,7 +32,7 @@ lib/pubky_rooms/
   rate_limit.ex             ETS fixed-window limiter check(key, limit, window_ms)
   pubky.ex                  behaviour facade over pubky_ex (get/list/put/delete/latest_cursor/resolve/revoke)
   pubky/live.ex             real impl;  pubky/fake.ex  in-memory homeserver for tests (emits events synchronously)
-  auth/session_store.ex     GenServer; DETS sessions.dets (credentials encrypted with a key derived from SECRET_KEY_BASE) + ETS :pubky_sessions
+  auth/session_store.ex     GenServer; memory-only sessions (ETS :pubky_sessions) rehydrated from the encrypted browser cookie (ADR 0005)
   auth/grant_login.ex       wraps Pubky.Auth.GrantFlow with app caps/client_id/relay
   events/dispatch.ex        stream sink: cursor advance + PubSub broadcast
   events/cursors.ex         ETS z32 -> last cursor
