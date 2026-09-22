@@ -361,7 +361,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
             No public room is tagged "{@tag_filter}" yet.
           </p>
           <p :if={@public == [] and !@tag_filter} class="text-sm text-muted-foreground">
-            No rooms in the directory yet. They show up here as their creators and members sign in.
+            No rooms yet. Open the first one.
           </p>
         </section>
 

@@ -106,7 +106,7 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     {:ok, _view, html} = live(init_test_session(conn, Fixtures.cookie(sid)), ~p"/")
     assert html =~ "Your rooms"
     assert length(Regex.scan(~r/Busy room/, html)) == 1
-    assert html =~ "No rooms in the directory yet"
+    assert html =~ "No rooms yet. Open the first one."
   end
 
   test "rooms can be created with tags; the lobby lists popular tags and filters by one",
