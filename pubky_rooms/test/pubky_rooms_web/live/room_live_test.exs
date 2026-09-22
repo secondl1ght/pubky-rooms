@@ -485,7 +485,9 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert_redirect(view, "/", 2_000)
     refute Map.has_key?(Fake.files(ctx.alice), Paths.room(ctx.room.id))
     html = wait_for(fn -> render(bob_view) end, &(&1 =~ "read-only now"))
-    assert Directory.get(Room.ref(ctx.room)) == nil
+    assert %Room{closed_at: closed_at} = Directory.get(Room.ref(ctx.room))
+    assert is_integer(closed_at)
+    assert has_element?(bob_view, "#closed-badge")
 
     # …and the room is read-only for everyone: no composer, no row actions, no tags
     assert html =~ "bob before close"
@@ -499,6 +501,32 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     render_async(bob_view)
     assert [%Message{content: "bob before close"}] = messages_on_homeserver(bob, ctx.room)
     refute Fake.files(bob) |> Map.keys() |> Enum.any?(&String.contains?(&1, "/tags/"))
+
+    # the archive survives a fresh visit: history from the members' folders,
+    # read-only for a member and for an anonymous reader alike
+    RoomServer.whereis(Room.ref(ctx.room)) |> GenServer.stop()
+    {:ok, again, _} = live(bob_conn, ctx.path)
+    html = wait_for(fn -> render(again) end, &(&1 =~ "bob before close"))
+    assert html =~ "Renamed"
+    assert html =~ "read-only now"
+    assert has_element?(again, "#closed-badge")
+    refute has_element?(again, "#composer")
+    refute has_element?(again, "##{bob_id} button[aria-label=Edit]")
+    # leaving stays possible: the marker is bob's own file and drops the archive from his lobby
+    assert has_element?(again, "button", "Leave")
+
+    # the creator has no settings on an archive (saving would recreate the definition)
+    {:ok, creator_again, _} = live(ctx.alice_conn, ctx.path)
+    wait_for(fn -> render(creator_again) end, &(&1 =~ "bob before close"))
+    refute has_element?(creator_again, "a[aria-label='Room settings']")
+    {:ok, redirected, _} = live(ctx.alice_conn, ctx.path <> "/settings")
+    wait_for(fn -> render(redirected) end, &(&1 =~ "bob before close"))
+    refute has_element?(redirected, "#room-settings-form")
+
+    {:ok, anon, _} = live(ctx.conn, ctx.path)
+    html = wait_for(fn -> render(anon) end, &(&1 =~ "bob before close"))
+    assert html =~ "read-only now"
+    refute html =~ "Join room"
   end
 
   test "room tags are shown to everyone; signed-in users toggle their own", ctx do

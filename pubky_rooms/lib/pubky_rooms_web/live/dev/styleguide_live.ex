@@ -91,6 +91,9 @@ defmodule PubkyRoomsWeb.Dev.StyleguideLive do
             <.badge variant="brand">brand</.badge>
             <.badge variant="brand-soft"><.icon name="lucide-radio" class="size-3" /> live</.badge>
             <.badge variant="destructive">banned</.badge>
+            <.badge variant="destructive-soft">
+              <.icon name="lucide-door-closed" class="size-3" /> closed
+            </.badge>
             <.badge variant="outline">outline</.badge>
           </div>
           <div class="flex flex-wrap items-center gap-3">

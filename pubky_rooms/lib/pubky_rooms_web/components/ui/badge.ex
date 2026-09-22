@@ -8,6 +8,7 @@ defmodule PubkyRoomsWeb.UI.Badge do
     "brand" => "bg-brand text-background",
     "brand-soft" => "bg-brand/16 text-brand border-brand/40",
     "destructive" => "bg-destructive text-white",
+    "destructive-soft" => "bg-destructive/16 text-destructive border-destructive/40",
     "outline" => "border-border text-foreground"
   }
 

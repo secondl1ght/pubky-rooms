@@ -16,6 +16,11 @@ defmodule PubkyRooms.Rooms.RoomServer do
        from this node), `DEL`s remove, reaction markers toggle a reaction on
        the message (no fetch: the path says it all), join markers add and
        remove members, room definition changes update or close the room.
+       A **closed** room stays alive as a read-only archive: its history is
+       still assembled from the members' folders (also on a later bootstrap,
+       from the directory's `closed_at` row when the definition is gone),
+       members' own edits and deletes still apply, but this app disables
+       every write. The creator writing the definition again reopens it.
     3. **Idle** — with no viewers attached for `room_idle_timeout_ms` the room
        releases its subscriptions and stops (sooner when more than
        `max_idle_rooms` rooms are alive); the next visit bootstraps again.
@@ -48,6 +53,8 @@ defmodule PubkyRooms.Rooms.RoomServer do
   Messages live in a public ETS `ordered_set` keyed by `{msg_id, author}`,
   so viewers read history directly. Changes are broadcast on the room topic as
   `{:room_event, ref, event}`; see `PubkyRoomsWeb.RoomLive` for the consumer.
+  `:ready` means "the snapshot is available" — its `status` is `:ready` for an
+  open room and `:closed` for an archive.
   """
   use GenServer, restart: :temporary
 
@@ -56,7 +63,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
   alias Pubky.Crypto.Blake3
   alias PubkyRooms.{Events, Pubky}
   alias PubkyRooms.Events.Subscriptions
-  alias PubkyRooms.Rooms.{Ban, Directory, Message, Paths}
+  alias PubkyRooms.Rooms.{Ban, Directory, Message, Paths, Room}
 
   @sweep_every 5_000
   @stop_after_error 30_000
@@ -194,29 +201,45 @@ defmodule PubkyRooms.Rooms.RoomServer do
     case Directory.fetch_room(state.ref) do
       {:ok, room} ->
         Directory.put_room(room)
-        members = MapSet.new(Directory.members_of(state.ref))
-        {subscribed, polled} = split_budget(state.creator, members)
-        state = %{state | room: room, members: members, subscribed: subscribed, polled: polled}
-        Subscriptions.acquire(subscribed, self())
-        # PubSub topics are free: polled members' events still arrive when
-        # anyone else on this node follows them (e.g. their own session).
-        Enum.each(members, &Events.subscribe_user/1)
-        Subscriptions.subscribe()
-        Directory.subscribe()
-        state = %{state | bans: load_bans(state)}
-        state = backfill_sync(state, MapSet.difference(members, banned_set(state)))
-        state = apply_statuses(state, Subscriptions.statuses(subscribed))
-        Process.send_after(self(), :sweep_pending, @sweep_every)
-        state = %{state | status: :ready}
-        broadcast(state, :ready)
-        {:noreply, state |> maybe_start_idle_timer() |> schedule_poll()}
+        bootstrap(state, room, :ready)
 
       {:error, :not_found} ->
-        fail(state, :not_found)
+        # The definition is gone. A room this node knew is an archive now
+        # (the DEL event may not have reached the directory yet); a room it
+        # never knew does not exist.
+        case Directory.get(state.ref) do
+          %Room{} = known ->
+            Directory.close_room(state.ref)
+            Directory.touch(state.ref)
+            room = %{known | closed_at: known.closed_at || System.os_time(:millisecond)}
+            bootstrap(state, room, :closed)
+
+          nil ->
+            fail(state, :not_found)
+        end
 
       {:error, reason} ->
         fail(state, {:error, reason})
     end
+  end
+
+  defp bootstrap(state, room, status) do
+    members = MapSet.new(Directory.members_of(state.ref))
+    {subscribed, polled} = split_budget(state.creator, members)
+    state = %{state | room: room, members: members, subscribed: subscribed, polled: polled}
+    Subscriptions.acquire(subscribed, self())
+    # PubSub topics are free: polled members' events still arrive when
+    # anyone else on this node follows them (e.g. their own session).
+    Enum.each(members, &Events.subscribe_user/1)
+    Subscriptions.subscribe()
+    Directory.subscribe()
+    state = %{state | bans: load_bans(state)}
+    state = backfill_sync(state, MapSet.difference(members, banned_set(state)))
+    state = apply_statuses(state, Subscriptions.statuses(subscribed))
+    Process.send_after(self(), :sweep_pending, @sweep_every)
+    state = %{state | status: status}
+    broadcast(state, :ready)
+    {:noreply, state |> maybe_start_idle_timer() |> schedule_poll()}
   end
 
   defp fail(state, status) do
@@ -310,8 +333,11 @@ defmodule PubkyRooms.Rooms.RoomServer do
         {:room_updated, %{creator: c, id: id} = room} when {c, id} == ref ->
           update_room(state, room)
 
+        {:room_closed, %{creator: c, id: id} = room} when {c, id} == ref ->
+          close(state, room)
+
         {:room_removed, ^ref} ->
-          close(state)
+          close(state, state.room)
 
         _ ->
           state
@@ -735,6 +761,14 @@ defmodule PubkyRooms.Rooms.RoomServer do
     end
   end
 
+  # A definition written again while the room is an archive reopens it:
+  # viewers re-attach on `:ready` and read the new status from the snapshot.
+  defp update_room(%{status: :closed} = state, %Room{closed_at: nil} = room) do
+    state = %{state | room: room, status: :ready}
+    broadcast(state, :ready)
+    state
+  end
+
   defp update_room(state, room) do
     if room == state.room do
       state
@@ -745,12 +779,15 @@ defmodule PubkyRooms.Rooms.RoomServer do
     end
   end
 
-  defp close(%{status: :closed} = state), do: state
+  # Closing keeps the process (and its subscriptions) alive: the archive is
+  # read from the same table and the idle timer decides when it stops.
+  defp close(%{status: :closed} = state, _room), do: state
 
-  defp close(state) do
-    state = %{state | status: :closed}
+  defp close(state, room) do
+    room = room || state.room
+    room = room && %{room | closed_at: room.closed_at || System.os_time(:millisecond)}
+    state = %{state | status: :closed, room: room}
     broadcast(state, :room_closed)
-    Process.send_after(self(), :stop, @stop_after_error)
     state
   end
 

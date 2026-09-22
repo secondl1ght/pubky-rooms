@@ -159,6 +159,45 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     assert html =~ "nothing-here"
   end
 
+  test "closed rooms are listed under a collapsed Closed group for former members only",
+       %{conn: conn} do
+    {sid, alice} = Fixtures.login("alice")
+    {bob_sid, bob} = Fixtures.login("bob")
+
+    {:ok, room} =
+      Rooms.create_room(sid, alice, %{
+        "name" => "Bygone room",
+        "visibility" => "public",
+        "tags" => "history"
+      })
+
+    :ok = Rooms.join(bob_sid, bob, Room.ref(room))
+    :ok = Rooms.close_room(sid, alice, room)
+
+    # anonymous: not a public room any more, not under its tag
+    {:ok, _anon, html} = live(conn, ~p"/")
+    refute html =~ "Bygone room"
+    {:ok, _anon, html} = live(conn, ~p"/?tag=history")
+    refute html =~ "Bygone room"
+
+    # a stranger sees nothing either
+    {other_sid, _} = Fixtures.login("carol")
+    {:ok, _carol, html} = live(init_test_session(conn, Fixtures.cookie(other_sid)), ~p"/")
+    refute html =~ "Bygone room"
+    refute html =~ ~s(id="closed-rooms")
+
+    # the creator and a former member find it under "Closed", nowhere else
+    for cookie <- [Fixtures.cookie(sid), Fixtures.cookie(bob_sid)] do
+      {:ok, view, html} = live(init_test_session(conn, cookie), ~p"/")
+      assert has_element?(view, "#closed-rooms")
+      assert has_element?(view, "#closed-rooms summary", "Closed")
+      assert has_element?(view, "#closed-rooms", "Bygone room")
+      # …and only there
+      assert length(String.split(html, "Bygone room")) == 2
+      assert has_element?(view, "#closed-rooms a span", "closed")
+    end
+  end
+
   test "creating a room requires sign-in", %{conn: conn} do
     assert {:error, {:redirect, %{to: "/login?return_to=/rooms/new"}}} =
              live(conn, ~p"/rooms/new")

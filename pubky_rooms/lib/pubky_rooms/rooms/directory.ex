@@ -16,6 +16,13 @@ defmodule PubkyRooms.Rooms.Directory do
     * on mainnet, Nexus (`PubkyRooms.Nexus`) is polled for rooms tagged from
       anywhere in the ecosystem and for tagger counts this node cannot see
 
+  A room whose definition the creator deleted is not forgotten: its row gets
+  a `closed_at` timestamp and its members stay, so former members still find
+  it (as a read-only archive, see `PubkyRooms.Rooms.RoomServer`) while it
+  leaves discovery (public list, tag filters, popular tags). Closed rooms
+  nobody opened for `closed_room_ttl_ms` (90 days) are swept hourly; the
+  creator writing the definition again reopens the room.
+
   Tables: `:rooms_directory` (`{ref, %Room{}, last_activity_at}`),
   `:room_members` (bag `{ref, z32}`), `:user_rooms` (bag `{z32, ref}`),
   `:room_tags` (bag `{ref, label, tagger}`), `:room_tag_ids`
@@ -40,6 +47,8 @@ defmodule PubkyRooms.Rooms.Directory do
   @dets :rooms_directory_dets
   @sync_throttle_ms :timer.minutes(5)
   @nexus_refresh_ms :timer.minutes(5)
+  @sweep_every_ms :timer.hours(1)
+  @default_closed_ttl_ms :timer.hours(24 * 90)
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
@@ -70,8 +79,11 @@ defmodule PubkyRooms.Rooms.Directory do
   @spec member_count(Paths.room_ref()) :: non_neg_integer()
   def member_count(ref), do: ref |> members_of() |> length()
 
-  @doc "Rooms the user created and rooms they joined, newest activity first."
-  @spec rooms_of(String.t()) :: %{created: [Room.t()], joined: [Room.t()]}
+  @doc """
+  Rooms the user created and rooms they joined, newest activity first; closed
+  rooms they belonged to (either way) are listed apart under `closed`.
+  """
+  @spec rooms_of(String.t()) :: %{created: [Room.t()], joined: [Room.t()], closed: [Room.t()]}
   def rooms_of(z32) do
     refs = for {^z32, ref} <- :ets.lookup(@user_rooms, z32), do: ref
 
@@ -85,21 +97,24 @@ defmodule PubkyRooms.Rooms.Directory do
       |> Enum.sort_by(fn {_room, activity} -> activity end, :desc)
       |> Enum.map(fn {room, _} -> room end)
 
+    {closed, open} = Enum.split_with(rooms, &Room.closed?/1)
+
     %{
-      created: Enum.filter(rooms, &(&1.creator == z32)),
-      joined: Enum.reject(rooms, &(&1.creator == z32))
+      created: Enum.filter(open, &(&1.creator == z32)),
+      joined: Enum.reject(open, &(&1.creator == z32)),
+      closed: closed
     }
   end
 
   @doc """
-  Public rooms known to this node (visibility `public`), most recent activity
-  first, then most members; at most `limit`.
+  Open public rooms known to this node (visibility `public`, not closed), most
+  recent activity first, then most members; at most `limit`.
   """
   @spec public_rooms(pos_integer()) :: [Room.t()]
   def public_rooms(limit \\ 100) do
     @rooms
     |> :ets.select([{{:_, :"$1", :"$2"}, [], [{{:"$1", :"$2"}}]}])
-    |> Enum.filter(fn {room, _activity} -> room.visibility == "public" end)
+    |> Enum.filter(fn {room, _activity} -> discoverable?(room) end)
     |> Enum.sort_by(fn {room, activity} -> {-activity, -member_count(Room.ref(room))} end)
     |> Enum.take(limit)
     |> Enum.map(fn {room, _} -> room end)
@@ -156,7 +171,7 @@ defmodule PubkyRooms.Rooms.Directory do
     Enum.uniq(local ++ nexus)
   end
 
-  @doc "The most used labels across public rooms: `[{label, rooms}]`, at most `limit`."
+  @doc "The most used labels across open public rooms: `[{label, rooms}]`, at most `limit`."
   @spec popular_tags(pos_integer()) :: [{String.t(), pos_integer()}]
   def popular_tags(limit \\ 12) do
     @tags
@@ -164,7 +179,7 @@ defmodule PubkyRooms.Rooms.Directory do
     |> Enum.map(fn {ref, label, _tagger} -> {ref, label} end)
     |> Enum.concat(for {{ref, label}, _count} <- :ets.tab2list(@nexus_tags), do: {ref, label})
     |> Enum.uniq()
-    |> Enum.filter(fn {ref, _label} -> match?(%Room{visibility: "public"}, get(ref)) end)
+    |> Enum.filter(fn {ref, _label} -> discoverable?(get(ref)) end)
     |> Enum.frequencies_by(fn {_ref, label} -> label end)
     |> Enum.sort_by(fn {label, rooms} -> {-rooms, label} end)
     |> Enum.take(limit)
@@ -205,9 +220,24 @@ defmodule PubkyRooms.Rooms.Directory do
   @spec put_room(Room.t()) :: :ok
   def put_room(%Room{} = room), do: GenServer.call(__MODULE__, {:put_room, room})
 
-  @doc "Forgets a room."
+  @doc "Forgets a room (and its memberships) entirely."
   @spec remove_room(Paths.room_ref()) :: :ok
   def remove_room(ref), do: GenServer.call(__MODULE__, {:remove_room, ref})
+
+  @doc """
+  Marks a known room as closed (`closed_at` now, unless already closed): it
+  keeps its members and leaves discovery. Unknown rooms are ignored.
+  """
+  @spec close_room(Paths.room_ref()) :: :ok
+  def close_room(ref), do: GenServer.call(__MODULE__, {:close_room, ref})
+
+  @doc """
+  Forgets closed rooms with no activity (opened, touched) since `now` minus
+  `closed_room_ttl_ms`; returns how many were removed. Runs hourly by itself.
+  """
+  @spec sweep_closed(non_neg_integer()) :: non_neg_integer()
+  def sweep_closed(now \\ System.os_time(:millisecond)),
+    do: GenServer.call(__MODULE__, {:sweep_closed, now})
 
   @doc "Records a membership."
   @spec add_member(Paths.room_ref(), String.t()) :: :ok
@@ -260,6 +290,7 @@ defmodule PubkyRooms.Rooms.Directory do
 
     Events.subscribe_all()
     if Nexus.enabled?(), do: schedule_nexus_sync(1_000)
+    Process.send_after(self(), :sweep_closed, @sweep_every_ms)
     {:ok, %{dets: dets, synced: %{}, nexus_refreshed: %{}, removed_tags: %{}}}
   end
 
@@ -267,7 +298,7 @@ defmodule PubkyRooms.Rooms.Directory do
     :dets.foldl(
       fn
         {{:room, ref}, room, activity}, acc ->
-          insert_room(ref, room, activity)
+          insert_room(ref, normalize(room), activity)
           acc
 
         {{:member, ref, z32}, _joined_at}, acc ->
@@ -293,6 +324,20 @@ defmodule PubkyRooms.Rooms.Directory do
 
   def handle_call({:remove_room, ref}, _from, state),
     do: {:reply, :ok, do_remove_room(state, ref)}
+
+  def handle_call({:close_room, ref}, _from, state),
+    do: {:reply, :ok, do_close_room(state, ref)}
+
+  def handle_call({:sweep_closed, now}, _from, state) do
+    ttl = Application.get_env(:pubky_rooms, :closed_room_ttl_ms, @default_closed_ttl_ms)
+
+    stale =
+      for {ref, room, activity} <- :ets.tab2list(@rooms),
+          Room.closed?(room) and activity < now - ttl,
+          do: ref
+
+    {:reply, length(stale), Enum.reduce(stale, state, &do_remove_room(&2, &1))}
+  end
 
   def handle_call({:add_member, ref, z32}, _from, state),
     do: {:reply, :ok, do_add_member(state, ref, z32)}
@@ -366,6 +411,14 @@ defmodule PubkyRooms.Rooms.Directory do
     {:noreply, do_put_nexus_tags(state, ref, tags)}
   end
 
+  def handle_info(:sweep_closed, state) do
+    {:reply, _removed, state} =
+      handle_call({:sweep_closed, System.os_time(:millisecond)}, nil, state)
+
+    Process.send_after(self(), :sweep_closed, @sweep_every_ms)
+    {:noreply, state}
+  end
+
   def handle_info(_msg, state), do: {:noreply, state}
 
   @impl true
@@ -378,7 +431,7 @@ defmodule PubkyRooms.Rooms.Directory do
     state
   end
 
-  defp apply_event(state, {:room, id}, :del, user), do: do_remove_room(state, {user, id})
+  defp apply_event(state, {:room, id}, :del, user), do: do_close_room(state, {user, id})
 
   defp apply_event(state, {:member, creator, id}, :put, user) do
     unless get({creator, id}), do: fetch_room_async({creator, id})
@@ -427,6 +480,27 @@ defmodule PubkyRooms.Rooms.Directory do
         do: :ets.delete(@nexus_tags, key)
 
     broadcast({:room_removed, ref})
+    state
+  end
+
+  # Closing keeps the row and the members; Nexus counts go (the room left
+  # discovery). Already-closed rooms keep their original `closed_at`.
+  defp do_close_room(state, ref) do
+    case :ets.lookup(@rooms, ref) do
+      [{^ref, %Room{closed_at: nil} = room, activity}] ->
+        closed = %{room | closed_at: System.os_time(:millisecond)}
+        insert_room(ref, closed, activity)
+        :ok = :dets.insert(state.dets, {{:room, ref}, closed, activity})
+
+        for {key, _} <- :ets.match_object(@nexus_tags, {{ref, :_}, :_}),
+            do: :ets.delete(@nexus_tags, key)
+
+        broadcast({:room_closed, closed})
+
+      _ ->
+        :ok
+    end
+
     state
   end
 
@@ -527,7 +601,7 @@ defmodule PubkyRooms.Rooms.Directory do
     Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn ->
       case fetch_room(ref) do
         {:ok, room} -> put_room(room)
-        {:error, :not_found} -> remove_room(ref)
+        {:error, :not_found} -> close_room(ref)
         {:error, reason} -> Logger.debug("room #{creator}/#{id} not fetched: #{inspect(reason)}")
       end
     end)
@@ -606,6 +680,12 @@ defmodule PubkyRooms.Rooms.Directory do
       _ -> :ok
     end
   end
+
+  defp discoverable?(%Room{visibility: "public", closed_at: nil}), do: true
+  defp discoverable?(_room), do: false
+
+  # Rows written before a struct field existed get the field's default.
+  defp normalize(%{__struct__: Room} = row), do: struct(Room, Map.delete(row, :__struct__))
 
   defp insert_room(ref, room, activity), do: :ets.insert(@rooms, {ref, room, activity})
 

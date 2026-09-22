@@ -135,9 +135,9 @@ defmodule PubkyRoomsWeb.LobbyLive do
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   defp load_rooms(socket) do
-    %{created: created, joined: joined} =
+    %{created: created, joined: joined, closed: closed} =
       case socket.assigns.current_user do
-        nil -> %{created: [], joined: []}
+        nil -> %{created: [], joined: [], closed: []}
         %{pubky: pubky} -> Directory.rooms_of(pubky)
       end
 
@@ -155,25 +155,25 @@ defmodule PubkyRoomsWeb.LobbyLive do
           Enum.filter(Directory.public_rooms(), &MapSet.member?(tagged, Room.ref(&1)))
       end
 
-    creators = Enum.map(created ++ joined ++ public, & &1.creator)
-    profiles = Map.new(creators, &{&1, Profiles.get(&1)})
+    all = created ++ joined ++ public ++ closed
+    profiles = Map.new(all, &{&1.creator, Profiles.get(&1.creator)})
 
     socket
     |> assign(
       created: created,
       joined: joined,
       public: public,
+      closed: closed,
       profiles: profiles,
       popular_tags: Directory.popular_tags(),
-      room_tags:
-        Map.new(created ++ joined ++ public, &{Room.ref(&1), Directory.tags_of(Room.ref(&1))})
+      room_tags: Map.new(all, &{Room.ref(&1), Directory.tags_of(Room.ref(&1))})
     )
     |> load_viewers()
   end
 
   defp listed_refs(socket) do
-    %{created: created, joined: joined, public: public} = socket.assigns
-    Enum.map(created ++ joined ++ public, &Room.ref/1)
+    %{created: created, joined: joined, public: public, closed: closed} = socket.assigns
+    Enum.map(created ++ joined ++ public ++ closed, &Room.ref/1)
   end
 
   # Viewer totals (signed in or not) per listed room, kept live through each
@@ -293,8 +293,29 @@ defmodule PubkyRoomsWeb.LobbyLive do
               />
             </div>
           </section>
+          <details :if={@closed != []} id="closed-rooms" class="group flex flex-col gap-3">
+            <summary class="flex cursor-pointer list-none items-center gap-2 text-muted-foreground marker:content-none">
+              <.icon
+                name="lucide-chevron-right"
+                class="size-4 transition-transform group-open:rotate-90"
+              />
+              <.section_title class="text-muted-foreground">Closed</.section_title>
+              <.badge variant="outline">{length(@closed)}</.badge>
+              <span class="text-xs">read-only archives of rooms you were in</span>
+            </summary>
+            <div class="grid grid-cols-1 gap-3 pt-3 md:grid-cols-2 lg:gap-6">
+              <.room_card
+                :for={room <- @closed}
+                room={room}
+                creator={@profiles[room.creator]}
+                online={@room_online[Room.ref(room)]}
+                viewers={@room_viewers[Room.ref(room)] || 0}
+                tags={@room_tags[Room.ref(room)] || []}
+              />
+            </div>
+          </details>
           <.empty_state
-            :if={@created == [] and @joined == []}
+            :if={@created == [] and @joined == [] and @closed == []}
             icon="lucide-messages-square"
             title="No rooms yet"
           >
@@ -465,7 +486,10 @@ defmodule PubkyRoomsWeb.LobbyLive do
         <.card_header class="gap-2">
           <div class="flex items-start justify-between gap-3">
             <.card_title class="truncate">{@room.name}</.card_title>
-            <.badge :if={@room.visibility == "unlisted"} variant="outline">
+            <.badge :if={Room.closed?(@room)} variant="destructive-soft">
+              <.icon name="lucide-door-closed" class="size-3" /> closed
+            </.badge>
+            <.badge :if={@room.visibility == "unlisted" and not Room.closed?(@room)} variant="outline">
               <.icon name="lucide-link" class="size-3" /> unlisted
             </.badge>
           </div>

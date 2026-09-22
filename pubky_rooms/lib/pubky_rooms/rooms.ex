@@ -144,8 +144,9 @@ defmodule PubkyRooms.Rooms do
   def update_room(_sid, _user, _room, _attrs), do: {:error, :forbidden}
 
   @doc """
-  Closes a room: the creator deletes the room definition. Members' messages
-  stay on their homeservers; the room just stops resolving.
+  Closes a room: the creator deletes the room definition (and their own tags
+  on it). Members' messages stay on their homeservers and the room lives on
+  as a read-only archive for its members (`Directory.close_room/1`).
   """
   @spec close_room(sid(), String.t(), Room.t()) :: :ok | {:error, Pubky.reason() | :forbidden}
   def close_room(sid, creator, %Room{creator: creator} = room) do
@@ -154,7 +155,7 @@ defmodule PubkyRooms.Rooms do
     case Pubky.delete(sid, Paths.room(room.id)) do
       ok when ok in [:ok, {:error, :not_found}] ->
         delete_tags(sid, creator, ref, Directory.own_tags(ref, creator))
-        Directory.remove_room(ref)
+        Directory.close_room(ref)
         :ok
 
       error ->

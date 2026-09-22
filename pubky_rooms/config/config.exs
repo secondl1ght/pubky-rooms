@@ -40,6 +40,8 @@ config :pubky_rooms,
   nexus_url: nil,
   # how often the Nexus resources stream is polled for rooms tagged anywhere (mainnet only)
   nexus_sync_ms: 300_000,
+  # closed rooms (read-only archives) nobody opened for this long are forgotten
+  closed_room_ttl_ms: 7_776_000_000,
   nexus_cdn_url: nil,
   simulator_url: nil
 

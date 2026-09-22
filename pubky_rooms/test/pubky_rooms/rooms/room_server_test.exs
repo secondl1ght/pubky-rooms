@@ -152,12 +152,63 @@ defmodule PubkyRooms.Rooms.RoomServerTest do
     {:ok, _} = RoomServer.ensure(missing)
     assert_receive {:room_event, ^missing, {:unavailable, :not_found}}, 2_000
 
-    {:ok, _} = RoomServer.ensure(ref)
+    {:ok, pid} = RoomServer.ensure(ref)
     assert_receive {:room_event, ^ref, :ready}, 2_000
     {:ok, _} = RoomServer.attach(ref)
     Fake.delete_as(alice, Paths.room(elem(ref, 1)))
     assert_receive {:room_event, ^ref, :room_closed}, 1_000
-    assert Directory.get(ref) == nil
+
+    # the directory keeps the room as a closed archive and the server stays up
+    assert %Room{closed_at: closed_at} = Directory.get(ref)
+    assert is_integer(closed_at)
+    assert Process.alive?(pid)
+
+    assert {:ok, %{status: :closed, room: %Room{closed_at: ^closed_at}}} =
+             RoomServer.snapshot(ref)
+  end
+
+  test "a closed room bootstraps as a read-only archive from the members' folders and reopens when the definition returns",
+       %{alice: alice, ref: ref, room: room} do
+    {bob_sid, bob} = Fixtures.login("bob")
+    :ok = Rooms.join(bob_sid, bob, ref)
+    {:ok, m1} = Message.new(bob, ref, "bob was here")
+    Fake.seed(bob, Message.path(m1), Message.encode(m1))
+
+    # the creator deletes the definition while nobody has the room open
+    Directory.subscribe()
+    Fake.delete_as(alice, Paths.room(room.id))
+    assert_receive {:directory, {:room_closed, %Room{closed_at: closed_at}}}, 1_000
+    assert %Room{closed_at: ^closed_at} = Directory.get(ref)
+    assert bob in Directory.members_of(ref)
+
+    {:ok, pid} = RoomServer.ensure(ref)
+    assert_receive {:room_event, ^ref, :ready}, 2_000
+    {:ok, snapshot} = RoomServer.attach(ref)
+    assert %{status: :closed, room: %Room{name: "Test room", closed_at: ^closed_at}} = snapshot
+    assert [%Message{content: "bob was here"}] = RoomServer.history(snapshot.table)
+    assert bob in snapshot.members
+
+    # members' own homeserver changes still apply to the archive
+    Fake.delete_as(bob, Message.path(m1))
+    key = m1.key
+    assert_receive {:room_event, ^ref, {:message_deleted, ^key}}, 1_000
+
+    # writing the definition again reopens the room for everyone
+    Fake.write_as(alice, Paths.room(room.id), Room.encode(room))
+    assert_receive {:room_event, ^ref, :ready}, 2_000
+    assert {:ok, %{status: :ready, room: %Room{closed_at: nil}}} = RoomServer.snapshot(ref)
+    assert %Room{closed_at: nil} = Directory.get(ref)
+    assert Process.alive?(pid)
+  end
+
+  test "a room the directory never knew is not_found when its definition is missing", %{
+    alice: alice
+  } do
+    missing = {alice, "0000000000002"}
+    Phoenix.PubSub.subscribe(PubkyRooms.PubSub, RoomServer.topic(missing))
+    {:ok, _} = RoomServer.ensure(missing)
+    assert_receive {:room_event, ^missing, {:unavailable, :not_found}}, 2_000
+    assert Directory.get(missing) == nil
   end
 
   test "idle rooms stop and release their subscriptions", %{ref: ref} do

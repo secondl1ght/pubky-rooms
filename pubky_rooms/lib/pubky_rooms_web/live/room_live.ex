@@ -91,7 +91,7 @@ defmodule PubkyRoomsWeb.RoomLive do
       not connected?(socket) ->
         {:noreply, socket}
 
-      socket.assigns.is_creator ->
+      socket.assigns.is_creator and socket.assigns.status == :ready ->
         {:noreply, assign(socket, settings_form: settings_form(socket))}
 
       true ->
@@ -136,7 +136,9 @@ defmodule PubkyRoomsWeb.RoomLive do
     end
   end
 
-  defp apply_snapshot(socket, %{status: :ready, table: table} = snapshot) do
+  # Open rooms and closed archives both come with a table of messages.
+  defp apply_snapshot(socket, %{status: status, table: table} = snapshot)
+       when status in [:ready, :closed] do
     history = RoomServer.history(table)
 
     socket
@@ -522,7 +524,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   def handle_event(
         "validate_settings",
         %{"room" => params},
-        %{assigns: %{is_creator: true}} = socket
+        %{assigns: %{is_creator: true, status: :ready}} = socket
       ) do
     {:noreply, assign(socket, settings_form: to_form(params, as: :room))}
   end
@@ -530,7 +532,16 @@ defmodule PubkyRoomsWeb.RoomLive do
   def handle_event(
         "save_settings",
         %{"room" => params},
-        %{assigns: %{is_creator: true, room: %Room{} = room, sid: sid, creator: creator}} = socket
+        %{
+          assigns: %{
+            is_creator: true,
+            status: :ready,
+            room: %Room{} = room,
+            sid: sid,
+            creator: creator
+          }
+        } =
+          socket
       ) do
     case Room.validate(params) do
       {:ok, _fields} ->
@@ -547,7 +558,16 @@ defmodule PubkyRoomsWeb.RoomLive do
   def handle_event(
         "close_room",
         _params,
-        %{assigns: %{is_creator: true, room: %Room{} = room, sid: sid, creator: creator}} = socket
+        %{
+          assigns: %{
+            is_creator: true,
+            status: :ready,
+            room: %Room{} = room,
+            sid: sid,
+            creator: creator
+          }
+        } =
+          socket
       ) do
     {:noreply,
      socket
@@ -1115,7 +1135,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                 <span :if={@status == :ready}>No messages yet. Say hello.</span>
                 <span :if={@status in [:loading, :bootstrapping]}>Loading the room from its members' homeservers…</span>
                 <span :if={@status == :not_found}>This room does not exist on its creator's homeserver.</span>
-                <span :if={@status == :closed}>This room was closed by its creator.</span>
+                <span :if={@status == :closed}>This room was closed by its creator; nothing was written in it.</span>
                 <span :if={match?({:error, _}, @status)}>The creator's homeserver could not be reached. Try again later.</span>
               </div>
               <.message_row
@@ -1137,13 +1157,6 @@ defmodule PubkyRoomsWeb.RoomLive do
 
             <div class="shrink-0 border-t border-border/60 p-3 sm:p-4">
               <%= cond do %>
-                <% is_nil(@current_user) -> %>
-                  <div class="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-                    <span>Sign in with Pubky Ring to chat.</span>
-                    <.button navigate={~p"/login?return_to=#{room_path(assigns)}"}>
-                      <.icon name="lucide-key-round" class="size-4" /> Sign in
-                    </.button>
-                  </div>
                 <% @status in [:closed, :not_found] -> %>
                   <div
                     id="closed-notice"
@@ -1151,10 +1164,20 @@ defmodule PubkyRoomsWeb.RoomLive do
                     role="status"
                   >
                     <.icon name="lucide-door-closed" class="size-4 text-destructive" />
-                    <span>
+                    <span :if={@status == :closed}>
                       This room was closed by its creator and is read-only now. Messages stay on
                       their authors' homeservers.
                     </span>
+                    <span :if={@status == :not_found}>
+                      This room does not exist on its creator's homeserver.
+                    </span>
+                  </div>
+                <% is_nil(@current_user) -> %>
+                  <div class="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+                    <span>Sign in with Pubky Ring to chat.</span>
+                    <.button navigate={~p"/login?return_to=#{room_path(assigns)}"}>
+                      <.icon name="lucide-key-round" class="size-4" /> Sign in
+                    </.button>
                   </div>
                 <% @banned? -> %>
                   <div
@@ -1573,11 +1596,14 @@ defmodule PubkyRoomsWeb.RoomLive do
           </p>
         </div>
         <.badge
-          :if={@room && @room.visibility == "unlisted"}
+          :if={@room && @room.visibility == "unlisted" && @status != :closed}
           variant="outline"
           class="hidden sm:inline-flex"
         >
           <.icon name="lucide-link" class="size-3" /> unlisted
+        </.badge>
+        <.badge :if={@status == :closed} id="closed-badge" variant="destructive-soft">
+          <.icon name="lucide-door-closed" class="size-3" /> closed
         </.badge>
       </div>
       <div class="flex shrink-0 items-center gap-2">
@@ -1624,7 +1650,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           Leave
         </.button>
         <.button
-          :if={@current_user && @current_user.pubky == @creator && @room}
+          :if={@current_user && @current_user.pubky == @creator && @room && @status == :ready}
           variant="secondary"
           size="icon"
           patch={~p"/r/#{@creator}/#{@room_id}/settings"}

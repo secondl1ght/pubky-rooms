@@ -6,6 +6,10 @@ defmodule PubkyRooms.Rooms.Room do
 
   The creator is never stored in the file: it is the owner of the path.
   Timestamps are Unix milliseconds.
+
+  `closed_at` never comes from the file: the directory sets it when the
+  creator deletes the definition, so the room can live on as a read-only
+  archive assembled from the members' folders (`PubkyRooms.Rooms.Directory`).
   """
 
   alias PubkyRooms.Ids
@@ -22,11 +26,12 @@ defmodule PubkyRooms.Rooms.Room do
           name: String.t(),
           topic: String.t() | nil,
           visibility: String.t(),
-          created_at: non_neg_integer()
+          created_at: non_neg_integer(),
+          closed_at: non_neg_integer() | nil
         }
 
   @enforce_keys [:creator, :id, :name, :visibility, :created_at]
-  defstruct [:creator, :id, :name, :topic, :visibility, :created_at]
+  defstruct [:creator, :id, :name, :topic, :visibility, :created_at, closed_at: nil]
 
   @doc "Maximum name length."
   def name_max, do: @name_max
@@ -40,6 +45,10 @@ defmodule PubkyRooms.Rooms.Room do
   @doc "The room's `pubky://` URI."
   @spec uri(t()) :: String.t()
   def uri(room), do: Paths.room_uri(ref(room))
+
+  @doc "Whether the creator deleted the definition (the room is a read-only archive)."
+  @spec closed?(t()) :: boolean()
+  def closed?(%__MODULE__{closed_at: at}), do: at != nil
 
   @doc """
   Validates user input for a new or updated room. Returns the cleaned fields or
