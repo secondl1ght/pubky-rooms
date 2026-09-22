@@ -15,7 +15,7 @@ Seeded on 2026-09-21 from Claude's browser pass over the finish-phase work; the 
 - Hierarchy: section titles ("Directory", "How it works", "Members") were muted grey while the body text under them was near-white, so the side info stood out more than the headings. `<.section_title>` is now the foreground colour everywhere (still 24px light), the How-it-works points are muted, and the collapsed "Closed" group keeps its explicit muted title as the one de-emphasised heading. — fixed
 - Hero paragraph said "create a room" and repeated the How-it-works facts. Now: "Group chat where every message is yours to keep. Sign in with Pubky Ring, open a room, share the link. Nothing here is locked in." The signed-in empty state and the sign-in-required flash say "open a room" too. — fixed
 - Directory empty state explained the node's discovery mechanics ("show up here as their creators and members sign in"); accurate but not actionable. Now "No rooms yet. Open the first one." — fixed
-- How it works gains a sixth point for discovery without naming Nexus: "Tag a room and people find it by tag, here and in Pubky App" (the Pubky App half becomes true at M8; decided to state it now). — fixed
+- How it works gains a sixth point for discovery without naming Nexus: "Tag a room to help people find it, here and in Pubky App" (the Pubky App half becomes true at M8; decided to state it now). — fixed
 
 ## Bugs
 - (none open)

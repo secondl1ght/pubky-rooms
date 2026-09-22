@@ -394,7 +394,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
               </p>
               <p class="flex gap-2">
                 <.icon name="lucide-tag" class="mt-0.5 size-4 shrink-0 text-brand" />
-                <span>Tag a room and people find it by tag, here and in Pubky App</span>
+                <span>Tag a room to help people find it, here and in Pubky App</span>
               </p>
               <p class="flex gap-2">
                 <.icon name="lucide-globe" class="mt-0.5 size-4 shrink-0 text-brand" />
