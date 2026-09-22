@@ -67,7 +67,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
   require Logger
 
   alias Pubky.Crypto.Blake3
-  alias PubkyRooms.{Events, Ids, Pubky}
+  alias PubkyRooms.{Events, Ids, Pubky, Telemetry}
   alias PubkyRooms.Events.Subscriptions
   alias PubkyRooms.Rooms.{Ban, Directory, Message, Paths, Room}
 
@@ -197,7 +197,8 @@ defmodule PubkyRooms.Rooms.RoomServer do
       paging: false,
       waiters: [],
       reactions: %{},
-      bans: %{}
+      bans: %{},
+      started_at: System.monotonic_time()
     }
 
     {:ok, state, {:continue, :bootstrap}}
@@ -245,6 +246,13 @@ defmodule PubkyRooms.Rooms.RoomServer do
     state = apply_statuses(state, Subscriptions.statuses(subscribed))
     Process.send_after(self(), :sweep_pending, @sweep_every)
     state = %{state | status: status}
+
+    Telemetry.bootstrap(
+      state.started_at,
+      %{members: MapSet.size(members), messages: :ets.info(state.table, :size)},
+      status
+    )
+
     broadcast(state, :ready)
     {:noreply, state |> maybe_start_idle_timer() |> schedule_poll()}
   end
@@ -494,7 +502,8 @@ defmodule PubkyRooms.Rooms.RoomServer do
         state
 
       match?(%{hash: ^hash}, state.pending[key]) ->
-        {%{msg: msg}, pending} = Map.pop(state.pending, key)
+        {%{msg: msg, at: at}, pending} = Map.pop(state.pending, key)
+        Telemetry.confirm(System.monotonic_time(:millisecond) - at, :event)
         upsert(%{state | pending: pending}, %{msg | state: :confirmed})
 
       true ->
@@ -812,7 +821,13 @@ defmodule PubkyRooms.Rooms.RoomServer do
     end)
   end
 
-  defp apply_fetch(state, key, {_why, {:ok, msg}}) do
+  defp apply_fetch(state, key, {why, {:ok, msg}}) do
+    case state.pending do
+      %{^key => %{at: at}} -> Telemetry.confirm(System.monotonic_time(:millisecond) - at, why)
+      _ when why == :event -> Telemetry.lag(System.os_time(:millisecond) - msg.created_at)
+      _ -> :ok
+    end
+
     upsert(%{state | pending: Map.delete(state.pending, key)}, msg)
   end
 

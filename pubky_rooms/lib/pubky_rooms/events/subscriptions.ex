@@ -169,6 +169,7 @@ defmodule PubkyRooms.Events.Subscriptions do
   # A stream's connection state applies to every user riding on it.
   def handle_info({:pubky_stream, {hs, name} = key, status}, state) do
     Logger.debug("stream #{inspect(name)} on #{String.slice(hs, 0, 8)}…: #{inspect(status)}")
+    PubkyRooms.Telemetry.stream_status(status)
     Phoenix.PubSub.broadcast(PubkyRooms.PubSub, "streams", {:stream_status, hs, name, status})
     {:noreply, apply_stream_status(state, key, user_status(status))}
   end
@@ -322,10 +323,12 @@ defmodule PubkyRooms.Events.Subscriptions do
       "events for #{String.slice(user, 0, 8)}… unavailable: #{inspect(reason)}; retrying"
     )
 
+    PubkyRooms.Telemetry.stream_unavailable(reason)
+
     if entry.failures == 0,
       do:
         Logger.warning(
-          "a member's homeserver events are unavailable (#{inspect(reason)}); retrying every #{div(retry_delay(), 1000)} s"
+          "a member's homeserver events are unavailable (#{inspect(reason)}); retrying every #{retry_delay()} ms"
         )
 
     Process.send_after(self(), {:retry, user}, retry_delay())

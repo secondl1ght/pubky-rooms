@@ -17,6 +17,12 @@ defmodule PubkyRoomsWeb.Router do
     plug :accepts, ["json"]
   end
 
+  # No session, no layout: platform health checks hit this every few seconds.
+  scope "/", PubkyRoomsWeb do
+    pipe_through :api
+    get "/healthz", HealthController, :show
+  end
+
   scope "/", PubkyRoomsWeb do
     pipe_through :browser
 

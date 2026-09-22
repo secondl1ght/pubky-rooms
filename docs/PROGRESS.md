@@ -91,7 +91,7 @@ Source of truth for scope: `docs/PLAN.md` + `docs/notes/rooms-app-design.md`. At
 | Message `:unconfirmed` state | — | changed: not needed (pending/confirmed/failed suffice) |
 | `Subscriptions` own homeserver cache (`:user_homeservers`) | — | changed: uses `Pubky.Resolver`'s ETS cache |
 | RoomServer `status/1`, `room/1`, `members/1`, `bans/1`, `verify/2` API | — | changed: `attach/2`/`snapshot/1` return one map; verification runs in the pending sweep |
-| Telemetry events (streams, lag, bootstrap, send→confirm) per ADR 0006; capacity gauges with a log warning at 80 % of the stream pool; `/healthz`; structured logs | M7 | open |
+| Telemetry events (streams, lag, bootstrap, send→confirm) per ADR 0006; capacity gauges with a log warning at 80 % of the stream pool; `/healthz`; structured logs | M7 | done ✓ (finish-phase step 3: `PubkyRooms.Telemetry`, `/healthz`, capacity poller with the 80 % warning; structured logs stay the default Logger formatter) |
 | Room UI marker + notice for members whose *live stream* is unavailable (stream failures are retried but not yet shown; only history failures are) | M5 | done ✓ (`Subscriptions` broadcasts `{:subscription_status, z32, status}`; `RoomServer` tracks `live_unavailable`) |
 | `docs/operations.md` kept current with every limit/config change | every session | rule |
 | CSP + secure headers; CORS for the API | M7/M8 | open |

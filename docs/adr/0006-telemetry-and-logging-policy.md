@@ -12,3 +12,5 @@
 - **Retention:** we keep no request logs beyond the platform's default log buffer; no database of users exists.
 
 **Consequences.** Operators can see health (are streams connected, how slow is bootstrap, how fast do writes confirm) without seeing who did what. Debugging a specific user's issue requires debug logging in a controlled environment. The README "Trust model" section states what the server sees; it must be updated if this policy changes.
+
+**Implementation (2026-09-21).** All events are emitted by `PubkyRooms.Telemetry` (event table in its moduledoc), metrics are declared in `PubkyRoomsWeb.Telemetry`, and `GET /healthz` returns counts only. A test asserts that no metadata value is a public key or a structured term. Metric tags are bounded atoms (`status`, `via`, `reason`).

@@ -1,4 +1,9 @@
 defmodule PubkyRoomsWeb.Telemetry do
+  @moduledoc """
+  Metric definitions for LiveDashboard (dev) or a future exporter, plus the
+  10-second poller that reads `PubkyRooms.Telemetry.measure/0`. Only
+  aggregate metrics with bounded tags (ADR 0006).
+  """
   use Supervisor
   import Telemetry.Metrics
 
@@ -52,6 +57,25 @@ defmodule PubkyRoomsWeb.Telemetry do
         unit: {:native, :millisecond}
       ),
 
+      # Pubky Rooms (see PubkyRooms.Telemetry: counts and durations, no identifiers)
+      counter("pubky_rooms.stream.connected.count"),
+      counter("pubky_rooms.stream.disconnected.count", tags: [:reason]),
+      counter("pubky_rooms.stream.unavailable.count", tags: [:reason]),
+      summary("pubky_rooms.room.bootstrap.duration",
+        unit: {:native, :millisecond},
+        tags: [:status]
+      ),
+      summary("pubky_rooms.room.bootstrap.members"),
+      summary("pubky_rooms.room.bootstrap.messages"),
+      summary("pubky_rooms.message.confirm.duration", unit: :millisecond, tags: [:via]),
+      summary("pubky_rooms.message.lag.duration", unit: :millisecond),
+      last_value("pubky_rooms.capacity.streams"),
+      last_value("pubky_rooms.capacity.pool_size"),
+      last_value("pubky_rooms.capacity.users"),
+      last_value("pubky_rooms.capacity.rooms"),
+      last_value("pubky_rooms.capacity.directory_rooms"),
+      last_value("pubky_rooms.capacity.directory_members"),
+
       # VM Metrics
       summary("vm.memory.total", unit: {:byte, :kilobyte}),
       summary("vm.total_run_queue_lengths.total"),
@@ -62,9 +86,8 @@ defmodule PubkyRoomsWeb.Telemetry do
 
   defp periodic_measurements do
     [
-      # A module, function and arguments to be invoked periodically.
-      # This function must call :telemetry.execute/3 and a metric must be added above.
-      # {PubkyRoomsWeb, :count_users, []}
+      # capacity gauges + the 80 % stream-pool warning
+      {PubkyRooms.Telemetry, :measure, []}
     ]
   end
 end
