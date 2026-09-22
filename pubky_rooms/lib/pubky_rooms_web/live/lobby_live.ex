@@ -375,7 +375,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
           </.empty_state>
         </section>
 
-        <.how_it_works class="mt-6 xl:hidden" />
+        <.how_it_works card={false} class="mt-6 xl:hidden" />
 
         <:aside>
           <.how_it_works />
@@ -461,46 +461,68 @@ defmodule PubkyRoomsWeb.LobbyLive do
     """
   end
 
+  attr :card, :boolean,
+    default: true,
+    doc: "a card (desktop right column) or a plain footer section with a rule above"
+
   attr :class, :any, default: nil
 
-  # The explainer card: in the right column from `xl`, at the foot of the page below it.
-  defp how_it_works(assigns) do
+  # The explainer: a card in the right column from `xl`; below it, a plain
+  # section closing the page, with a rule above to mark where the content ends.
+  defp how_it_works(%{card: true} = assigns) do
     ~H"""
     <.card class={["gap-4 py-5", @class]}>
       <.card_header>
         <.section_title class="text-xl">How it works</.section_title>
       </.card_header>
       <.card_content class="flex flex-col gap-3 text-sm text-muted-foreground">
-        <p class="flex gap-2">
-          <.icon name="lucide-file-text" class="mt-0.5 size-4 shrink-0 text-brand" />
-          <span>Every message is a file on its author's homeserver</span>
-        </p>
-        <p class="flex gap-2">
-          <.icon name="lucide-radio" class="mt-0.5 size-4 shrink-0 text-brand" />
-          <span>Homeserver event streams deliver them live</span>
-        </p>
-        <p class="flex gap-2">
-          <.icon name="lucide-circle-check" class="mt-0.5 size-4 shrink-0 text-brand" />
-          <span>A check mark means your homeserver stored it</span>
-        </p>
-        <p class="flex gap-2">
-          <.icon name="lucide-lock-open" class="mt-0.5 size-4 shrink-0 text-brand" />
-          <span>
-            Nothing is locked in: your rooms live on your homeserver and work in any other Pubky client
-          </span>
-        </p>
-        <p class="flex gap-2">
-          <.icon name="lucide-tag" class="mt-0.5 size-4 shrink-0 text-brand" />
-          <span>Tag a room to help people find it, here and in Pubky App</span>
-        </p>
-        <p class="flex gap-2">
-          <.icon name="lucide-globe" class="mt-0.5 size-4 shrink-0 text-brand" />
-          <span>
-            All rooms are public for now, like posts on Pubky App. Private rooms come with private homeserver storage.
-          </span>
-        </p>
+        <.how_it_works_points />
       </.card_content>
     </.card>
+    """
+  end
+
+  defp how_it_works(assigns) do
+    ~H"""
+    <section class={["flex flex-col gap-4 border-t border-border pt-8", @class]}>
+      <.section_title class="text-xl">How it works</.section_title>
+      <div class="flex flex-col gap-3 text-sm text-muted-foreground">
+        <.how_it_works_points />
+      </div>
+    </section>
+    """
+  end
+
+  defp how_it_works_points(assigns) do
+    ~H"""
+    <p class="flex gap-2">
+      <.icon name="lucide-file-text" class="mt-0.5 size-4 shrink-0 text-brand" />
+      <span>Every message is a file on its author's homeserver</span>
+    </p>
+    <p class="flex gap-2">
+      <.icon name="lucide-radio" class="mt-0.5 size-4 shrink-0 text-brand" />
+      <span>Homeserver event streams deliver them live</span>
+    </p>
+    <p class="flex gap-2">
+      <.icon name="lucide-circle-check" class="mt-0.5 size-4 shrink-0 text-brand" />
+      <span>A check mark means your homeserver stored it</span>
+    </p>
+    <p class="flex gap-2">
+      <.icon name="lucide-lock-open" class="mt-0.5 size-4 shrink-0 text-brand" />
+      <span>
+        Nothing is locked in: your rooms live on your homeserver and work in any other Pubky client
+      </span>
+    </p>
+    <p class="flex gap-2">
+      <.icon name="lucide-tag" class="mt-0.5 size-4 shrink-0 text-brand" />
+      <span>Tag a room to help people find it, here and in Pubky App</span>
+    </p>
+    <p class="flex gap-2">
+      <.icon name="lucide-globe" class="mt-0.5 size-4 shrink-0 text-brand" />
+      <span>
+        All rooms are public for now, like posts on Pubky App. Private rooms come with private homeserver storage.
+      </span>
+    </p>
     """
   end
 
