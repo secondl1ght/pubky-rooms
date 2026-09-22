@@ -10,6 +10,7 @@ defmodule PubkyRoomsWeb.Router do
     plug :put_root_layout, html: {PubkyRoomsWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug PubkyRoomsWeb.Plugs.SecurityHeaders
     plug :fetch_current_user
   end
 
@@ -56,7 +57,10 @@ defmodule PubkyRoomsWeb.Router do
     scope "/dev" do
       pipe_through :browser
 
-      live_dashboard "/dashboard", metrics: PubkyRoomsWeb.Telemetry
+      live_dashboard "/dashboard",
+        metrics: PubkyRoomsWeb.Telemetry,
+        csp_nonce_assign_key: :csp_nonce
+
       live "/ui", PubkyRoomsWeb.Dev.StyleguideLive, :index
     end
   end

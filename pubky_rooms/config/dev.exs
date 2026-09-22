@@ -48,6 +48,8 @@ config :pubky_rooms, dev_routes: true
 # Develop against the local pubky-docker testnet and a local Ring Simulator
 config :pubky, network: :testnet, client_id: "localhost:4000"
 config :pubky_rooms, simulator_url: "http://localhost:5173"
+# testnet avatars and files are served over plain HTTP by the local homeserver
+config :pubky_rooms, csp_img_src: ["http:"]
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"

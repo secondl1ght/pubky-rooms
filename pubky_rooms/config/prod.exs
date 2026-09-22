@@ -18,7 +18,8 @@ config :pubky_rooms, PubkyRoomsWeb.Endpoint,
   force_ssl: [
     rewrite_on: [:x_forwarded_proto],
     exclude: [
-      # paths: ["/health"],
+      # platform health checks reach us over plain HTTP inside the network
+      paths: ["/healthz"],
       hosts: ["localhost", "127.0.0.1"]
     ]
   ]
