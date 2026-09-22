@@ -30,9 +30,15 @@ defmodule PubkyRooms.Rooms.RoomServer do
     5. **Live budget** — at most `max_members_subscribed` members (creator
        first) get event subscriptions; members beyond that are *polled*: their
        folders are re-listed every `member_poll_ms` while viewers are
-       attached (`{:polled, [z32]}`). Members whose stream is down are
-       reported as `{:live_unavailable, [z32]}` from `Subscriptions` status
-       broadcasts. Nobody is ever dropped from a room.
+       attached (`{:polled, [z32]}`). A poll is **exact**: it pages down a
+       member's folder until it meets a message the room already holds (or
+       the folder ends), fetches every new message it found (no cap), and
+       treats a message older than one poll interval that vanished from the
+       listed range (the member's newest page, at least) as deleted. Edits
+       by polled members, and deletions further down, wait for the next
+       bootstrap. Members whose stream is down are reported as
+       `{:live_unavailable, [z32]}` from `Subscriptions` status broadcasts.
+       Nobody is ever dropped from a room.
 
     6. **Paging** — listing entries that were not fetched at bootstrap stay
        in memory per member (with the listing cursor for more); `older/3`
@@ -61,7 +67,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
   require Logger
 
   alias Pubky.Crypto.Blake3
-  alias PubkyRooms.{Events, Pubky}
+  alias PubkyRooms.{Events, Ids, Pubky}
   alias PubkyRooms.Events.Subscriptions
   alias PubkyRooms.Rooms.{Ban, Directory, Message, Paths, Room}
 
@@ -73,6 +79,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
   @default_viewers_debounce 2_000
   @history_limit 200
   @max_paging_rounds 5
+  @max_poll_pages 40
 
   @type ref :: Paths.room_ref()
   @type status :: :bootstrapping | :ready | :not_found | :closed | {:error, term()}
@@ -363,18 +370,16 @@ defmodule PubkyRooms.Rooms.RoomServer do
     end
   end
 
-  def handle_info({:backfilled, members, {msgs, failed, leftovers, reactions}}, state) do
-    msgs = Enum.reject(msgs, &banned?(state, &1.author))
-    state = Enum.reduce(msgs, state, fn msg, acc -> upsert(acc, msg) end)
-    state = merge_leftovers(state, leftovers, msgs)
-    state = apply_listed_reactions(state, reactions, broadcast: true)
+  def handle_info({:backfilled, members, history}, state) do
+    {:noreply, apply_backfill(state, members, history)}
+  end
 
-    unreachable =
-      state.unreachable
-      |> MapSet.difference(MapSet.new(members))
-      |> MapSet.union(MapSet.new(failed))
-
-    {:noreply, set_unreachable(state, unreachable)}
+  # A poll came back: new messages land like a backfill; then every message
+  # of a listed member that is older than `since` and missing from the
+  # listing has been deleted on their homeserver.
+  def handle_info({:poll_result, members, since, history, listed}, state) do
+    state = apply_backfill(state, members, history)
+    {:noreply, Enum.reduce(listed, state, &apply_poll_listing(&2, &1, since))}
   end
 
   # A paging round finished: store the messages silently (the viewer who asked
@@ -417,7 +422,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
     state = %{state | poll_timer: nil}
 
     if map_size(state.viewers) > 0 and MapSet.size(state.polled) > 0 do
-      backfill_async(state, MapSet.to_list(state.polled))
+      poll_async(state, MapSet.to_list(state.polled))
       {:noreply, schedule_poll(state)}
     else
       {:noreply, state}
@@ -852,8 +857,8 @@ defmodule PubkyRooms.Rooms.RoomServer do
     set_unreachable(state, MapSet.new(failed))
   end
 
-  # Joins, retries and polls: fetch in the background; the result comes back
-  # as `{:backfilled, …}`. Messages already in the table are not fetched again.
+  # Joins and retries: fetch in the background; the result comes back as
+  # `{:backfilled, …}`. Messages already in the table are not fetched again.
   defp backfill_async(state, members) do
     server = self()
     ref = state.ref
@@ -862,6 +867,73 @@ defmodule PubkyRooms.Rooms.RoomServer do
     Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn ->
       send(server, {:backfilled, members, fetch_history(members, ref, known)})
     end)
+  end
+
+  # Polls: exact listing (see `fetch_history/4`), result as `{:poll_result, …}`.
+  # `since` is the newest id a deletion verdict may cover: a message younger
+  # than one poll interval may still be in flight (written on this node by a
+  # polled member whose own session brought the event) and is judged later.
+  defp poll_async(state, members) do
+    server = self()
+    ref = state.ref
+    known = known_keys(state, members)
+    lag_us = config(:member_poll_ms, @default_poll_ms) * 1_000
+    since = Ids.encode(max(System.os_time(:microsecond) - lag_us, 0))
+
+    Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn ->
+      {history, listed} = fetch_history(members, ref, known, :exact)
+      send(server, {:poll_result, members, since, history, listed})
+    end)
+  end
+
+  defp apply_backfill(state, members, {msgs, failed, leftovers, reactions}) do
+    msgs = Enum.reject(msgs, &banned?(state, &1.author))
+    state = Enum.reduce(msgs, state, fn msg, acc -> upsert(acc, msg) end)
+    state = merge_leftovers(state, leftovers, msgs)
+    state = apply_listed_reactions(state, reactions, broadcast: true)
+
+    unreachable =
+      state.unreachable
+      |> MapSet.difference(MapSet.new(members))
+      |> MapSet.union(MapSet.new(failed))
+
+    set_unreachable(state, unreachable)
+  end
+
+  # Messages of `member` the room holds (confirmed, older than `since`, not
+  # below the oldest id the poll listed) that the listing lacks are gone.
+  defp apply_poll_listing(state, {member, ids}, since) do
+    listed = MapSet.new(ids)
+    floor = List.last(ids)
+
+    gone =
+      for {{msg_id, ^member} = key, %Message{state: :confirmed}} <-
+            :ets.select(state.table, [{{{:_, member}, :_}, [], [:"$_"]}]),
+          msg_id < since,
+          is_nil(floor) or msg_id >= floor,
+          not MapSet.member?(listed, msg_id),
+          do: key
+
+    Enum.each(gone, fn key ->
+      :ets.delete(state.table, key)
+      broadcast(state, {:message_deleted, key})
+    end)
+
+    older =
+      case state.older[member] do
+        %{entries: entries} = o ->
+          kept =
+            Enum.filter(entries, fn {msg_id, _} ->
+              MapSet.member?(listed, msg_id) or (floor && msg_id < floor) or msg_id >= since
+            end)
+
+          Map.put(state.older, member, %{o | entries: kept})
+
+        nil ->
+          state.older
+      end
+
+    %{state | older: older, reactions: Map.drop(state.reactions, gone)}
   end
 
   # Keys the room already holds (in the table or as unfetched listing entries).
@@ -907,15 +979,19 @@ defmodule PubkyRooms.Rooms.RoomServer do
   # Lists every member's folder (one request each), merges the entries by
   # message id (time-ordered), and fetches only the newest `bootstrap_messages`
   # that are not `known` already. Returns `{messages, members_whose_listing_failed,
-  # leftovers}` where `leftovers` maps each listed member to the entries that
-  # were not fetched (newest first) and the cursor for older ones.
+  # leftovers, reactions}` where `leftovers` maps each listed member to the
+  # entries that were not fetched (newest first) and the cursor for older ones.
+  #
+  # In `:exact` mode (polls) each folder is paged until an entry in `known` is
+  # met and *every* new entry is fetched; the result is `{history, listed}`
+  # with `listed` mapping each listed member to all ids seen, newest first.
   #
   # Cursors are captured before anything is listed: a message written after
   # the listing then always arrives through the event stream, and one written
   # before is in the listing. Overlap is idempotent.
-  defp fetch_history(members, ref, known) do
+  defp fetch_history(members, ref, known, mode \\ :page) do
     per_member = config(:bootstrap_per_member, 50)
-    total = config(:bootstrap_messages, 100)
+    total = if mode == :exact, do: :infinity, else: config(:bootstrap_messages, 100)
 
     members
     |> Task.async_stream(&Subscriptions.capture_cursor/1,
@@ -925,11 +1001,17 @@ defmodule PubkyRooms.Rooms.RoomServer do
     )
     |> Stream.run()
 
+    list =
+      case mode do
+        :page -> &list_recent(ref, &1, nil, per_member)
+        :exact -> &list_until_known(ref, &1, known, per_member)
+      end
+
     {listed, failed} =
       members
-      |> Task.async_stream(&list_recent(ref, &1, nil, per_member),
+      |> Task.async_stream(list,
         max_concurrency: concurrency(),
-        timeout: 30_000,
+        timeout: if(mode == :exact, do: 120_000, else: 30_000),
         on_timeout: :kill_task
       )
       |> Enum.zip(members)
@@ -941,6 +1023,11 @@ defmodule PubkyRooms.Rooms.RoomServer do
           {acc, [member | failed]}
       end)
 
+    all_ids =
+      Map.new(listed, fn {member, %{entries: entries}} ->
+        {member, Enum.map(entries, &elem(&1, 0))}
+      end)
+
     # entries the room already holds are neither fetched again nor "unfetched"
     listed =
       Map.new(listed, fn {member, %{entries: entries} = m} ->
@@ -948,9 +1035,50 @@ defmodule PubkyRooms.Rooms.RoomServer do
         {member, %{m | entries: rest}}
       end)
 
-    picks = listed |> all_entries() |> Enum.take(total)
+    picks = listed |> all_entries() |> take(total)
     leftovers = without_picks(listed, picks)
-    {fetch_messages(ref, picks), failed, leftovers, list_reactions(ref, Map.keys(listed))}
+
+    history =
+      {fetch_messages(ref, picks), failed, leftovers, list_reactions(ref, Map.keys(listed))}
+
+    case mode do
+      :page -> history
+      :exact -> {history, all_ids}
+    end
+  end
+
+  defp take(entries, :infinity), do: entries
+  defp take(entries, n), do: Enum.take(entries, n)
+
+  # Pages down a member's folder (newest first) until a page holds an entry
+  # the room already knows, the folder ends, or `@max_poll_pages` pages were
+  # read (then older messages are missing until the next bootstrap; logged).
+  defp list_until_known(ref, member, known, limit) do
+    Enum.reduce_while(1..@max_poll_pages, {[], nil}, fn page, {acc, cursor} ->
+      case list_recent(ref, member, cursor, limit) do
+        {:ok, entries, next} -> poll_page(acc ++ entries, next, page, known, member)
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp poll_page(acc, next, page, known, member) do
+    met? = Enum.any?(acc, fn {msg_id, _} -> MapSet.member?(known, {msg_id, member}) end)
+
+    cond do
+      met? or is_nil(next) ->
+        {:halt, {:ok, acc, next}}
+
+      page == @max_poll_pages ->
+        Logger.info(
+          "poll reached #{@max_poll_pages} pages for one member; older messages wait for the next bootstrap"
+        )
+
+        {:halt, {:ok, acc, next}}
+
+      true ->
+        {:cont, {acc, next}}
+    end
   end
 
   # One listing per member of their reaction markers for this room (at most

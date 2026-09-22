@@ -263,6 +263,49 @@ defmodule PubkyRooms.Rooms.RoomServerTest do
     assert_receive {:room_event, ^ref, {:polled, [^bob]}}, 1_000
   end
 
+  test "polls are exact: pages of new messages are all picked up and silent deletions are noticed",
+       ctx do
+    %{ref: ref} = ctx
+    Application.put_env(:pubky_rooms, :max_members_subscribed, 1)
+    on_exit(fn -> Application.delete_env(:pubky_rooms, :max_members_subscribed) end)
+    bob = Fixtures.z32("exact-bob")
+    Directory.add_member(ref, bob)
+
+    # bob already has one message when the room opens
+    {:ok, first} = Message.new(bob, ref, "exact 0")
+    Fake.seed(bob, Message.path(first), Message.encode(first))
+    {:ok, _pid} = RoomServer.ensure(ref)
+    assert_receive {:room_event, ^ref, :ready}, 2_000
+    {:ok, %{table: table, polled: [^bob]}} = RoomServer.attach(ref)
+    assert [%Message{content: "exact 0"}] = RoomServer.history(table)
+
+    # 25 files appear without any event reaching us: three listing pages
+    # (bootstrap_per_member is 10 in tests) and far more than the bootstrap
+    # fetch cap (bootstrap_messages 5); a poll must fetch every one of them
+    msgs =
+      for i <- 1..25 do
+        {:ok, m} = Message.new(bob, ref, "exact #{i}")
+        Fake.seed(bob, Message.path(m), Message.encode(m))
+        m
+      end
+
+    for %Message{content: content} <- msgs do
+      assert_receive {:room_event, ^ref, {:message_upserted, %Message{content: ^content}}}, 3_000
+    end
+
+    assert length(RoomServer.history(table)) == 26
+
+    # a file among the member's newest page removed without an event is
+    # noticed once it is older than one poll interval; older deletions wait
+    # for the next bootstrap (the poll stops at the first message it knows)
+    gone = Enum.at(msgs, 19)
+    Fake.unseed(bob, Message.path(gone))
+    key = gone.key
+    assert_receive {:room_event, ^ref, {:message_deleted, ^key}}, 3_000
+    refute Enum.any?(RoomServer.history(table), &(&1.key == key))
+    assert length(RoomServer.history(table)) == 25
+  end
+
   test "the viewer total is announced on the stats topic, debounced, signed in or not", ctx do
     %{ref: ref} = ctx
     Phoenix.PubSub.subscribe(PubkyRooms.PubSub, RoomServer.stats_topic(ref))

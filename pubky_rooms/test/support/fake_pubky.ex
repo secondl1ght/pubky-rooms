@@ -33,6 +33,10 @@ defmodule PubkyRooms.Pubky.Fake do
   def seed(user, path, body),
     do: Agent.update(__MODULE__, &put_in(&1, [:files, {user, path}], IO.iodata_to_binary(body)))
 
+  @doc "Removes a file directly (no event), e.g. a deletion nobody streamed."
+  def unseed(user, path),
+    do: Agent.update(__MODULE__, &%{&1 | files: Map.delete(&1.files, {user, path})})
+
   @doc "Writes a file as `user` and emits its PUT event (as another client would)."
   def write_as(user, path, body), do: store(user, path, IO.iodata_to_binary(body))
 
