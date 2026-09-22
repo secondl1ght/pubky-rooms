@@ -326,7 +326,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
               share the link. Nothing here is locked in.
             </.typography>
             <div class="flex flex-wrap gap-3">
-              <.button variant="brand" size="lg" navigate={~p"/login"}>
+              <.button variant="brand" size="lg" navigate={~p"/login"} class="w-full sm:w-auto">
                 <.icon name="lucide-key-round" class="size-4" /> Sign in with Pubky Ring
               </.button>
             </div>

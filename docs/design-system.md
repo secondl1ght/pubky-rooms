@@ -26,7 +26,7 @@ https://pubky.app. Reference data: `docs/notes/pubky-app-design-system.md`, `doc
 |---|---|
 | `<.icon name="lucide-house" class="size-5" />` | any Lucide icon; color from `currentColor` |
 | `<.logo />`, `<.pubky_mark />` | key + "Pubky" wordmark + lime "Rooms" |
-| `<.button variant size>` | variants default (lime tint), brand (solid lime), secondary, ghost, outline, destructive, destructive-soft, link, dark, dark-outline; sizes default/sm/lg/icon/icon-lg; renders `<.link>` with href/navigate/patch |
+| `<.button variant size>` | variants default (lime tint), brand (solid lime), secondary, ghost, outline, destructive, destructive-soft, link, dark, dark-outline; sizes default/sm/lg/icon/icon-lg/tab (48 px pill matching the tab-bar circles); renders `<.link>` with href/navigate/patch |
 | `<.fab navigate label />` | 80px translucent circle, lime on hover |
 | `<.avatar src name pubky size online>` | xs…2xl; generative fallback (signal-color disc + initial), hides broken images; `online` adds the lime presence dot |
 | `<.card variant>` + `card_header/title/description/content/footer` | default (`rounded-xl py-6`), post (`rounded-md py-0`), flat |
@@ -40,7 +40,7 @@ https://pubky.app. Reference data: `docs/notes/pubky-app-design-system.md`, `doc
 | `<.spinner>`, `<.skeleton>`, `<.empty_state icon title>` | feedback |
 | `<.typography size tag>` | xs/sm/md (500) · lg/xl/2xl (700); `<.section_title>` = 24px light, foreground colour (supporting text under it is muted; pass `text-muted-foreground` to de-emphasise a group) |
 | `<.container>`, `<.page>` (slots sidebar/aside), `<.sidebar_item>` | 1200px container; sticky 180px sidebar ≥ lg; aside ≥ xl |
-| `Layouts.app current_user active back` | desktop header (logo, icon nav, avatar/sign-in), mobile header, mobile tab bar, flash |
+| `Layouts.app current_user active back` | desktop header (logo, icon nav, avatar or sign-in pill), mobile header (back, logo), mobile tab bar (lobby, open a room, avatar or sign-in pill in size `tab`), flash |
 
 ## Rules
 - Never copy code from `~/CODE/pubky-app`; only the recorded tokens/specs. Verify parity with side-by-side

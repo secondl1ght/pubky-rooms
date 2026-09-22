@@ -17,6 +17,8 @@ Seeded on 2026-09-21 from Claude's browser pass over the finish-phase work; the 
 - Directory empty state explained the node's discovery mechanics ("show up here as their creators and members sign in"); accurate but not actionable. Now "No rooms yet. Open the first one." — fixed
 - How it works gains a sixth point for discovery without naming Nexus: "Tag a room to help people find it, here and in Pubky App" (the Pubky App half becomes true at M8; decided to state it now). — fixed
 - How it works point 1 dropped "JSON" and the `/pub/pubky-rooms/` path as too technical for the lobby: "Every message is a file on its author's homeserver" (file-text icon). The path stays in the README and the sign-in page. — fixed
+- Mobile: the tab bar's third item used Lucide `log-in` (read as "sign out") and the header had a bare lime key; the hero button was not full width. Now the account control is one component everywhere: avatar when signed in, the desktop-style "Sign in" pill (key icon, 48 px `tab` size) as the last tab-bar item when not; the mobile header only carries back + logo; hero CTA is full width below `sm`; tab items hover like the desktop nav. Tests. — fixed
+- Mobile loses the sidebar (Directory jump, tags filter, online count) and the How-it-works card. Layout change, to be discussed. — open
 
 ## Bugs
 - (none open)

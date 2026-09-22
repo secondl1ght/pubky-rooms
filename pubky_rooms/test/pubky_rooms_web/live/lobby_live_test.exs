@@ -23,6 +23,18 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     assert has_element?(view, "h2", "How it works")
     refute has_element?(view, "h2", "About")
     refute html =~ "Your rooms"
+
+    # sign-in is the last item of the mobile tab bar (a pill like the desktop one), not a header icon
+    assert has_element?(view, "nav a[href='/login']", "Sign in")
+    refute has_element?(view, "header a[aria-label='Sign in']")
+  end
+
+  test "signed-in users get their avatar in the header and the mobile tab bar", %{conn: conn} do
+    {sid, _alice} = Fixtures.login("alice")
+    {:ok, view, _html} = live(init_test_session(conn, Fixtures.cookie(sid)), ~p"/")
+    assert has_element?(view, "header a[href='/me']")
+    assert has_element?(view, "nav a[href='/me']")
+    refute has_element?(view, "a[href='/login']")
   end
 
   test "signed-in users are sent home from the sign-in page", %{conn: conn} do

@@ -63,9 +63,7 @@ defmodule PubkyRoomsWeb.Layouts do
           </.link>
         </div>
         <.logo navigate={~p"/"} />
-        <div class="flex size-12 items-center justify-end">
-          <.user_menu current_user={@current_user} active={@active == :profile} compact />
-        </div>
+        <div class="size-12" aria-hidden="true"></div>
       </div>
     </header>
 
@@ -80,20 +78,7 @@ defmodule PubkyRoomsWeb.Layouts do
           label="Open a room"
           active={@active == :new}
         />
-        <.tab_item
-          :if={@current_user}
-          navigate={~p"/me"}
-          icon="lucide-user-round"
-          label="You"
-          active={@active == :profile}
-        />
-        <.tab_item
-          :if={!@current_user}
-          navigate={~p"/login"}
-          icon="lucide-log-in"
-          label="Sign in"
-          active={false}
-        />
+        <.user_menu current_user={@current_user} active={@active == :profile} size="tab" />
       </div>
     </nav>
 
@@ -136,9 +121,9 @@ defmodule PubkyRoomsWeb.Layouts do
       aria-label={@label}
       aria-current={@active && "page"}
       class={[
-        "flex size-12 items-center justify-center rounded-full p-3 transition-colors",
-        "border border-border text-secondary-foreground backdrop-blur-sm",
-        (@active && "bg-secondary") || "bg-white/5 hover:bg-white/10"
+        "flex size-12 items-center justify-center rounded-full p-3 transition-all",
+        "border border-border text-secondary-foreground backdrop-blur-sm hover:bg-accent",
+        (@active && "bg-secondary") || "bg-white/5"
       ]}
     >
       <.icon name={@icon} class="size-6" />
@@ -148,21 +133,18 @@ defmodule PubkyRoomsWeb.Layouts do
 
   attr :current_user, :map, default: nil
   attr :active, :boolean, default: false
-  attr :compact, :boolean, default: false
 
+  attr :size, :string,
+    default: "default",
+    doc: "button size of the sign-in pill (`tab` in the tab bar)"
+
+  # The account control: the avatar when signed in, the sign-in pill otherwise.
+  # Desktop header and mobile tab bar both use it so sign-in looks the same everywhere.
   defp user_menu(%{current_user: nil} = assigns) do
     ~H"""
-    <.button :if={!@compact} navigate={~p"/login"}>
+    <.button navigate={~p"/login"} size={@size}>
       <.icon name="lucide-key-round" class="size-4" /> Sign in
     </.button>
-    <.link
-      :if={@compact}
-      navigate={~p"/login"}
-      class="flex size-12 items-center justify-center rounded-full text-brand"
-      aria-label="Sign in"
-    >
-      <.icon name="lucide-key-round" class="size-6" />
-    </.link>
     """
   end
 

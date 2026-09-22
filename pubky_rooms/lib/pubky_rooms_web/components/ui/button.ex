@@ -38,7 +38,8 @@ defmodule PubkyRoomsWeb.UI.Button do
     "sm" => "h-8 px-3 gap-1.5",
     "lg" => "h-auto px-8 py-5 text-sm font-bold",
     "icon" => "size-9 p-0",
-    "icon-lg" => "size-12 p-0"
+    "icon-lg" => "size-12 p-0",
+    "tab" => "h-12 px-5 gap-2"
   }
 
   @base "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-semibold rounded-full border " <>
