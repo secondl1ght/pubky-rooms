@@ -16,6 +16,7 @@ Seeded on 2026-09-21 from Claude's browser pass over the finish-phase work; the 
 - Hero paragraph said "create a room" and repeated the How-it-works facts. Now: "Group chat where every message is yours to keep. Sign in with Pubky Ring, open a room, share the link. Nothing here is locked in." The signed-in empty state and the sign-in-required flash say "open a room" too. — fixed
 - Directory empty state explained the node's discovery mechanics ("show up here as their creators and members sign in"); accurate but not actionable. Now "No rooms yet. Open the first one." — fixed
 - How it works gains a sixth point for discovery without naming Nexus: "Tag a room to help people find it, here and in Pubky App" (the Pubky App half becomes true at M8; decided to state it now). — fixed
+- How it works point 1 dropped "JSON" and the `/pub/pubky-rooms/` path as too technical for the lobby: "Every message is a file on its author's homeserver" (file-text icon). The path stays in the README and the sign-in page. — fixed
 
 ## Bugs
 - (none open)

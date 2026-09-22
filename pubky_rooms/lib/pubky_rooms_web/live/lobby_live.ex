@@ -372,11 +372,8 @@ defmodule PubkyRoomsWeb.LobbyLive do
             </.card_header>
             <.card_content class="flex flex-col gap-3 text-sm text-muted-foreground">
               <p class="flex gap-2">
-                <.icon name="lucide-braces" class="mt-0.5 size-4 shrink-0 text-brand" />
-                <span>
-                  Every message is a JSON file on its author's homeserver, under
-                  <code class="text-xs">/pub/pubky-rooms/</code>
-                </span>
+                <.icon name="lucide-file-text" class="mt-0.5 size-4 shrink-0 text-brand" />
+                <span>Every message is a file on its author's homeserver</span>
               </p>
               <p class="flex gap-2">
                 <.icon name="lucide-radio" class="mt-0.5 size-4 shrink-0 text-brand" />
