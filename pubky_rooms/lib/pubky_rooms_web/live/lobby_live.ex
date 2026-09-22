@@ -240,15 +240,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
           </div>
           <div :if={@popular_tags != []} class="flex flex-col gap-2" id="popular-tags">
             <.section_title class="mb-1">Tags</.section_title>
-            <div class="flex flex-wrap gap-1.5">
-              <.tag
-                :for={{label, _rooms} <- @popular_tags}
-                label={label}
-                size="sm"
-                selected={@tag_filter == label}
-                phx-click={JS.patch(if(@tag_filter == label, do: ~p"/", else: ~p"/?tag=#{label}"))}
-              />
-            </div>
+            <.tag_chips tags={@popular_tags} filter={@tag_filter} class="flex-wrap" />
           </div>
           <p class="flex items-center gap-2.5 text-sm text-secondary-foreground" id="lobby-online">
             <.live_dot />
@@ -334,6 +326,16 @@ defmodule PubkyRoomsWeb.LobbyLive do
         <% end %>
 
         <section id="directory" class="flex flex-col gap-3">
+          <p class="flex items-center gap-2.5 text-sm text-secondary-foreground lg:hidden">
+            <.live_dot />
+            {@online_count} {if @online_count == 1, do: "person", else: "people"} online
+          </p>
+          <.tag_chips
+            :if={@popular_tags != []}
+            tags={@popular_tags}
+            filter={@tag_filter}
+            class="-mx-4 overflow-x-auto px-4 pb-1 lg:hidden"
+          />
           <div class="flex flex-wrap items-baseline justify-between gap-3">
             <.section_title>
               Directory<span :if={@tag_filter} class="text-muted-foreground"> · {@tag_filter}</span>
@@ -365,42 +367,10 @@ defmodule PubkyRoomsWeb.LobbyLive do
           </p>
         </section>
 
+        <.how_it_works class="xl:hidden" />
+
         <:aside>
-          <.card class="gap-4 py-5">
-            <.card_header>
-              <.section_title class="text-xl">How it works</.section_title>
-            </.card_header>
-            <.card_content class="flex flex-col gap-3 text-sm text-muted-foreground">
-              <p class="flex gap-2">
-                <.icon name="lucide-file-text" class="mt-0.5 size-4 shrink-0 text-brand" />
-                <span>Every message is a file on its author's homeserver</span>
-              </p>
-              <p class="flex gap-2">
-                <.icon name="lucide-radio" class="mt-0.5 size-4 shrink-0 text-brand" />
-                <span>Homeserver event streams deliver them live</span>
-              </p>
-              <p class="flex gap-2">
-                <.icon name="lucide-circle-check" class="mt-0.5 size-4 shrink-0 text-brand" />
-                <span>A check mark means your homeserver stored it</span>
-              </p>
-              <p class="flex gap-2">
-                <.icon name="lucide-lock-open" class="mt-0.5 size-4 shrink-0 text-brand" />
-                <span>
-                  Nothing is locked in: your rooms live on your homeserver and work in any other Pubky client
-                </span>
-              </p>
-              <p class="flex gap-2">
-                <.icon name="lucide-tag" class="mt-0.5 size-4 shrink-0 text-brand" />
-                <span>Tag a room to help people find it, here and in Pubky App</span>
-              </p>
-              <p class="flex gap-2">
-                <.icon name="lucide-globe" class="mt-0.5 size-4 shrink-0 text-brand" />
-                <span>
-                  All rooms are public for now, like posts on Pubky App. Private rooms come with private homeserver storage.
-                </span>
-              </p>
-            </.card_content>
-          </.card>
+          <.how_it_works />
         </:aside>
       </.page>
 
@@ -461,6 +431,68 @@ defmodule PubkyRoomsWeb.LobbyLive do
         </:footer>
       </.dialog>
     </Layouts.app>
+    """
+  end
+
+  attr :tags, :list, required: true, doc: "`[{label, rooms}]` from `Directory.popular_tags/1`"
+  attr :filter, :string, default: nil, doc: "the selected label, if any"
+  attr :class, :any, default: nil
+
+  # The popular-tag chips; a click toggles the directory filter.
+  defp tag_chips(assigns) do
+    ~H"""
+    <div class={["flex gap-1.5", @class]}>
+      <.tag
+        :for={{label, _rooms} <- @tags}
+        label={label}
+        size="sm"
+        selected={@filter == label}
+        phx-click={JS.patch(if(@filter == label, do: ~p"/", else: ~p"/?tag=#{label}"))}
+      />
+    </div>
+    """
+  end
+
+  attr :class, :any, default: nil
+
+  # The explainer card: in the right column from `xl`, at the foot of the page below it.
+  defp how_it_works(assigns) do
+    ~H"""
+    <.card class={["gap-4 py-5", @class]}>
+      <.card_header>
+        <.section_title class="text-xl">How it works</.section_title>
+      </.card_header>
+      <.card_content class="flex flex-col gap-3 text-sm text-muted-foreground">
+        <p class="flex gap-2">
+          <.icon name="lucide-file-text" class="mt-0.5 size-4 shrink-0 text-brand" />
+          <span>Every message is a file on its author's homeserver</span>
+        </p>
+        <p class="flex gap-2">
+          <.icon name="lucide-radio" class="mt-0.5 size-4 shrink-0 text-brand" />
+          <span>Homeserver event streams deliver them live</span>
+        </p>
+        <p class="flex gap-2">
+          <.icon name="lucide-circle-check" class="mt-0.5 size-4 shrink-0 text-brand" />
+          <span>A check mark means your homeserver stored it</span>
+        </p>
+        <p class="flex gap-2">
+          <.icon name="lucide-lock-open" class="mt-0.5 size-4 shrink-0 text-brand" />
+          <span>
+            Nothing is locked in: your rooms live on your homeserver and work in any other Pubky client
+          </span>
+        </p>
+        <p class="flex gap-2">
+          <.icon name="lucide-tag" class="mt-0.5 size-4 shrink-0 text-brand" />
+          <span>Tag a room to help people find it, here and in Pubky App</span>
+        </p>
+        <p class="flex gap-2">
+          <.icon name="lucide-globe" class="mt-0.5 size-4 shrink-0 text-brand" />
+          <span>
+            All rooms are public for now, like posts on Pubky App. Private rooms come with private homeserver storage.
+          </span>
+        </p>
+      </.card_content>
+    </.card>
     """
   end
 

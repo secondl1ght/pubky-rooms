@@ -27,6 +27,8 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     # sign-in is the last item of the mobile tab bar (a pill like the desktop one), not a header icon
     assert has_element?(view, "nav a[href='/login']", "Sign in")
     refute has_element?(view, "header a[aria-label='Sign in']")
+    # the explainer is rendered twice: the xl right column and the foot of the page below xl
+    assert length(Regex.scan(~r/How it works/, render(view))) == 2
   end
 
   test "signed-in users get their avatar in the header and the mobile tab bar", %{conn: conn} do
