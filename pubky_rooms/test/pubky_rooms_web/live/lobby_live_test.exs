@@ -19,6 +19,9 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     # the first nav item is the lobby itself, never "your rooms" (a visitor has none)
     assert has_element?(view, "a[href='/']", "Lobby")
     assert page_title(view) =~ "Lobby"
+    # one explainer, not two: "How it works" stays, the sidebar "About" is gone
+    assert has_element?(view, "h2", "How it works")
+    refute has_element?(view, "h2", "About")
     refute html =~ "Your rooms"
   end
 

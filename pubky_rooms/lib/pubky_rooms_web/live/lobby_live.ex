@@ -254,12 +254,6 @@ defmodule PubkyRoomsWeb.LobbyLive do
             <.live_dot />
             {@online_count} {if @online_count == 1, do: "person", else: "people"} online
           </p>
-          <div class="flex flex-col gap-1">
-            <.section_title class="mb-2">About</.section_title>
-            <p class="text-sm text-muted-foreground">
-              Every message is a file on its author's homeserver. This server only relays and never stores your chats.
-            </p>
-          </div>
         </:sidebar>
 
         <%= if @current_user do %>
@@ -378,20 +372,27 @@ defmodule PubkyRoomsWeb.LobbyLive do
             </.card_header>
             <.card_content class="flex flex-col gap-3 text-sm text-secondary-foreground">
               <p class="flex gap-2">
-                <.icon name="lucide-file-json" class="mt-0.5 size-4 shrink-0 text-brand" />
-                Messages are JSON files under <code class="text-xs">/pub/pubky-rooms/</code>
+                <.icon name="lucide-braces" class="mt-0.5 size-4 shrink-0 text-brand" />
+                <span>
+                  Every message is a JSON file on its author's homeserver, under
+                  <code class="text-xs">/pub/pubky-rooms/</code>
+                </span>
               </p>
               <p class="flex gap-2">
                 <.icon name="lucide-radio" class="mt-0.5 size-4 shrink-0 text-brand" />
-                Homeserver event streams deliver them live
+                <span>Homeserver event streams deliver them live</span>
               </p>
               <p class="flex gap-2">
                 <.icon name="lucide-circle-check" class="mt-0.5 size-4 shrink-0 text-brand" />
-                A check mark means your homeserver stored it
+                <span>A check mark means your homeserver stored it</span>
+              </p>
+              <p class="flex gap-2">
+                <.icon name="lucide-server-off" class="mt-0.5 size-4 shrink-0 text-brand" />
+                <span>This server only relays. It never stores your chats.</span>
               </p>
               <p class="flex gap-2">
                 <.icon name="lucide-globe" class="mt-0.5 size-4 shrink-0 text-brand" />
-                All rooms are public, like posts on Pubky App
+                <span>All rooms are public, like posts on Pubky App</span>
               </p>
             </.card_content>
           </.card>
