@@ -117,6 +117,15 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
   }
+  @keyframes jump-flash {
+    from { background-color: color-mix(in oklab, var(--brand) 18%, transparent); }
+    to { background-color: transparent; }
+  }
+}
+
+/* A message the reader jumped to (from a quote) flashes once. */
+.jump-highlight {
+  animation: jump-flash 1.6s ease-out both;
 }
 
 /* Layout variables (plain CSS custom properties, referenced as e.g. max-w-(--container-max-width)) */

@@ -287,9 +287,13 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     render_async(bob_view)
 
     html = wait_for(fn -> render(alice_view) end, &(&1 =~ "the answer"))
-    # the quote links to the original and shows its text
-    assert html =~ ~s(href="##{id}")
-    assert html =~ ~r/the answer/
+    # the quote shows the original's text and jumps to it
+    [reply] = messages_on_homeserver(bob, ctx.room)
+    reply_id = "msg-#{bob}-#{reply.msg_id}"
+    assert has_element?(alice_view, "##{reply_id} button[phx-click=jump][phx-value-id=#{id}]")
+    assert html =~ "original question?"
+    alice_view |> element("##{reply_id} button[phx-click=jump]") |> render_click()
+    assert_push_event(alice_view, "scroll_to", %{id: ^id})
     assert [%Message{reply_to: reply_to}] = messages_on_homeserver(bob, ctx.room)
     assert reply_to == original.uri
 
@@ -445,6 +449,49 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert html =~ "first from bob"
     assert wait_for(fn -> Fake.files(ctx.alice) end, &(not Map.has_key?(&1, Paths.mute(bob))))
     assert wait_for(fn -> render(other_tab) end, &(&1 =~ "second from bob"))
+  end
+
+  test "a quote of a message outside the loaded window loads earlier pages and then jumps to it",
+       ctx do
+    %{alice: alice, room: room} = ctx
+    ref = Room.ref(room)
+    {bob_sid, bob} = Fixtures.login("bob")
+    Rooms.join(bob_sid, bob, ref)
+
+    # the original is the oldest of 13 messages: beyond the first listing page
+    # (bootstrap_per_member 10) and far outside the bootstrap window (5)
+    {:ok, needle} = Message.new(alice, ref, "the needle")
+    Fake.seed(alice, Message.path(needle), Message.encode(needle))
+
+    for i <- 1..12 do
+      {:ok, m} = Message.new(alice, ref, "filler #{i}")
+      Fake.seed(alice, Message.path(m), Message.encode(m))
+    end
+
+    {:ok, reply} = Message.new(bob, ref, "found it?", reply_to: needle.uri)
+    Fake.seed(bob, Message.path(reply), Message.encode(reply))
+    needle_id = "msg-#{alice}-#{needle.msg_id}"
+    reply_id = "msg-#{bob}-#{reply.msg_id}"
+
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    wait_for(fn -> render(view) end, &(&1 =~ "found it?"))
+    refute has_element?(view, "##{needle_id}")
+    assert has_element?(view, "##{reply_id} button[phx-click=jump]", "earlier message")
+
+    # the jump pages until the original is in the window, then scrolls to it
+    view |> element("##{reply_id} button[phx-click=jump]") |> render_click()
+    wait_for(fn -> render_async(view) end, &(&1 =~ "the needle"))
+    assert_push_event(view, "scroll_to", %{id: ^needle_id}, 2_000)
+    assert has_element?(view, "##{needle_id}")
+
+    # now in the window: the same click scrolls right away, no loading
+    view |> element("##{reply_id} button[phx-click=jump]") |> render_click()
+    assert_push_event(view, "scroll_to", %{id: ^needle_id})
+    refute render(view) =~ "Loading earlier messages"
+
+    # a quote of a message nobody holds gives up once the history is exhausted
+    render_click(view, "jump", %{"id" => "msg-#{alice}-0000000000001"})
+    assert wait_for(fn -> render_async(view) end, &(&1 =~ "no longer available"))
   end
 
   test "below xl the members list opens as a sheet with the same actions", ctx do

@@ -1,7 +1,7 @@
 // Keeps a chat list pinned to the bottom while the reader is near it, asks
 // the server for earlier messages when the reader nears the top (the list
-// element carries data-has-more), and preserves the scroll offset when those
-// are prepended.
+// element carries data-has-more), preserves the scroll offset when those are
+// prepended, and scrolls to a message on the server's "scroll_to" event.
 const BOTTOM_THRESHOLD = 80
 const TOP_THRESHOLD = 240
 
@@ -19,6 +19,15 @@ const ScrollToBottom = {
       // empty page (a member's homeserver is down) waits for the reader to
       // scroll or press the button, so we never hammer a dead homeserver
       if (count > 0) this.maybeLoadOlder()
+    })
+    // a quote was clicked: bring the original into view and flash it
+    this.handleEvent("scroll_to", ({id}) => {
+      const target = document.getElementById(id)
+      if (!target) return
+      this.pinned = false
+      target.scrollIntoView({block: "center"})
+      target.classList.add("jump-highlight")
+      setTimeout(() => target.classList.remove("jump-highlight"), 1600)
     })
     this.observer = new MutationObserver(() => this.afterUpdate())
     this.observer.observe(this.el, {childList: true, subtree: true})

@@ -18,6 +18,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   # a viewer is shown as typing for this long after their last keystroke event
   @typing_ttl 4_000
   @typing_throttle 2_000
+  @max_jump_rounds 10
 
   @impl true
   def mount(%{"creator" => creator, "room_id" => room_id}, _session, socket) do
@@ -64,6 +65,8 @@ defmodule PubkyRoomsWeb.RoomLive do
           oldest_key: nil,
           has_more: false,
           loading_older: false,
+          jump_target: nil,
+          jump_rounds: 0,
           typing: %{},
           typing_timer: nil,
           last_typing_at: nil
@@ -187,6 +190,85 @@ defmodule PubkyRoomsWeb.RoomLive do
   # Mutes hide an author's messages from this viewer (see `PubkyRooms.Mutes`).
   defp unmuted(%{assigns: %{muted: muted}}, msgs),
     do: Enum.reject(msgs, &MapSet.member?(muted, &1.author))
+
+  # Asks the room for the page before the oldest loaded message (one at a time).
+  defp load_older_page(socket) do
+    %{ref: ref, oldest_key: before, has_more: more?, loading_older: loading?} = socket.assigns
+
+    if more? and not loading? and before do
+      limit = Application.get_env(:pubky_rooms, :page_size, 50)
+
+      socket
+      |> assign(loading_older: true)
+      |> start_async(:older, fn -> RoomServer.older(ref, before, limit) end)
+    else
+      socket
+    end
+  end
+
+  defp prepend_older(socket, []), do: socket
+
+  # Items are inserted one by one at index 0, so the batch goes in reversed.
+  defp prepend_older(socket, [oldest | _] = msgs) do
+    socket
+    |> assign(oldest_key: oldest.key)
+    |> stream(:messages, socket |> unmuted(msgs) |> Enum.reverse(), at: 0)
+  end
+
+  defp jump_to(socket, {_msg_id, author} = key) do
+    %{muted: muted, has_more: more?, oldest_key: oldest, loading_older: loading?} = socket.assigns
+
+    cond do
+      MapSet.member?(muted, author) ->
+        put_flash(socket, :info, "That message is from someone you muted.")
+
+      in_window?(socket, key) ->
+        push_event(socket, "scroll_to", %{id: dom_id(key)})
+
+      more? and oldest != nil and not loading? ->
+        socket |> assign(jump_target: key, jump_rounds: 0) |> load_older_page()
+
+      true ->
+        put_flash(socket, :info, "That message is no longer available.")
+    end
+  end
+
+  # One more page arrived while jumping: done, keep going, or give up.
+  defp continue_jump(socket, key, msgs, more?) do
+    rounds = socket.assigns.jump_rounds + 1
+
+    cond do
+      in_window?(socket, key) ->
+        socket |> assign(jump_target: nil) |> push_event("scroll_to", %{id: dom_id(key)})
+
+      more? and msgs != [] and rounds < @max_jump_rounds ->
+        socket |> assign(jump_rounds: rounds) |> load_older_page()
+
+      more? ->
+        socket
+        |> assign(jump_target: nil)
+        |> put_flash(:error, "Earlier messages could not be loaded right now.")
+
+      true ->
+        socket
+        |> assign(jump_target: nil)
+        |> put_flash(:info, "That message is no longer available.")
+    end
+  end
+
+  # Held by the room and inside the loaded window (so its row is in the DOM).
+  defp in_window?(%{assigns: %{oldest_key: oldest}} = socket, key),
+    do: oldest != nil and key >= oldest and stored_message(socket, key) != nil
+
+  defp parse_dom_id("msg-" <> rest) when byte_size(rest) == 66 do
+    <<author::binary-size(52), "-", msg_id::binary-size(13)>> = rest
+
+    if Ids.valid_z32?(author) and Ids.valid_id?(msg_id),
+      do: {:ok, {msg_id, author}},
+      else: :error
+  end
+
+  defp parse_dom_id(_id), do: :error
 
   # The viewer's mute lists (Rooms + Pubky App) are read before the history
   # is streamed and followed live, so a mute made on another device applies.
@@ -382,18 +464,14 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   # The reader scrolled to the top (or pressed the button): extend the window.
-  def handle_event("load_older", _params, socket) do
-    %{ref: ref, oldest_key: before, has_more: more?, loading_older: loading?} = socket.assigns
+  def handle_event("load_older", _params, socket), do: {:noreply, load_older_page(socket)}
 
-    if more? and not loading? and before do
-      limit = Application.get_env(:pubky_rooms, :page_size, 50)
-
-      {:noreply,
-       socket
-       |> assign(loading_older: true)
-       |> start_async(:older, fn -> RoomServer.older(ref, before, limit) end)}
-    else
-      {:noreply, socket}
+  # A quote was clicked: scroll to the original, loading earlier pages first
+  # when it sits outside the window.
+  def handle_event("jump", %{"id" => id}, socket) do
+    case parse_dom_id(id) do
+      {:ok, key} -> {:noreply, jump_to(socket, key)}
+      :error -> {:noreply, socket}
     end
   end
 
@@ -672,26 +750,18 @@ defmodule PubkyRoomsWeb.RoomLive do
     do: {:noreply, restore_message(socket, key, {:unexpected, reason})}
 
   def handle_async(:older, {:ok, {:ok, msgs, more?}}, socket) do
-    socket = assign(socket, loading_older: false, has_more: more?)
+    socket = socket |> assign(loading_older: false, has_more: more?) |> prepend_older(msgs)
 
-    case msgs do
-      [] ->
-        {:noreply, push_event(socket, "older:loaded", %{count: 0})}
-
-      [oldest | _] ->
-        # items are inserted one by one at index 0, so the batch goes in reversed
-        {:noreply,
-         socket
-         |> assign(oldest_key: oldest.key)
-         |> stream(:messages, socket |> unmuted(msgs) |> Enum.reverse(), at: 0)
-         |> push_event("older:loaded", %{count: length(msgs)})}
+    case socket.assigns.jump_target do
+      nil -> {:noreply, push_event(socket, "older:loaded", %{count: length(msgs)})}
+      key -> {:noreply, continue_jump(socket, key, msgs, more?)}
     end
   end
 
   def handle_async(:older, {:exit, _reason}, socket) do
     {:noreply,
      socket
-     |> assign(loading_older: false)
+     |> assign(loading_older: false, jump_target: nil)
      |> push_event("older:loaded", %{count: 0})
      |> put_flash(:error, "Earlier messages could not be loaded right now.")}
   end
@@ -1084,16 +1154,25 @@ defmodule PubkyRoomsWeb.RoomLive do
   # What a reply quotes: the original's author and text, if we hold it.
   defp quote_of(_socket, %Message{reply_to: nil}), do: nil
 
+  # `%{id, name, content}` when the room holds the original; `{:missing, id}`
+  # when it does not (yet: it may be further up in the history, or gone).
   defp quote_of(assigns, %Message{reply_to: uri}) do
-    with {:ok, {author, _ref, msg_id}} <- Paths.parse_message_uri(uri),
-         %Message{} = original <- stored_message(assigns, {msg_id, author}) do
-      %{
-        id: dom_id(original),
-        name: profile_of(assigns.profiles, author).name,
-        content: Format.truncate(original.content, 140)
-      }
-    else
-      _ -> :unavailable
+    case Paths.parse_message_uri(uri) do
+      {:ok, {author, _ref, msg_id}} ->
+        case stored_message(assigns, {msg_id, author}) do
+          %Message{} = original ->
+            %{
+              id: dom_id(original),
+              name: profile_of(assigns.profiles, author).name,
+              content: Format.truncate(original.content, 140)
+            }
+
+          nil ->
+            {:missing, dom_id({msg_id, author})}
+        end
+
+      :error ->
+        :unavailable
     end
   end
 
@@ -1920,7 +1999,10 @@ defmodule PubkyRoomsWeb.RoomLive do
   attr :can_edit, :boolean, default: false, doc: "own message in an open room, not banned"
   attr :can_reply, :boolean, default: false, doc: "also gates reacting"
   attr :viewer, :string, default: nil, doc: "the viewer's z32, to mark their own reactions"
-  attr :quote, :any, default: nil, doc: "nil | :unavailable | %{id, name, content}"
+
+  attr :quote, :any,
+    default: nil,
+    doc: "nil | :unavailable | {:missing, id} | %{id, name, content}"
 
   defp message_row(assigns) do
     ~H"""
@@ -1997,14 +2079,27 @@ defmodule PubkyRoomsWeb.RoomLive do
           </time>
           <span :if={@msg.edited_at} class="text-xs text-muted-foreground">(edited)</span>
         </div>
-        <a
+        <button
           :if={is_map(@quote)}
-          href={"#" <> @quote.id}
-          class="mb-0.5 flex min-w-0 flex-col gap-0.5 border-l-2 border-brand/60 pl-2 text-xs text-muted-foreground hover:text-secondary-foreground"
+          type="button"
+          phx-click="jump"
+          phx-value-id={@quote.id}
+          class="mb-0.5 flex min-w-0 max-w-full cursor-pointer flex-col items-start gap-0.5 border-l-2 border-brand/60 pl-2 text-left text-xs text-muted-foreground hover:text-secondary-foreground"
+          title="Show the original message"
         >
           <span class="font-semibold">{@quote.name}</span>
-          <span class="truncate">{@quote.content}</span>
-        </a>
+          <span class="max-w-full truncate">{@quote.content}</span>
+        </button>
+        <button
+          :if={match?({:missing, _}, @quote)}
+          type="button"
+          phx-click="jump"
+          phx-value-id={elem(@quote, 1)}
+          class="mb-0.5 flex cursor-pointer items-center gap-1 border-l-2 border-border pl-2 text-xs italic text-muted-foreground hover:text-secondary-foreground"
+          title="Load earlier messages up to the original"
+        >
+          <.icon name="lucide-history" class="size-3" /> Replying to an earlier message — show it
+        </button>
         <span
           :if={@quote == :unavailable}
           class="mb-0.5 border-l-2 border-border pl-2 text-xs italic text-muted-foreground"
