@@ -168,7 +168,7 @@ defmodule PubkyRoomsWeb.Layouts do
       aria-label="Your profile"
       aria-current={@active && "page"}
       class={[
-        "flex items-center justify-center rounded-full ring-2 ring-transparent transition-shadow hover:ring-brand/50",
+        "flex items-center justify-center rounded-full ring-2 ring-transparent",
         @active && "ring-brand"
       ]}
     >
