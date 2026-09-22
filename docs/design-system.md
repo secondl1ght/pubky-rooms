@@ -35,7 +35,7 @@ https://pubky.app. Reference data: `docs/notes/pubky-app-design-system.md`, `doc
 | `<Linkify.linkify text>` | message text with `http(s)` URLs linked safely (escaped segments, `noopener noreferrer nofollow ugc`, new tab); adds no whitespace |
 | `<.input field type label hint>` | text/email/…/textarea (`variant="inline"` for composers)/select/checkbox/hidden; `<.label>`, `<.error>` |
 | `<.dialog id show on_cancel>` + `show_dialog/hide_dialog` | centered modal ≥ sm, bottom sheet on mobile; slots title/description/footer |
-| `<.flash kind>`, `Layouts.flash_group` | bottom-right toasts (info/success/error) |
+| `<.flash kind dismiss_after>`, `Layouts.flash_group` | bottom-right toasts (info/success/error); info and success dismiss themselves after 5 s (`AutoDismiss` hook, paused on hover/focus), errors stay |
 | `<.spinner>`, `<.skeleton>`, `<.empty_state icon title>` | feedback |
 | `<.typography size tag>` | xs/sm/md (500) · lg/xl/2xl (700); `<.section_title>` = 24px light grey |
 | `<.container>`, `<.page>` (slots sidebar/aside), `<.sidebar_item>` | 1200px container; sticky 180px sidebar ≥ lg; aside ≥ xl |

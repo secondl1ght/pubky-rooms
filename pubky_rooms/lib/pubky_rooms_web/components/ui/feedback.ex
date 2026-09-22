@@ -12,6 +12,10 @@ defmodule PubkyRoomsWeb.UI.Feedback do
   @doc """
   Renders a flash toast (bottom-right dark card, as Pubky App's toasts).
 
+  Success and info toasts dismiss themselves after `dismiss_after`
+  milliseconds (the `AutoDismiss` hook; paused while hovered or focused);
+  error toasts stay until clicked, so nothing that needs acting on fades away.
+
       <.flash kind={:info} flash={@flash} />
       <.flash id="offline" kind={:error} title="Offline" hidden>Reconnecting…</.flash>
   """
@@ -19,17 +23,31 @@ defmodule PubkyRoomsWeb.UI.Feedback do
   attr :flash, :map, default: %{}, doc: "the map of flash messages to display"
   attr :title, :string, default: nil
   attr :kind, :atom, values: [:info, :error, :success], doc: "used for styling and flash lookup"
+
+  attr :dismiss_after, :integer,
+    default: nil,
+    doc: "ms before the toast dismisses itself; default 5000 for info/success, never for errors"
+
   attr :rest, :global, doc: "the arbitrary HTML attributes to add to the flash container"
   slot :inner_block, doc: "the optional inner block that renders the flash message"
 
   def flash(assigns) do
-    assigns = assign_new(assigns, :id, fn -> "flash-#{assigns.kind}" end)
+    assigns =
+      assigns
+      |> assign_new(:id, fn -> "flash-#{assigns.kind}" end)
+      |> assign_new(:auto_dismiss, fn
+        %{dismiss_after: ms} when is_integer(ms) -> ms
+        %{kind: kind} when kind in [:info, :success] -> 5000
+        _ -> nil
+      end)
 
     ~H"""
     <div
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
       id={@id}
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
+      phx-hook={@auto_dismiss && "AutoDismiss"}
+      data-dismiss-after={@auto_dismiss}
       role="alert"
       class={[
         "pointer-events-auto flex w-80 items-start gap-3 rounded-xl border bg-card p-4 text-sm shadow-lg sm:w-96",
