@@ -88,7 +88,7 @@ defmodule PubkyRoomsWeb.UI.Avatar do
       </span>
       <span
         :if={@online}
-        class={["absolute right-0 bottom-0 rounded-full bg-[#00FF5D] ring-background", @dot_classes]}
+        class={["absolute right-0 bottom-0 rounded-full bg-brand ring-background", @dot_classes]}
         aria-label="online"
         role="img"
       />

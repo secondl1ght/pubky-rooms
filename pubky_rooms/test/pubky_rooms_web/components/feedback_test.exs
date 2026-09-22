@@ -19,6 +19,13 @@ defmodule PubkyRoomsWeb.UI.FeedbackTest do
     refute html =~ "data-dismiss-after"
   end
 
+  test "the live indicator is decorative, brand-coloured and animates only when motion is allowed" do
+    html = render_component(&Feedback.live_dot/1, [])
+    assert html =~ ~s(aria-hidden="true")
+    assert html =~ "bg-brand"
+    assert html =~ "motion-safe:animate-live-ping"
+  end
+
   test "the delay can be set per toast" do
     html =
       render_component(&Feedback.flash/1,

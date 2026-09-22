@@ -18,7 +18,7 @@ defmodule PubkyRoomsWeb.UI do
     * `PubkyRoomsWeb.UI.Tag` — colored tag chips
     * `PubkyRoomsWeb.UI.Form` — inputs, textareas, labels, errors
     * `PubkyRoomsWeb.UI.Dialog` — modal dialogs (bottom sheets on mobile)
-    * `PubkyRoomsWeb.UI.Feedback` — flash toasts, spinner, skeleton, empty state
+    * `PubkyRoomsWeb.UI.Feedback` — flash toasts, live indicator, spinner, skeleton, empty state
     * `PubkyRoomsWeb.UI.Typography` — the type scale
     * `PubkyRoomsWeb.UI.Layout` — page containers and sidebars
     * `PubkyRoomsWeb.UI.Transitions` — shared `Phoenix.LiveView.JS` show/hide helpers

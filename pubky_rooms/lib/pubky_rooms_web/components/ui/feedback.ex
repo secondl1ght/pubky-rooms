@@ -80,6 +80,25 @@ defmodule PubkyRoomsWeb.UI.Feedback do
     """
   end
 
+  @doc """
+  The live indicator: a brand-lime dot with a slow ring breathing outwards,
+  used wherever the UI says "n online". The ring is still under
+  `prefers-reduced-motion`. Decorative: pair it with visible text.
+
+      <.live_dot /> {@online} online
+  """
+  attr :class, :any, default: "size-2"
+  attr :rest, :global
+
+  def live_dot(assigns) do
+    ~H"""
+    <span class={["relative inline-flex shrink-0", @class]} aria-hidden="true" {@rest}>
+      <span class="absolute inset-0 rounded-full bg-brand motion-safe:animate-live-ping"></span>
+      <span class="relative size-full rounded-full bg-brand"></span>
+    </span>
+    """
+  end
+
   @doc "A spinning ring."
   attr :class, :any, default: "size-5"
   attr :rest, :global

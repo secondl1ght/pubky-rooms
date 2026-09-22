@@ -35,6 +35,7 @@ https://pubky.app. Reference data: `docs/notes/pubky-app-design-system.md`, `doc
 | `<Linkify.linkify text>` | message text with `http(s)` URLs linked safely (escaped segments, `noopener noreferrer nofollow ugc`, new tab); adds no whitespace |
 | `<.input field type label hint>` | text/email/…/textarea (`variant="inline"` for composers)/select/checkbox/hidden; `<.label>`, `<.error>` |
 | `<.dialog id show on_cancel>` + `show_dialog/hide_dialog` | centered modal ≥ sm, bottom sheet on mobile; slots title/description/footer |
+| `<.live_dot class>` | the "n online" indicator: brand-lime dot with a slow outward ring (`--animate-live-ping`, still under reduced motion); decorative, always next to text |
 | `<.flash kind dismiss_after>`, `Layouts.flash_group` | bottom-right toasts (info/success/error); info and success dismiss themselves after 5 s (`AutoDismiss` hook, paused on hover/focus), errors stay |
 | `<.spinner>`, `<.skeleton>`, `<.empty_state icon title>` | feedback |
 | `<.typography size tag>` | xs/sm/md (500) · lg/xl/2xl (700); `<.section_title>` = 24px light grey |

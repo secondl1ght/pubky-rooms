@@ -100,6 +100,7 @@
   --animate-zoom-in: zoom-in 0.2s ease-out both;
   --animate-slide-up: slide-up 0.25s ease-out both;
   --animate-pulse-soft: pulse-soft 2s ease-in-out infinite;
+  --animate-live-ping: live-ping 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
 
   @keyframes fade-in {
     from { opacity: 0; }
@@ -116,6 +117,11 @@
   @keyframes pulse-soft {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
+  }
+  /* The live indicator's ring: a slow breath outwards, gone before the next. */
+  @keyframes live-ping {
+    0% { transform: scale(1); opacity: 0.6; }
+    70%, 100% { transform: scale(2.75); opacity: 0; }
   }
   @keyframes jump-flash {
     from { background-color: color-mix(in oklab, var(--brand) 18%, transparent); }

@@ -250,13 +250,10 @@ defmodule PubkyRoomsWeb.LobbyLive do
               />
             </div>
           </div>
-          <div class="flex flex-col gap-1">
-            <.section_title class="mb-2">Right now</.section_title>
-            <p class="flex items-center gap-2 text-sm text-secondary-foreground" id="lobby-online">
-              <span class="inline-block size-2 rounded-full bg-[#00FF5D]"></span>
-              {@online_count} {if @online_count == 1, do: "person", else: "people"} online
-            </p>
-          </div>
+          <p class="flex items-center gap-2.5 text-sm text-secondary-foreground" id="lobby-online">
+            <.live_dot />
+            {@online_count} {if @online_count == 1, do: "person", else: "people"} online
+          </p>
           <div class="flex flex-col gap-1">
             <.section_title class="mb-2">About</.section_title>
             <p class="text-sm text-muted-foreground">
@@ -508,7 +505,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
               class="flex items-center gap-1 text-secondary-foreground"
               title="Signed-in people in the room"
             >
-              <span class="inline-block size-2 rounded-full bg-[#00FF5D]"></span> {@online}
+              <.live_dot /> {@online}
             </span>
             <span :if={@anonymous > 0} class="flex items-center gap-1" title="Anonymous viewers">
               <.icon name="lucide-eye" class="size-3.5" /> {@anonymous}

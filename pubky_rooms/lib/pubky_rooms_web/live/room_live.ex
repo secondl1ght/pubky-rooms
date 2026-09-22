@@ -1572,7 +1572,7 @@ defmodule PubkyRoomsWeb.RoomLive do
       <.card_header :if={@heading}>
         <.section_title class="text-xl">Members · {length(@members)}</.section_title>
         <p class="text-xs text-muted-foreground">
-          <span class="mr-1 inline-block size-2 rounded-full bg-[#00FF5D] align-middle"></span>
+          <.live_dot class="mr-1 size-2 align-middle" />
           {map_size(@online)} online<span
             :if={Rooms.anonymous_count(@viewers, @online) > 0}
             title="Viewers who are not signed in"
@@ -1859,7 +1859,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           class="flex items-center gap-1.5 text-xs text-muted-foreground"
           title="Signed-in people in the room right now"
         >
-          <span class="inline-block size-2 rounded-full bg-[#00FF5D]"></span>
+          <.live_dot />
           <span id="online-count">{@online_count} online</span>
         </span>
         <span
