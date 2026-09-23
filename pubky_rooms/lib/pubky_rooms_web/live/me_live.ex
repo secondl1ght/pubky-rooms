@@ -172,7 +172,7 @@ defmodule PubkyRoomsWeb.MeLive do
             </dl>
 
             <div class="flex flex-wrap gap-2">
-              <.button variant="destructive-soft" href={~p"/logout"} method="delete">
+              <.button variant="secondary" href={~p"/logout"} method="delete">
                 <.icon name="lucide-log-out" class="size-4" /> Sign out
               </.button>
             </div>
