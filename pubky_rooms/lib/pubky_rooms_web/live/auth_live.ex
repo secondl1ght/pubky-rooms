@@ -242,7 +242,7 @@ defmodule PubkyRoomsWeb.AuthLive do
                     name="lucide-timer-off"
                     class="size-10 opacity-60"
                   />
-                  <.button :if={@state in [:expired, :error]} variant="dark" phx-click="new_code">
+                  <.button :if={@state in [:expired, :error]} variant="secondary" phx-click="new_code">
                     <.icon name="lucide-refresh-cw" class="size-4" /> New code
                   </.button>
                 </div>
