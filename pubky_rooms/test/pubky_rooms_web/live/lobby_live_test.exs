@@ -202,6 +202,8 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     # signed in with a filter: only the filtered directory, own-room sections hidden
     {:ok, mine, html_mine} = live(alice_conn, ~p"/?tag=dd")
     refute html_mine =~ "Your rooms"
+    refute html_mine =~ "Sign in with Pubky Ring"
+    refute html_mine =~ "No rooms yet"
     assert length(Regex.scan(~r/Busy tags/, html_mine)) == 1
     mine |> element("a", "Clear filter") |> render_click()
     assert render(mine) =~ "Your rooms"

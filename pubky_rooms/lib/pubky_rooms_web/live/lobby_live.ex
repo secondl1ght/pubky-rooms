@@ -281,8 +281,8 @@ defmodule PubkyRoomsWeb.LobbyLive do
           </div>
         </:sidebar>
 
-        <%= if @current_user && is_nil(@tag_filter) do %>
-          <section :if={@created != []} class="flex flex-col gap-3">
+        <%= if @current_user do %>
+          <section :if={@created != [] and is_nil(@tag_filter)} class="flex flex-col gap-3">
             <.section_title>Your rooms</.section_title>
             <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:gap-6">
               <.room_card
@@ -296,7 +296,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
               />
             </div>
           </section>
-          <section :if={@joined != []} class="flex flex-col gap-3">
+          <section :if={@joined != [] and is_nil(@tag_filter)} class="flex flex-col gap-3">
             <.section_title>Joined</.section_title>
             <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:gap-6">
               <.room_card
@@ -310,7 +310,11 @@ defmodule PubkyRoomsWeb.LobbyLive do
               />
             </div>
           </section>
-          <details :if={@closed != []} id="closed-rooms" class="group flex flex-col gap-3">
+          <details
+            :if={@closed != [] and is_nil(@tag_filter)}
+            id="closed-rooms"
+            class="group flex flex-col gap-3"
+          >
             <summary class="flex cursor-pointer list-none items-center gap-2 text-muted-foreground marker:content-none">
               <.icon
                 name="lucide-chevron-right"
@@ -333,7 +337,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
             </div>
           </details>
           <.empty_state
-            :if={@created == [] and @joined == [] and @closed == []}
+            :if={@created == [] and @joined == [] and @closed == [] and is_nil(@tag_filter)}
             icon="lucide-messages-square"
             title="No rooms yet"
           >
