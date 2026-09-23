@@ -62,15 +62,23 @@ defmodule PubkyRooms.Rooms.Room do
 
     errors =
       []
-      |> check(String.length(name) in 1..@name_max, :name, "must be 1 to #{@name_max} characters")
-      |> check(printable?(name), :name, "contains invalid characters")
+      |> check(
+        String.length(name) in 1..@name_max,
+        :name,
+        "Give the room a name of 1 to #{@name_max} characters."
+      )
+      |> check(printable?(name), :name, "The name contains unsupported characters.")
       |> check(
         is_nil(topic) or String.length(topic) <= @topic_max,
         :topic,
-        "must be at most #{@topic_max} characters"
+        "Topics can be up to #{@topic_max} characters."
       )
-      |> check(is_nil(topic) or printable?(topic), :topic, "contains invalid characters")
-      |> check(visibility in @visibilities, :visibility, "must be public or unlisted")
+      |> check(
+        is_nil(topic) or printable?(topic),
+        :topic,
+        "The topic contains unsupported characters."
+      )
+      |> check(visibility in @visibilities, :visibility, "Choose public or unlisted.")
 
     if errors == [],
       do: {:ok, %{name: name, topic: topic, visibility: visibility}},

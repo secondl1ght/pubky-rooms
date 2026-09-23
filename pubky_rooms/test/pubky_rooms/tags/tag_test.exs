@@ -30,7 +30,7 @@ defmodule PubkyRooms.Tags.TagTest do
     assert {:error, _} = Tag.normalize(String.duplicate("a", 21))
     assert {:error, _} = Tag.normalize("a/b")
     assert {:ok, ["bitcoin", "nostr", "dev"]} = Tag.parse_labels("#Bitcoin, nostr  dev room")
-    assert {:error, "at most 2 tags"} = Tag.parse_labels("a b c", 2)
+    assert {:error, "Add up to 2 tags."} = Tag.parse_labels("a b c", 2)
     assert {:ok, []} = Tag.parse_labels(nil)
     assert {:ok, []} = Tag.parse_labels("   ")
   end

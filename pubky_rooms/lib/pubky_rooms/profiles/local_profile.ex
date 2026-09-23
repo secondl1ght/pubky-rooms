@@ -21,13 +21,13 @@ defmodule PubkyRooms.Profiles.LocalProfile do
     name = name |> String.replace(~r/[\p{C}]/u, "") |> String.trim()
 
     cond do
-      name == "" -> {:error, "can't be blank"}
-      String.length(name) > @name_max -> {:error, "must be at most #{@name_max} characters"}
+      name == "" -> {:error, "Enter a name."}
+      String.length(name) > @name_max -> {:error, "Names can be up to #{@name_max} characters."}
       true -> {:ok, name}
     end
   end
 
-  def validate(_), do: {:error, "can't be blank"}
+  def validate(_), do: {:error, "Enter a name."}
 
   @doc "Encodes the nickname file."
   @spec encode(String.t()) :: binary()

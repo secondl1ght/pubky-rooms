@@ -138,7 +138,7 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     )
     |> render_submit()
 
-    assert wait_for(fn -> render(view) end, &(&1 =~ "at most 4 tags"))
+    assert wait_for(fn -> render(view) end, &(&1 =~ "Add up to 4 tags."))
 
     view
     |> form("#new-room-form",
@@ -240,7 +240,7 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     |> form("#new-room-form", room: %{name: "", visibility: "public"})
     |> render_submit()
 
-    assert render(view) =~ "must be 1 to 64 characters"
+    assert render(view) =~ "Give the room a name of 1 to 64 characters."
 
     view
     |> form("#new-room-form", room: %{name: "Test room", topic: "Hello", visibility: "unlisted"})

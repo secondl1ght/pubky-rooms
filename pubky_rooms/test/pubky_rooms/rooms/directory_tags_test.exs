@@ -17,7 +17,7 @@ defmodule PubkyRooms.Rooms.DirectoryTagsTest do
     sid: sid,
     alice: alice
   } do
-    assert {:error, [tags: {"at most 4 tags", []}]} =
+    assert {:error, [tags: {"Add up to 4 tags.", []}]} =
              Rooms.create_room(sid, alice, %{
                "name" => "Too many",
                "visibility" => "public",
@@ -106,7 +106,7 @@ defmodule PubkyRooms.Rooms.DirectoryTagsTest do
     assert {:ok, "lightning"} = Rooms.tag_room(bob_sid, bob, ref, " Lightning ")
     assert Map.has_key?(Fake.files(bob), Tag.path(uri, "lightning"))
     assert Directory.tagged_by?(ref, "lightning", bob)
-    assert {:error, "can't be blank"} = Rooms.tag_room(bob_sid, bob, ref, "  ")
+    assert {:error, "Enter a tag."} = Rooms.tag_room(bob_sid, bob, ref, "  ")
 
     assert :ok = Rooms.untag_room(bob_sid, bob, ref, "lightning")
     refute Map.has_key?(Fake.files(bob), Tag.path(uri, "lightning"))

@@ -46,7 +46,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
 
     # blank messages are rejected before any write
     view |> form("#composer", message: %{content: "   "}) |> render_submit()
-    assert render(view) =~ "can&#39;t be blank"
+    assert render(view) =~ "Write a message first."
   end
 
   test "a failed write is shown with retry and discard", ctx do
@@ -580,7 +580,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     |> form("#room-settings-form", room: %{name: "", topic: "x", visibility: "public"})
     |> render_submit()
 
-    assert render(view) =~ "must be 1 to 64 characters"
+    assert render(view) =~ "Give the room a name of 1 to 64 characters."
 
     view
     |> form("#room-settings-form",
@@ -701,7 +701,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
 
     # bad labels are rejected before any write
     bob_view |> form("#tag-form", tag: %{label: String.duplicate("x", 21)}) |> render_submit()
-    assert render(bob_view) =~ "must be at most 20 characters"
+    assert render(bob_view) =~ "Tags can be up to 20 characters."
   end
 
   test "anonymous viewers are counted, never identified", ctx do

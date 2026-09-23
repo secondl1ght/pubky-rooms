@@ -109,7 +109,7 @@ defmodule PubkyRooms.ProfilesTest do
     assert_receive {:profile_updated, ^z32, %{source: :fallback}}, 1_000
 
     # invalid names never reach the homeserver
-    assert {:error, "can't be blank"} = PubkyRooms.Rooms.set_nickname(sid, "   ")
+    assert {:error, "Enter a name."} = PubkyRooms.Rooms.set_nickname(sid, "   ")
     assert {:error, _} = PubkyRooms.Rooms.set_nickname(sid, String.duplicate("x", 33))
   end
 

@@ -30,10 +30,10 @@ defmodule PubkyRooms.Rooms.Ban do
       text ->
         cond do
           String.length(text) > @reason_max ->
-            {:error, "must be at most #{@reason_max} characters"}
+            {:error, "Reasons can be up to #{@reason_max} characters."}
 
           not Room.printable?(text) ->
-            {:error, "contains invalid characters"}
+            {:error, "The reason contains unsupported characters."}
 
           true ->
             {:ok, text}

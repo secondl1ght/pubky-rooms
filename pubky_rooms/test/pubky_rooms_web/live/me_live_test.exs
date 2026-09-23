@@ -31,7 +31,7 @@ defmodule PubkyRoomsWeb.MeLiveTest do
 
     view |> form("#nickname-form", nickname: %{name: "  "}) |> render_submit()
     render_async(view)
-    assert render(view) =~ "can&#39;t be blank"
+    assert render(view) =~ "Enter a name."
 
     view |> form("#nickname-form", nickname: %{name: "Nakamoto"}) |> render_submit()
     render_async(view)

@@ -65,20 +65,20 @@ defmodule PubkyRooms.Rooms.Message do
 
     cond do
       trimmed == "" ->
-        {:error, "can't be blank"}
+        {:error, "Write a message first."}
 
       String.length(trimmed) > @content_max ->
-        {:error, "must be at most #{@content_max} characters"}
+        {:error, "Messages can be up to #{@content_max} characters."}
 
       not Room.printable?(trimmed) ->
-        {:error, "contains invalid characters"}
+        {:error, "The message contains unsupported characters."}
 
       true ->
         {:ok, trimmed}
     end
   end
 
-  def validate_content(_), do: {:error, "can't be blank"}
+  def validate_content(_), do: {:error, "Write a message first."}
 
   @doc "Builds a new pending message by `author` in `room_ref`."
   @spec new(String.t(), Paths.room_ref(), String.t(), keyword()) ::

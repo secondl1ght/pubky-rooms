@@ -8,10 +8,11 @@ defmodule PubkyRooms.Rooms.BanTest do
     assert {:ok, nil} = Ban.validate_reason("   ")
     assert {:ok, "spam"} = Ban.validate_reason("  spam ")
 
-    assert {:error, "must be at most 140 characters"} =
+    assert {:error, "Reasons can be up to 140 characters."} =
              Ban.validate_reason(String.duplicate("x", 141))
 
-    assert {:error, "contains invalid characters"} = Ban.validate_reason("bad\0byte")
+    assert {:error, "The reason contains unsupported characters."} =
+             Ban.validate_reason("bad\0byte")
   end
 
   test "markers round-trip and reject garbage" do

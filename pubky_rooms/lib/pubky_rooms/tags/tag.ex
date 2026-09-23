@@ -44,23 +44,23 @@ defmodule PubkyRooms.Tags.Tag do
 
     cond do
       normalized == "" ->
-        {:error, "can't be blank"}
+        {:error, "Enter a tag."}
 
       String.length(normalized) > @label_max ->
-        {:error, "must be at most #{@label_max} characters"}
+        {:error, "Tags can be up to #{@label_max} characters."}
 
       not Room.printable?(normalized) ->
-        {:error, "contains invalid characters"}
+        {:error, "The tag contains unsupported characters."}
 
       String.contains?(normalized, ["/", ","]) ->
-        {:error, "cannot contain / or ,"}
+        {:error, "Tags cannot contain slashes or commas."}
 
       true ->
         {:ok, normalized}
     end
   end
 
-  def normalize(_), do: {:error, "can't be blank"}
+  def normalize(_), do: {:error, "Enter a tag."}
 
   @doc """
   Parses a comma- or space-separated list of labels typed by a user into at
@@ -77,12 +77,12 @@ defmodule PubkyRooms.Tags.Tag do
       labels = labels |> Enum.uniq() |> Enum.reject(&(&1 == @auto_label))
 
       if length(labels) > max,
-        do: {:error, "at most #{max} tags"},
+        do: {:error, "Add up to #{max} tags."},
         else: {:ok, labels}
     end
   end
 
-  def parse_labels(_, _max), do: {:error, "is invalid"}
+  def parse_labels(_, _max), do: {:error, "Enter tags as words separated by spaces or commas."}
 
   defp normalize_all(parts) do
     Enum.reduce_while(parts, {:ok, []}, fn part, {:ok, acc} ->

@@ -49,7 +49,7 @@ defmodule PubkyRooms.Rooms.RoomTest do
   test "messages validate content and reply targets" do
     ref = {@creator, "0000000000001"}
     author = Fixtures.z32("author")
-    assert {:error, "can't be blank"} = Message.new(author, ref, "   ")
+    assert {:error, "Write a message first."} = Message.new(author, ref, "   ")
     assert {:error, _} = Message.new(author, ref, String.duplicate("x", 2001))
     assert {:ok, msg} = Message.new(author, ref, " gm ")
     assert msg.content == "gm"
