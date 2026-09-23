@@ -20,7 +20,7 @@ const Clipboard = {
     const originalTip = el.dataset.tip
     if (originalTip !== undefined) {
       el.dataset.tip = label
-      el.innerHTML = `<span class="${icon} size-4" aria-hidden="true"></span>\`
+      el.innerHTML = `<span class="${icon} size-4" aria-hidden="true"></span>`
     } else {
       el.innerHTML = label
     }
