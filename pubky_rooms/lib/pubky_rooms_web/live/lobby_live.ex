@@ -27,6 +27,8 @@ defmodule PubkyRoomsWeb.LobbyLive do
      |> assign(
        page_title: "Lobby",
        form: new_form(),
+       tag_labels: [],
+       tag_suggestions: [],
        creating: false,
        stats_topics: MapSet.new(),
        reload_timer: nil,
@@ -45,6 +47,12 @@ defmodule PubkyRoomsWeb.LobbyLive do
   end
 
   def handle_params(params, _uri, socket) do
+    # A fresh dialog every time it opens.
+    socket =
+      if socket.assigns.live_action == :new,
+        do: assign(socket, form: new_form(), tag_labels: [], tag_suggestions: []),
+        else: socket
+
     filter =
       case Tag.normalize(params["tag"]) do
         {:ok, label} -> label
@@ -61,11 +69,35 @@ defmodule PubkyRoomsWeb.LobbyLive do
     {:noreply, assign(socket, form: form_for(params))}
   end
 
+  # The tag input (UI.TagInput): chips live here, the hook only drives the field.
+  def handle_event("add_tag", %{"label" => label}, %{assigns: %{tag_labels: labels}} = socket) do
+    socket = assign(socket, tag_suggestions: [])
+
+    with {:ok, normalized} <- Tag.normalize(label),
+         false <- normalized in labels or normalized == Tag.auto_label(),
+         true <- length(labels) < Tag.max_custom_labels() do
+      {:noreply, assign(socket, tag_labels: labels ++ [normalized])}
+    else
+      _ -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("remove_tag", %{"label" => label}, %{assigns: %{tag_labels: labels}} = socket) do
+    {:noreply, assign(socket, tag_labels: List.delete(labels, label))}
+  end
+
+  def handle_event("tag_query", %{"q" => q}, %{assigns: %{tag_labels: labels}} = socket) do
+    known = socket.assigns.popular_tags |> Enum.map(fn {label, _rooms} -> label end)
+    {:noreply, assign(socket, tag_suggestions: Tag.suggest(known, q, labels))}
+  end
+
   def handle_event(
         "create",
         %{"room" => params},
         %{assigns: %{current_user: %{pubky: pubky}, sid: sid}} = socket
       ) do
+    params = Map.put(params, "tags", Enum.join(socket.assigns.tag_labels, " "))
+
     case Room.validate(params) do
       {:ok, _fields} ->
         {:noreply,
@@ -382,18 +414,20 @@ defmodule PubkyRoomsWeb.LobbyLive do
         </:aside>
       </.page>
 
-      <.dialog :if={@live_action == :new} id="new-room" show on_cancel={JS.patch(~p"/")}>
+      <.dialog
+        :if={@live_action == :new}
+        id="new-room"
+        show
+        on_cancel={JS.patch(~p"/")}
+        class="sm:w-[34rem]"
+      >
         <:title>Open a room</:title>
-        <:description>
-          The room definition is written to your homeserver; you can rename or close it later.
-          All rooms are public: anyone with the link can read them. "Unlisted" only keeps a room out of discovery.
-        </:description>
         <.form
           for={@form}
           id="new-room-form"
           phx-change="validate"
           phx-submit="create"
-          class="flex flex-col gap-4"
+          class="flex flex-col gap-5"
         >
           <.input
             field={@form[:name]}
@@ -406,27 +440,42 @@ defmodule PubkyRoomsWeb.LobbyLive do
             field={@form[:topic]}
             type="textarea"
             label="Topic"
-            placeholder="What is this room about? (optional)"
+            placeholder="What is this room about? Optional."
             rows="2"
             maxlength={Room.topic_max()}
           />
-          <.input
+          <.choice_cards
             field={@form[:visibility]}
-            type="select"
             label="Visibility"
             options={[
-              {"Public — listed for discovery", "public"},
-              {"Unlisted — not listed, still readable by anyone with the link", "unlisted"}
+              %{
+                value: "public",
+                title: "Public",
+                description: "Listed in the directory and found by tag.",
+                icon: "lucide-globe"
+              },
+              %{
+                value: "unlisted",
+                title: "Unlisted",
+                description: "Only people with the link. Still readable by anyone who has it.",
+                icon: "lucide-link"
+              }
             ]}
           />
-          <.input
-            :if={@form[:visibility].value != "unlisted"}
-            field={@form[:tags]}
-            label="Tags"
-            placeholder="bitcoin, nostr, dev"
-            hint={"Up to #{Tag.max_custom_labels()} labels for discovery, written as universal tags on your homeserver (every public room is also tagged “room”)."}
-            autocomplete="off"
-          />
+          <div :if={@form[:visibility].value != "unlisted"} class="flex flex-col gap-1.5">
+            <.label for="new-room-tags-input">Tags</.label>
+            <.tag_input
+              id="new-room-tags"
+              name="room[tags]"
+              labels={@tag_labels}
+              suggestions={@tag_suggestions}
+              max={Tag.max_custom_labels()}
+            />
+            <p class="text-xs text-muted-foreground">
+              Up to {Tag.max_custom_labels()}, one word each. Public rooms are tagged "room" automatically.
+            </p>
+            <.error :for={{msg, _} <- Keyword.get_values(@form.errors, :tags)}>{msg}</.error>
+          </div>
         </.form>
         <:footer>
           <.button variant="ghost" phx-click={JS.patch(~p"/")}>Cancel</.button>

@@ -390,10 +390,10 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     # every write is off for the banned member: reactions, replies, tags, typing
     refute has_element?(bob_view, "button[aria-label=React]")
     refute has_element?(bob_view, "button[aria-label=Reply]")
-    refute has_element?(bob_view, "#tag-form")
+    refute has_element?(bob_view, "#room-tag-input")
     assert html =~ ~r/<button[^>]*disabled[^>]*phx-value-label="room"/
     render_click(bob_view, "react", %{"id" => "msg-#{ctx.alice}-0000000000000", "key" => "up"})
-    render_hook(bob_view, "add_tag", %{"tag" => %{"label" => "sneaky"}})
+    render_hook(bob_view, "add_tag", %{"label" => "sneaky"})
     render_hook(bob_view, "toggle_tag", %{"label" => "room"})
     render_hook(bob_view, "typing", %{})
     render_async(bob_view)
@@ -623,9 +623,9 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     refute has_element?(bob_view, "##{bob_id} button[aria-label=Edit]")
     refute has_element?(bob_view, "##{bob_id} button[aria-label=Delete]")
     refute has_element?(bob_view, "button[aria-label=React]")
-    refute has_element?(bob_view, "#tag-form")
+    refute has_element?(bob_view, "#room-tag-input")
     render_click(bob_view, "delete", %{"id" => bob_id})
-    render_hook(bob_view, "add_tag", %{"tag" => %{"label" => "late"}})
+    render_hook(bob_view, "add_tag", %{"label" => "late"})
     render_async(bob_view)
     assert [%Message{content: "bob before close"}] = messages_on_homeserver(bob, ctx.room)
     refute Fake.files(bob) |> Map.keys() |> Enum.any?(&String.contains?(&1, "/tags/"))
@@ -669,11 +669,12 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
              ~r/aria-pressed="false"[^>]*phx-value-label="room"|phx-value-label="room"[^>]*aria-pressed="false"/
 
     assert html =~ ~r/<button[^>]*disabled[^>]*phx-value-label="room"/
-    refute has_element?(anon, "#tag-form")
+    refute has_element?(anon, "#room-tag-input")
 
     # bob (not even a member) adds a tag and joins alice on "room"
     {:ok, bob_view, _} = live(bob_conn, ctx.path)
-    bob_view |> form("#tag-form", tag: %{label: " Lightning "}) |> render_submit()
+    assert has_element?(bob_view, "#room-tag-input")
+    render_hook(bob_view, "add_tag", %{"label" => " Lightning "})
     render_async(bob_view)
     html = wait_for(fn -> render(bob_view) end, &(&1 =~ "lightning"))
     assert html =~ ~r/aria-pressed="true"[^>]*phx-value-label="lightning"/
@@ -699,9 +700,11 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     wait_for(fn -> render(bob_view) end, &(not (&1 =~ "lightning")))
     refute Map.has_key?(Fake.files(bob), Tag.path(uri, "lightning"))
 
-    # bad labels are rejected before any write
-    bob_view |> form("#tag-form", tag: %{label: String.duplicate("x", 21)}) |> render_submit()
+    # bad labels are rejected before any write; suggestions skip the room's own tags
+    render_hook(bob_view, "add_tag", %{"label" => String.duplicate("x", 21)})
     assert render(bob_view) =~ "Tags can be up to 20 characters."
+    render_hook(bob_view, "tag_query", %{"q" => "roo"})
+    refute has_element?(bob_view, "#room-tag-input [data-role=suggestion]")
   end
 
   test "anonymous viewers are counted, never identified", ctx do

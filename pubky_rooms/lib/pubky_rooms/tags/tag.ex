@@ -37,7 +37,17 @@ defmodule PubkyRooms.Tags.Tag do
   @doc "How many labels a creator may add to a room at creation (besides `room`)."
   def max_custom_labels, do: @max_custom_labels
 
-  @doc "Normalizes a label the way pubky-app-specs does: trimmed and lowercased; 1..#{@label_max} chars."
+  # pubky-app-specs `validationLimits.tagInvalidChars`: a tag is one word.
+  # The `TagInput` hook strips the same characters as the user types.
+  @banned [",", ":", " ", "\t", "\n", "\r"]
+
+  @doc "Characters a label may not contain (pubky-app-specs `tagInvalidChars`)."
+  def banned_chars, do: @banned
+
+  @doc """
+  Normalizes a label the way pubky-app-specs does: trimmed and lowercased,
+  1..#{@label_max} characters, one word (no comma, colon or whitespace).
+  """
   @spec normalize(term()) :: {:ok, String.t()} | {:error, String.t()}
   def normalize(label) when is_binary(label) do
     normalized = label |> String.trim() |> String.downcase()
@@ -52,8 +62,8 @@ defmodule PubkyRooms.Tags.Tag do
       not Room.printable?(normalized) ->
         {:error, "The tag contains unsupported characters."}
 
-      String.contains?(normalized, ["/", ","]) ->
-        {:error, "Tags cannot contain slashes or commas."}
+      String.contains?(normalized, @banned) ->
+        {:error, "Tags are one word: no spaces, commas or colons."}
 
       true ->
         {:ok, normalized}
@@ -61,6 +71,32 @@ defmodule PubkyRooms.Tags.Tag do
   end
 
   def normalize(_), do: {:error, "Enter a tag."}
+
+  @doc """
+  Suggestions for a partially typed label, as Pubky App's tag input offers
+  them: known labels containing `query` (case-insensitive), never the exact
+  match or an excluded label, at most `limit`, in the order given.
+
+      iex> Tag.suggest(["bitcoin", "bitkit", "music"], "bit", [], 5)
+      ["bitcoin", "bitkit"]
+  """
+  @spec suggest([String.t()], String.t() | nil, [String.t()], pos_integer()) :: [String.t()]
+  def suggest(known, query, exclude \\ [], limit \\ 5)
+  def suggest(_known, nil, _exclude, _limit), do: []
+
+  def suggest(known, query, exclude, limit) when is_binary(query) do
+    q = query |> String.trim() |> String.downcase()
+
+    if q == "" do
+      []
+    else
+      known
+      |> Enum.map(&String.downcase/1)
+      |> Enum.uniq()
+      |> Enum.filter(&(String.contains?(&1, q) and &1 != q and &1 not in exclude))
+      |> Enum.take(limit)
+    end
+  end
 
   @doc """
   Parses a comma- or space-separated list of labels typed by a user into at

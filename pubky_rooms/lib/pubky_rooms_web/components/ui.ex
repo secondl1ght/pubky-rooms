@@ -16,6 +16,7 @@ defmodule PubkyRoomsWeb.UI do
     * `PubkyRoomsWeb.UI.Card` — cards and their sections
     * `PubkyRoomsWeb.UI.Badge` — small status labels
     * `PubkyRoomsWeb.UI.Tag` — colored tag chips
+    * `PubkyRoomsWeb.UI.TagInput` — the Pubky App style chip input for tags
     * `PubkyRoomsWeb.UI.Form` — inputs, textareas, labels, errors
     * `PubkyRoomsWeb.UI.Dialog` — modal dialogs (bottom sheets on mobile)
     * `PubkyRoomsWeb.UI.Feedback` — flash toasts, live indicator, spinner, skeleton, empty state
@@ -38,6 +39,7 @@ defmodule PubkyRoomsWeb.UI do
       import PubkyRoomsWeb.UI.Icon
       import PubkyRoomsWeb.UI.Layout
       import PubkyRoomsWeb.UI.Tag
+      import PubkyRoomsWeb.UI.TagInput
       import PubkyRoomsWeb.UI.Transitions
       import PubkyRoomsWeb.UI.Typography
     end

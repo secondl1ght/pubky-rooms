@@ -132,18 +132,23 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
 
     {:ok, view, _html} = live(alice_conn, ~p"/rooms/new")
 
-    view
-    |> form("#new-room-form",
-      room: %{name: "Too many", visibility: "public", tags: "a b c d e"}
-    )
-    |> render_submit()
+    # the tag input: chips are added one at a time, sanitised, deduplicated, capped
+    for label <- ["Bitcoin", "dev", "bitcoin", "room", "nostr", "art", "fifth"] do
+      render_hook(view, "add_tag", %{"label" => label})
+    end
 
-    assert wait_for(fn -> render(view) end, &(&1 =~ "Add up to 4 tags."))
+    assert has_element?(view, "#new-room-tags [data-label='bitcoin']")
+    assert has_element?(view, "#new-room-tags input[type=hidden][value='bitcoin dev nostr art']")
+    refute has_element?(view, "#new-room-tags [data-label='fifth']")
+    assert has_element?(view, "#new-room-tags button[data-role=add][disabled]")
+
+    # the x removes a chip; suggestions come from tags this node knows
+    render_hook(view, "remove_tag", %{"label" => "art"})
+    refute has_element?(view, "#new-room-tags [data-label='art']")
+    render_hook(view, "remove_tag", %{"label" => "nostr"})
 
     view
-    |> form("#new-room-form",
-      room: %{name: "Bitcoin devs", visibility: "public", tags: "Bitcoin, dev"}
-    )
+    |> form("#new-room-form", room: %{name: "Bitcoin devs", visibility: "public"})
     |> render_submit()
 
     {_path, _flash} = assert_redirect(view)
@@ -156,6 +161,15 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
         "visibility" => "public",
         "tags" => "music"
       })
+
+    # a second creator gets suggestions from the tags this node already knows
+    {:ok, view, _html} = live(alice_conn, ~p"/rooms/new")
+    render_hook(view, "tag_query", %{"q" => "bit"})
+    assert has_element?(view, "#new-room-tags [data-role=suggestion][data-label='bitcoin']")
+    refute has_element?(view, "#new-room-tags [data-role=suggestion][data-label='music']")
+    render_hook(view, "add_tag", %{"label" => "bitcoin"})
+    render_hook(view, "tag_query", %{"q" => "bit"})
+    refute has_element?(view, "#new-room-tags [data-role=suggestion]")
 
     # anonymous lobby: popular tags in the sidebar, chips on the cards
     {:ok, lobby, html} = live(build_conn(), ~p"/")

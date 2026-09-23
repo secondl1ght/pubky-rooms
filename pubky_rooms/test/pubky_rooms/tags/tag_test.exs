@@ -28,11 +28,25 @@ defmodule PubkyRooms.Tags.TagTest do
     assert {:ok, "bitcoin"} = Tag.normalize("  BitCoin ")
     assert {:error, _} = Tag.normalize("")
     assert {:error, _} = Tag.normalize(String.duplicate("a", 21))
-    assert {:error, _} = Tag.normalize("a/b")
+    assert {:ok, "a/b"} = Tag.normalize("a/b")
+    # pubky-app-specs tagInvalidChars: comma, colon and whitespace
+    assert {:error, "Tags are one word: no spaces, commas or colons."} = Tag.normalize("a b")
+    assert {:error, _} = Tag.normalize("a:b")
+    assert {:error, _} = Tag.normalize("a,b")
     assert {:ok, ["bitcoin", "nostr", "dev"]} = Tag.parse_labels("#Bitcoin, nostr  dev room")
     assert {:error, "Add up to 2 tags."} = Tag.parse_labels("a b c", 2)
     assert {:ok, []} = Tag.parse_labels(nil)
     assert {:ok, []} = Tag.parse_labels("   ")
+  end
+
+  test "suggestions match known labels by substring, skipping exact and excluded ones" do
+    known = ["bitcoin", "bitkit", "music", "Bitcoin"]
+    assert ["bitcoin", "bitkit"] = Tag.suggest(known, "bit")
+    assert ["bitkit"] = Tag.suggest(known, "bit", ["bitcoin"])
+    assert [] = Tag.suggest(known, "bitcoin")
+    assert [] = Tag.suggest(known, "  ")
+    assert [] = Tag.suggest(known, nil)
+    assert ["bitcoin"] = Tag.suggest(known, "BIT", [], 1)
   end
 
   test "decode checks the id against the content and finds the room" do

@@ -46,7 +46,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           settings_form: nil,
           saving: false,
           tags: [],
-          tag_form: to_form(%{"label" => ""}, as: :tag),
+          tag_suggestions: [],
           muted: MapSet.new(),
           app_muted: MapSet.new(),
           members_open: false,
@@ -615,26 +615,36 @@ defmodule PubkyRoomsWeb.RoomLive do
     end
   end
 
+  # From the tag input (UI.TagInput) in the header: `%{"label" => label}`.
   def handle_event(
         "add_tag",
-        %{"tag" => %{"label" => label}},
+        %{"label" => label},
         %{assigns: %{current_user: %{pubky: me}, sid: sid, ref: ref}} = socket
       ) do
+    socket = assign(socket, tag_suggestions: [])
+
     case {can_write?(socket), Tag.normalize(label)} do
       {true, {:ok, normalized}} ->
         {:noreply,
-         socket
-         |> assign(tag_form: to_form(%{"label" => ""}, as: :tag))
-         |> start_async({:tag, normalized}, fn -> Rooms.tag_room(sid, me, ref, normalized) end)}
+         start_async(socket, {:tag, normalized}, fn ->
+           Rooms.tag_room(sid, me, ref, normalized)
+         end)}
 
       {true, {:error, error}} ->
-        {:noreply,
-         assign(socket,
-           tag_form: to_form(%{"label" => label}, as: :tag, errors: [label: {error, []}])
-         )}
+        {:noreply, put_flash(socket, :error, error)}
 
       {false, _} ->
         {:noreply, socket}
+    end
+  end
+
+  def handle_event("tag_query", %{"q" => q}, socket) do
+    if can_write?(socket) do
+      known = Directory.popular_tags() |> Enum.map(fn {label, _rooms} -> label end)
+      taken = Enum.map(socket.assigns.tags, & &1.label)
+      {:noreply, assign(socket, tag_suggestions: Tag.suggest(known, q, taken))}
+    else
+      {:noreply, socket}
     end
   end
 
@@ -1211,7 +1221,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           tags={@tags}
           viewer={@current_user && @current_user.pubky}
           writer={can_write?(assigns)}
-          form={@tag_form}
+          suggestions={@tag_suggestions}
         />
 
         <div class="flex min-h-0 flex-1 gap-6">
@@ -1455,16 +1465,12 @@ defmodule PubkyRoomsWeb.RoomLive do
         on_cancel={JS.patch(room_path(assigns))}
       >
         <:title>Room settings</:title>
-        <:description>
-          Changes overwrite the room definition on your homeserver. All rooms stay public to read;
-          "Unlisted" only keeps a room out of discovery.
-        </:description>
         <.form
           for={@settings_form}
           id="room-settings-form"
           phx-change="validate_settings"
           phx-submit="save_settings"
-          class="flex flex-col gap-4"
+          class="flex flex-col gap-5"
         >
           <.input field={@settings_form[:name]} label="Name" maxlength={Room.name_max()} />
           <.input
@@ -1474,13 +1480,22 @@ defmodule PubkyRoomsWeb.RoomLive do
             rows="2"
             maxlength={Room.topic_max()}
           />
-          <.input
+          <.choice_cards
             field={@settings_form[:visibility]}
-            type="select"
             label="Visibility"
             options={[
-              {"Public — listed for discovery", "public"},
-              {"Unlisted — not listed, still readable by anyone with the link", "unlisted"}
+              %{
+                value: "public",
+                title: "Public",
+                description: "Listed in the directory and found by tag.",
+                icon: "lucide-globe"
+              },
+              %{
+                value: "unlisted",
+                title: "Unlisted",
+                description: "Only people with the link. Still readable by anyone who has it.",
+                icon: "lucide-link"
+              }
             ]}
           />
         </.form>
@@ -1910,10 +1925,11 @@ defmodule PubkyRoomsWeb.RoomLive do
   attr :tags, :list, required: true, doc: "`Directory.tags_of/1` result"
   attr :viewer, :string, default: nil, doc: "marks the viewer's own tags"
   attr :writer, :boolean, default: false, doc: "whether the viewer may add or remove tags"
-  attr :form, Phoenix.HTML.Form, required: true
+  attr :suggestions, :list, default: [], doc: "labels offered by the tag input"
 
-  # Universal tags on the room: click to add or remove your own; the input
-  # adds a new label. Anonymous viewers just see them.
+  # Universal tags on the room: click to add or remove your own; the tag input
+  # (same one as the create dialog) adds a new label. Anonymous viewers just
+  # see them.
   defp tag_row(assigns) do
     ~H"""
     <div id="room-tags" class="flex flex-wrap items-center gap-1.5">
@@ -1928,23 +1944,13 @@ defmodule PubkyRoomsWeb.RoomLive do
         phx-value-label={t.label}
         title={if @viewer in t.taggers, do: "Remove your tag", else: "Tag this room too"}
       />
-      <.form
+      <.tag_input
         :if={@writer}
-        for={@form}
-        id="tag-form"
-        phx-submit="add_tag"
-        class="flex items-center gap-1"
-      >
-        <.input
-          field={@form[:label]}
-          placeholder="+ tag"
-          maxlength={Tag.label_max()}
-          class="h-6 w-28 rounded-md px-2 text-xs"
-          wrapper_class="gap-0"
-          autocomplete="off"
-          aria-label="Add a tag"
-        />
-      </.form>
+        id="room-tag-input"
+        size="sm"
+        suggestions={@suggestions}
+        placeholder="add tag"
+      />
     </div>
     """
   end

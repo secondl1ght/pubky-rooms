@@ -9,6 +9,8 @@ defmodule PubkyRoomsWeb.UI.Form do
   use Phoenix.Component
   use Gettext, backend: PubkyRoomsWeb.Gettext
 
+  import PubkyRoomsWeb.UI.Icon
+
   alias Phoenix.HTML.Form, as: HTMLForm
 
   @input_base "flex w-full min-w-0 rounded-md border border-input bg-transparent text-base shadow-xs outline-none " <>
@@ -170,6 +172,53 @@ defmodule PubkyRoomsWeb.UI.Form do
   end
 
   defp input_base, do: @input_base
+
+  @doc """
+  A radio group rendered as selectable cards, for a choice between a few
+  options that each deserve a sentence (room visibility, for example). The
+  checked card gets the brand outline.
+
+      <.choice_cards field={@form[:visibility]} label="Visibility" options={[
+        %{value: "public", title: "Public", description: "…", icon: "lucide-globe"},
+        %{value: "unlisted", title: "Unlisted", description: "…", icon: "lucide-link"}
+      ]} />
+  """
+  attr :field, Phoenix.HTML.FormField, required: true
+  attr :label, :string, default: nil
+  attr :options, :list, required: true, doc: "maps with `value`, `title`, `description`, `icon`"
+  attr :class, :any, default: nil
+
+  def choice_cards(assigns) do
+    ~H"""
+    <fieldset class={["flex flex-col gap-1.5", @class]}>
+      <legend :if={@label} class="mb-1.5 text-sm font-semibold leading-none text-secondary-foreground">
+        {@label}
+      </legend>
+      <div class="grid gap-2 sm:grid-cols-2">
+        <label :for={opt <- @options} class="cursor-pointer">
+          <input
+            type="radio"
+            name={@field.name}
+            value={opt.value}
+            checked={to_string(@field.value) == opt.value}
+            class="peer sr-only"
+          />
+          <span class={[
+            "flex h-full items-start gap-3 rounded-md border border-input/60 p-3 transition-colors",
+            "hover:bg-white/[0.03] peer-checked:border-brand peer-checked:bg-brand/10",
+            "peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring/50"
+          ]}>
+            <.icon name={opt.icon} class="mt-0.5 size-4 shrink-0 text-brand" />
+            <span class="flex flex-col gap-0.5">
+              <span class="text-sm font-semibold text-foreground">{opt.title}</span>
+              <span class="text-xs text-muted-foreground">{opt.description}</span>
+            </span>
+          </span>
+        </label>
+      </div>
+    </fieldset>
+    """
+  end
 
   @doc "Renders a field label."
   attr :for, :string, default: nil

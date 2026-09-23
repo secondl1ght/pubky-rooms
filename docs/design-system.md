@@ -35,6 +35,9 @@ https://pubky.app. Reference data: `docs/notes/pubky-app-design-system.md`, `doc
 | `<Linkify.linkify text>` | message text with `http(s)` URLs linked safely (escaped segments, `noopener noreferrer nofollow ugc`, new tab); adds no whitespace |
 | `<.input field type label hint>` | text/email/…/textarea (`variant="inline"` for composers)/select/checkbox/hidden; `<.label>`, `<.error>` |
 | `<.dialog id show on_cancel>` + `show_dialog/hide_dialog` | centered modal ≥ sm, bottom sheet on mobile; slots title/description/footer |
+| `<.tag label count selected size static removable on_remove>` | Pubky App tag chip: colour from the label (`Tags.Color`), 30 % fill, glow on hover, outline when selected; `removable` puts an x inside the chip (`on_remove` gets `phx-value-label`) |
+| `<.tag_input id name labels suggestions max on_add on_remove on_query size>` | the Pubky App tag input: chips + a "+" that becomes an inline field (`TagInput` hook: lowercases and strips comma/colon/whitespace as you type, Enter adds, Backspace on empty removes the last chip, Escape/blur folds it, arrow keys pick a suggestion, "limit reached" at `max`); labels live in the LiveView, the hook pushes `on_add`/`on_remove` (`%{"label"}`) and `on_query` (`%{"q"}`); `name` adds a hidden field with the labels space-separated |
+| `<.choice_cards field label options>` | a radio group as selectable cards (icon, title, description); the checked card gets the brand outline. Used for room visibility |
 | `<.live_dot class>` | the "n online" indicator: brand-lime dot with a slow outward ring (`--animate-live-ping`, still under reduced motion); decorative, always next to text |
 | `<.flash kind dismiss_after>`, `Layouts.flash_group` | bottom-right toasts (info/success/error); info and success dismiss themselves after 5 s (`AutoDismiss` hook, paused on hover/focus), errors stay |
 | `<.spinner>`, `<.skeleton>`, `<.empty_state icon title>` | feedback |
@@ -44,6 +47,7 @@ https://pubky.app. Reference data: `docs/notes/pubky-app-design-system.md`, `doc
 
 ## Rules
 
+- Dialogs: the panel is a flex column with 24 px gaps between header, body and footer; `show_dialog/2` shows it with `display: "flex"` (a plain `JS.show` would set `display: block` and silently drop the gaps). A native `<select>` is never used for a two-or-three-way choice; use `<.choice_cards>`.
 - Borders: a box nested inside a card (a form group, an explainer panel) takes `border-input/60`, the input outline at reduced opacity so it sits behind the inputs it contains; separators between regions use `border-border`; cards themselves have no border. Two greys, each with one job.
 - Never copy code from `~/CODE/pubky-app`; only the recorded tokens/specs. Verify parity with side-by-side
   screenshots (`/dev/ui` vs pubky.app) and computed styles.

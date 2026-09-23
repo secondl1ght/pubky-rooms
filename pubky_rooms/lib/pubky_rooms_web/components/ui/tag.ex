@@ -24,8 +24,40 @@ defmodule PubkyRoomsWeb.UI.Tag do
     default: false,
     doc: "render a non-interactive span (e.g. inside a link)"
 
+  attr :removable, :boolean,
+    default: false,
+    doc: "a chosen tag with an x inside the chip; `on_remove` receives `phx-value-label`"
+
+  attr :on_remove, :any, default: nil, doc: "event name or `JS` for the x"
   attr :class, :any, default: nil
   attr :rest, :global, include: ~w(disabled aria-pressed href navigate patch)
+
+  def tag(%{removable: true} = assigns) do
+    assigns =
+      assigns
+      |> assign(:style, "--tag-rgb: #{Color.css_rgb(assigns.label)}")
+      |> assign(:classes, [
+        "flex w-fit max-w-full items-center gap-1 rounded-md border border-transparent font-bold",
+        (assigns.size == "sm" && "h-6 pr-1 pl-2 text-xs") || "h-8 pr-1.5 pl-3 text-sm",
+        "bg-[rgb(var(--tag-rgb)/0.3)]",
+        assigns.class
+      ])
+
+    ~H"""
+    <span style={@style} class={@classes} {@rest}>
+      <span class="truncate">{@label}</span>
+      <button
+        type="button"
+        phx-click={@on_remove}
+        phx-value-label={@label}
+        class="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded opacity-70 transition-opacity hover:opacity-100"
+        aria-label={"Remove #{@label}"}
+      >
+        <span class="lucide-x size-3" aria-hidden="true" />
+      </button>
+    </span>
+    """
+  end
 
   def tag(assigns) do
     assigns =

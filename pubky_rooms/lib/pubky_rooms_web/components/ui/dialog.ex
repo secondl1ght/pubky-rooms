@@ -112,6 +112,8 @@ defmodule PubkyRoomsWeb.UI.Dialog do
     )
     |> JS.show(
       to: "##{id}-container",
+      # the panel is a flex column; JS.show would otherwise set display: block
+      display: "flex",
       time: 250,
       transition:
         {"transition-all ease-out duration-250",
