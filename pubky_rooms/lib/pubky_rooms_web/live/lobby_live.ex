@@ -382,8 +382,6 @@ defmodule PubkyRoomsWeb.LobbyLive do
         </:aside>
       </.page>
 
-      <.fab :if={@current_user} patch={~p"/rooms/new"} label="Open a room" />
-
       <.dialog :if={@live_action == :new} id="new-room" show on_cancel={JS.patch(~p"/")}>
         <:title>Open a room</:title>
         <:description>

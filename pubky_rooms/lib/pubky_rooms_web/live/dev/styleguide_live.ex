@@ -42,7 +42,7 @@ defmodule PubkyRoomsWeb.Dev.StyleguideLive do
           </div>
           <.button variant="secondary" size="sm" phx-click="toggle-user">Toggle signed in</.button>
         </:sidebar>
-        <.fab href="#forms" label="New room" />
+        <.fab href="#forms" label="Open a room" />
 
         <section id="type" class="flex flex-col gap-3">
           <.typography size="2xl" tag="h1">

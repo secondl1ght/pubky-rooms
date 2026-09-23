@@ -95,7 +95,7 @@ defmodule PubkyRoomsWeb.UI.Button do
   The floating action button: a large translucent circle fixed above the
   mobile tab bar (bottom-right on desktop) that turns lime on hover.
 
-      <.fab navigate={~p"/rooms/new"} label="New room" />
+      <.fab navigate={~p"/rooms/new"} label="Open a room" />
   """
   attr :label, :string, required: true
   attr :icon, :string, default: "lucide-plus"
