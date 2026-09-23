@@ -301,7 +301,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
             icon="lucide-messages-square"
             title="No rooms yet"
           >
-            Open a room and share its link. It is written to your homeserver, so it is yours to keep.
+            Open a room and it appears in the directory for everyone. Tag it so people find it here and in Pubky App, or share the link directly.
             <:actions>
               <.button variant="brand" patch={~p"/rooms/new"}>
                 <.icon name="lucide-plus" class="size-4" /> Open a room
