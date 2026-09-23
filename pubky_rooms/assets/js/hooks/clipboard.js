@@ -8,19 +8,19 @@ const Clipboard = {
       if (!text) return
       try {
         await navigator.clipboard.writeText(text)
-        this.flash("Copied")
+        this.flash("Copied", "lucide-check")
       } catch (_err) {
-        this.flash("Copy failed")
+        this.flash("Copy failed", "lucide-x")
       }
     })
   },
-  flash(label) {
+  flash(label, icon) {
     const el = this.el
     const original = el.innerHTML
     const originalTip = el.dataset.tip
     if (originalTip !== undefined) {
       el.dataset.tip = label
-      el.innerHTML = '<span class="lucide-check size-4" aria-hidden="true"></span>'
+      el.innerHTML = `<span class="${icon} size-4" aria-hidden="true"></span>\`
     } else {
       el.innerHTML = label
     }
