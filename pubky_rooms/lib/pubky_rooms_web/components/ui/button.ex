@@ -37,6 +37,7 @@ defmodule PubkyRoomsWeb.UI.Button do
     "default" => "h-10 px-4 py-2 gap-1",
     "sm" => "h-8 px-3 gap-1.5",
     "lg" => "h-auto px-8 py-5 text-sm font-bold",
+    "icon-sm" => "size-7 p-0",
     "icon" => "size-9 p-0",
     "icon-lg" => "size-12 p-0",
     "tab" => "h-12 px-5 gap-2"

@@ -26,7 +26,7 @@ https://pubky.app. Reference data: `docs/notes/pubky-app-design-system.md`, `doc
 |---|---|
 | `<.icon name="lucide-house" class="size-5" />` | any Lucide icon; color from `currentColor` |
 | `<.logo />`, `<.pubky_mark />` | key + "Pubky" wordmark + lime "Rooms" |
-| `<.button variant size>` | variants default (lime tint), brand (solid lime), secondary, ghost, outline, destructive, destructive-soft, link, dark, dark-outline; sizes default/sm/lg/icon/icon-lg/tab (48 px pill matching the tab-bar circles); renders `<.link>` with href/navigate/patch |
+| `<.button variant size>` | variants default (lime tint), brand (solid lime), secondary, ghost, outline, destructive, destructive-soft, link, dark, dark-outline; sizes default/sm/lg/icon-sm/icon/icon-lg/tab (48 px pill matching the tab-bar circles); renders `<.link>` with href/navigate/patch |
 | `<.fab navigate label />` | 80px translucent circle, lime on hover; in the library for Pubky App parity, not used by any page (the lobby dropped it on 2026-09-22: opening a room is not a frequent action and the header, sidebar and tab bar already offer it) |
 | `<.avatar src name pubky size online>` | xs…2xl; generative fallback (signal-color disc + initial), hides broken images; `online` adds the lime presence dot |
 | `<.card variant>` + `card_header/title/description/content/footer` | default (`rounded-xl py-6`), post (`rounded-md py-0`), flat |

@@ -19,6 +19,11 @@ defmodule PubkyRoomsWeb.MeLiveTest do
     assert {:error, {:redirect, %{to: "/login"}}} = live(build_conn(), ~p"/me")
   end
 
+  test "the public key can be copied", %{conn: conn, user: user} do
+    {:ok, view, _html} = live(conn, ~p"/me")
+    assert has_element?(view, "#copy-pubky[data-copy='#{user}'][phx-hook='Clipboard']")
+  end
+
   test "a nickname is written to the homeserver and shown everywhere", %{conn: conn, user: user} do
     {:ok, view, html} = live(conn, ~p"/me")
     assert html =~ "shown as your shortened key"

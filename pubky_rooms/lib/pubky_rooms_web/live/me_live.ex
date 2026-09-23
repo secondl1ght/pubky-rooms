@@ -95,12 +95,26 @@ defmodule PubkyRoomsWeb.MeLive do
               />
               <div class="flex min-w-0 flex-col gap-1">
                 <.typography size="lg" tag="h1">{@current_user.name}</.typography>
-                <p
-                  class="truncate font-mono text-xs text-muted-foreground"
-                  title={@current_user.pubky}
-                >
-                  {@current_user.pubky}
-                </p>
+                <div class="flex min-w-0 items-center gap-1">
+                  <p
+                    class="truncate font-mono text-xs text-muted-foreground"
+                    title={@current_user.pubky}
+                  >
+                    {@current_user.pubky}
+                  </p>
+                  <.button
+                    variant="ghost"
+                    size="icon-sm"
+                    id="copy-pubky"
+                    phx-hook="Clipboard"
+                    data-copy={@current_user.pubky}
+                    aria-label="Copy your public key"
+                    data-tip="Copy key"
+                    class="tooltip shrink-0 text-muted-foreground hover:text-foreground"
+                  >
+                    <.icon name="lucide-copy" class="size-3.5" />
+                  </.button>
+                </div>
                 <p class="text-xs text-muted-foreground">
                   <%= case @current_user.source do %>
                     <% :pubky_app -> %>
