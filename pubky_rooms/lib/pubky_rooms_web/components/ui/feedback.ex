@@ -58,7 +58,7 @@ defmodule PubkyRoomsWeb.UI.Feedback do
     >
       <span
         class={[
-          "mt-0.5 size-5 shrink-0",
+          "size-5 shrink-0",
           @kind == :info && "lucide-info text-secondary-foreground",
           @kind == :success && "lucide-circle-check text-brand",
           @kind == :error && "lucide-circle-alert text-destructive"
@@ -71,7 +71,7 @@ defmodule PubkyRoomsWeb.UI.Feedback do
       </div>
       <button
         type="button"
-        class="group cursor-pointer self-start text-muted-foreground hover:text-foreground"
+        class="group mt-0.5 cursor-pointer self-start text-muted-foreground hover:text-foreground"
         aria-label={gettext("close")}
       >
         <span class="lucide-x size-4" aria-hidden="true" />
