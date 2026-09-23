@@ -17,20 +17,21 @@ defmodule PubkyRoomsWeb.UI.Button do
   use Phoenix.Component
 
   @variants %{
-    "default" => "bg-brand/16 text-brand border-brand hover:bg-brand/30",
+    "default" => "bg-brand/16 text-brand border-brand shadow-xs hover:bg-brand/30",
     "brand" =>
-      "bg-brand text-background border-brand hover:bg-brand-hover hover:border-brand-hover",
+      "bg-brand text-background border-brand shadow-xs hover:bg-brand-hover hover:border-brand-hover",
     "secondary" =>
-      "bg-secondary text-secondary-foreground border-secondary hover:bg-accent hover:border-accent",
-    "ghost" => "border-transparent shadow-none hover:bg-accent/50 hover:text-accent-foreground",
-    "outline" => "bg-input/30 border-input hover:bg-input/50",
+      "bg-secondary text-secondary-foreground border-secondary shadow-xs hover:bg-accent hover:border-accent",
+    "ghost" => "border-transparent hover:bg-accent/50 hover:text-accent-foreground",
+    "outline" => "bg-input/30 border-input shadow-xs hover:bg-input/50",
     "destructive" =>
-      "bg-destructive/60 text-destructive-foreground border-transparent hover:bg-destructive/90",
+      "bg-destructive/60 text-destructive-foreground border-transparent shadow-xs hover:bg-destructive/90",
     "destructive-soft" =>
-      "bg-destructive/16 text-destructive border-destructive hover:bg-destructive/30",
-    "link" => "border-transparent shadow-none text-primary underline-offset-4 hover:underline",
-    "dark" => "bg-neutral-900 text-white border-neutral-900 hover:bg-neutral-800",
-    "dark-outline" => "bg-transparent border-neutral-700 hover:bg-neutral-800 hover:text-white"
+      "bg-destructive/16 text-destructive border-destructive shadow-xs hover:bg-destructive/30",
+    "link" => "border-transparent text-primary underline-offset-4 hover:underline",
+    "dark" => "bg-neutral-900 text-white border-neutral-900 shadow-xs hover:bg-neutral-800",
+    "dark-outline" =>
+      "bg-transparent border-neutral-700 shadow-xs hover:bg-neutral-800 hover:text-white"
   }
 
   @sizes %{
@@ -44,7 +45,7 @@ defmodule PubkyRoomsWeb.UI.Button do
   }
 
   @base "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-semibold rounded-full border " <>
-          "shadow-xs transition-all cursor-pointer outline-none select-none " <>
+          "transition-all cursor-pointer outline-none select-none " <>
           "disabled:opacity-50 disabled:pointer-events-none aria-disabled:opacity-50 aria-disabled:pointer-events-none " <>
           "focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:border-ring"
 
