@@ -144,7 +144,7 @@ defmodule PubkyRoomsWeb.MeLive do
                 autocomplete="nickname"
               />
               <div class="flex flex-wrap gap-2">
-                <.button variant="brand" type="submit" disabled={@saving}>
+                <.button variant="brand" type="submit" disabled={@saving} class="w-full sm:w-auto">
                   <.spinner :if={@saving} class="size-4" />
                   <.icon :if={!@saving} name="lucide-save" class="size-4" /> Save name
                 </.button>
@@ -154,6 +154,7 @@ defmodule PubkyRoomsWeb.MeLive do
                   type="button"
                   phx-click="clear_nickname"
                   disabled={@saving}
+                  class="w-full sm:w-auto"
                 >
                   Remove
                 </.button>
@@ -172,7 +173,7 @@ defmodule PubkyRoomsWeb.MeLive do
             </dl>
 
             <div class="flex flex-wrap justify-end gap-2">
-              <.button variant="secondary" href={~p"/logout"} method="delete">
+              <.button variant="secondary" href={~p"/logout"} method="delete" class="w-full sm:w-auto">
                 <.icon name="lucide-log-out" class="size-4" /> Sign out
               </.button>
             </div>
