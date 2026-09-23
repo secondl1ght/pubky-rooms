@@ -174,7 +174,7 @@ defmodule PubkyRoomsWeb.AuthLive do
             </.typography>
             <.typography size="md" class="max-w-md text-muted-foreground">
               Scan the code with Pubky Ring to approve Rooms. It asks for one folder on your homeserver
-              and nothing else, and everything you write here is stored there, under your keys.
+              and nothing else. Everything you write here is stored there, under your keys.
             </.typography>
             <ul class="mt-2 flex flex-col gap-2 text-sm text-secondary-foreground">
               <li class="flex items-center gap-2">
