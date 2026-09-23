@@ -26,6 +26,7 @@ Seeded on 2026-09-21 from Claude's browser pass over the finish-phase work; the 
 
 ## Signed-in pass (2026-09-22)
 - Toast text sat 2 px above the icon: the icon carried a top nudge meant for titled toasts. Icon (20 px) now aligns with the 20 px first line; the close button is a 20 px flex box (its inline box used to take the line-height and sit low). — fixed
+- Toasts are full width inside the 16 px gutters below `sm`; the 384 px bottom-right box from `sm` up. — fixed
 - How it works is for visitors: hidden once signed in (both the xl column and the phone footer). Test. — fixed
 - Signed-in empty state repeated the homeserver point; now lists the ways a room gets found: the directory, tags (here and in Pubky App), the link. — fixed
 - Fallback avatars are a disc in one of the six signal colours with the initial, not Pubky App's facehash face (React-only library). A static SVG port seeded like Pubky App would give identical faces in both apps. — deferred → after launch (backlog row in `docs/PROGRESS.md`)

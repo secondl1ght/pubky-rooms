@@ -50,7 +50,7 @@ defmodule PubkyRoomsWeb.UI.Feedback do
       data-dismiss-after={@auto_dismiss}
       role="alert"
       class={[
-        "pointer-events-auto flex w-80 items-start gap-3 rounded-xl border bg-card p-4 text-sm shadow-lg sm:w-96",
+        "pointer-events-auto flex w-full items-start gap-3 rounded-xl border bg-card p-4 text-sm shadow-lg sm:w-96",
         @kind == :error && "border-destructive/40",
         @kind == :success && "border-brand/40"
       ]}
