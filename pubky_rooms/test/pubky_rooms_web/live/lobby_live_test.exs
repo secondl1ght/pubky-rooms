@@ -187,6 +187,22 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     refute html =~ "Bitcoin devs"
     assert html =~ "Clear filter"
 
+    # a card shows three tags, but the filtered one is never hidden among them
+    {:ok, busy} =
+      Rooms.create_room(sid, alice, %{
+        "name" => "Busy tags",
+        "visibility" => "public",
+        "tags" => "aa bb cc dd"
+      })
+
+    {:ok, lobby2, _} = live(build_conn(), ~p"/?tag=dd")
+    html = render(lobby2)
+    assert html =~ "Busy tags"
+    assert html =~ ~r/data-label="dd"|>dd</
+    # the room carries aa bb cc dd room: three shown, "+2" for the rest
+    assert html =~ "+2"
+    refute busy.id == room.id
+
     lobby |> element("a", "Clear filter") |> render_click()
     assert_patch(lobby, ~p"/")
     assert render(lobby) =~ "Bitcoin devs"

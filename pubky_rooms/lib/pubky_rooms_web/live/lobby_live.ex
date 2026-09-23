@@ -291,6 +291,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
                 online={@room_online[Room.ref(room)]}
                 viewers={@room_viewers[Room.ref(room)] || 0}
                 tags={@room_tags[Room.ref(room)] || []}
+                filter={@tag_filter}
               />
             </div>
           </section>
@@ -304,6 +305,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
                 online={@room_online[Room.ref(room)]}
                 viewers={@room_viewers[Room.ref(room)] || 0}
                 tags={@room_tags[Room.ref(room)] || []}
+                filter={@tag_filter}
               />
             </div>
           </section>
@@ -325,6 +327,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
                 online={@room_online[Room.ref(room)]}
                 viewers={@room_viewers[Room.ref(room)] || 0}
                 tags={@room_tags[Room.ref(room)] || []}
+                filter={@tag_filter}
               />
             </div>
           </details>
@@ -389,6 +392,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
               online={@room_online[Room.ref(room)]}
               viewers={@room_viewers[Room.ref(room)] || 0}
               tags={@room_tags[Room.ref(room)] || []}
+              filter={@tag_filter}
             />
           </div>
           <.empty_state
@@ -489,6 +493,15 @@ defmodule PubkyRoomsWeb.LobbyLive do
     """
   end
 
+  # The three tags a card shows: the active filter first when the room carries
+  # it (so a filtered list never hides the reason a room is listed), then the
+  # most-used; the rest become a "+n".
+  defp card_tags(tags, filter) do
+    {matching, others} = Enum.split_with(tags, &(&1.label == filter))
+    shown = Enum.take(matching ++ others, 3)
+    {shown, length(tags) - length(shown)}
+  end
+
   attr :tags, :list, required: true, doc: "`[{label, rooms}]` from `Directory.popular_tags/1`"
   attr :filter, :string, default: nil, doc: "the selected label, if any"
   attr :class, :any, default: nil
@@ -577,15 +590,25 @@ defmodule PubkyRoomsWeb.LobbyLive do
   attr :creator, :map, required: true, doc: "the creator's profile"
   attr :online, :map, default: nil, doc: "signed-in presence: `%{users, tabs}`"
   attr :viewers, :integer, default: 0, doc: "everyone with the room open, signed in or not"
-  attr :tags, :list, default: [], doc: "`Directory.tags_of/1` result; the top three are shown"
+
+  attr :tags, :list,
+    default: [],
+    doc: "`Directory.tags_of/1` result; three are shown, the rest counted"
+
+  attr :filter, :string,
+    default: nil,
+    doc: "the active tag filter, always shown when the room has it"
 
   defp room_card(assigns) do
     ref = Room.ref(assigns.room)
     %{users: users, tabs: tabs} = assigns.online || %{users: 0, tabs: 0}
+    {shown, hidden} = card_tags(assigns.tags, assigns.filter)
 
     assigns =
       assign(assigns,
         member_count: Directory.member_count(ref),
+        shown_tags: shown,
+        hidden_tags: hidden,
         activity: Directory.last_activity(ref),
         online: users,
         anonymous: max(assigns.viewers - tabs, 0)
@@ -605,8 +628,18 @@ defmodule PubkyRoomsWeb.LobbyLive do
             </.badge>
           </div>
           <.card_description :if={@room.topic} class="line-clamp-2">{@room.topic}</.card_description>
-          <div :if={@tags != []} class="flex flex-wrap gap-1.5 pt-1">
-            <.tag :for={t <- Enum.take(@tags, 3)} label={t.label} count={t.count} size="sm" static />
+          <div :if={@tags != []} class="flex flex-wrap items-center gap-1.5 pt-1">
+            <.tag
+              :for={t <- @shown_tags}
+              label={t.label}
+              count={t.count}
+              size="sm"
+              selected={t.label == @filter}
+              static
+            />
+            <span :if={@hidden_tags > 0} class="text-xs text-muted-foreground" title="more tags">
+              +{@hidden_tags}
+            </span>
           </div>
         </.card_header>
         <.card_footer class="justify-between gap-3 text-xs text-muted-foreground">
