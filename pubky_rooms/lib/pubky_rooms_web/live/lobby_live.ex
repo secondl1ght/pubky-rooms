@@ -371,7 +371,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
             {@online_count} {if @online_count == 1, do: "person", else: "people"} online
           </p>
           <div :if={@popular_tags != []} class="flex flex-col gap-2 lg:hidden">
-            <.section_title class="text-xl">Tags</.section_title>
+            <.section_title>Tags</.section_title>
             <.tag_chips
               tags={@popular_tags}
               filter={@tag_filter}
