@@ -375,9 +375,9 @@ defmodule PubkyRoomsWeb.LobbyLive do
           </.empty_state>
         </section>
 
-        <.how_it_works card={false} class="mt-6 xl:hidden" />
+        <.how_it_works :if={!@current_user} card={false} class="mt-6 xl:hidden" />
 
-        <:aside>
+        <:aside :if={!@current_user}>
           <.how_it_works />
         </:aside>
       </.page>

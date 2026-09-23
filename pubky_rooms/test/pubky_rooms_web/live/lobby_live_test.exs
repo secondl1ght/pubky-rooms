@@ -37,6 +37,8 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     assert has_element?(view, "header a[href='/me']")
     assert has_element?(view, "nav a[href='/me']")
     refute has_element?(view, "a[href='/login']")
+    # the explainer is for visitors; signed-in people know how it works
+    refute has_element?(view, "h2", "How it works")
   end
 
   test "signed-in users are sent home from the sign-in page", %{conn: conn} do
