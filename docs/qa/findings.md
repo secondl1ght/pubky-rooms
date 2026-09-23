@@ -25,7 +25,7 @@ Seeded on 2026-09-21 from Claude's browser pass over the finish-phase work; the 
 - Sign-in "New code" button was the only `dark` button in the app (picked for the white QR panel); now `secondary` like "Copy link". The `dark`/`dark-outline` variants stay in the library for parity with Pubky App. — fixed
 
 ## Signed-in pass (2026-09-22)
-- Toast text sat 2 px above the icon: the icon carried a top nudge meant for titled toasts. Icon (20 px) now aligns with the 20 px first line; the 16 px close button gets the 2 px nudge instead. — fixed
+- Toast text sat 2 px above the icon: the icon carried a top nudge meant for titled toasts. Icon (20 px) now aligns with the 20 px first line; the close button is a 20 px flex box (its inline box used to take the line-height and sit low). — fixed
 - How it works is for visitors: hidden once signed in (both the xl column and the phone footer). Test. — fixed
 - Signed-in empty state repeated the homeserver point; now lists the ways a room gets found: the directory, tags (here and in Pubky App), the link. — fixed
 - Fallback avatars are a disc in one of the six signal colours with the initial, not Pubky App's facehash face (React-only library). A static SVG port seeded like Pubky App would give identical faces in both apps. — deferred → after launch (backlog row in `docs/PROGRESS.md`)

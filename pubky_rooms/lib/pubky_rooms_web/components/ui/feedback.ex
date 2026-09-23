@@ -71,7 +71,7 @@ defmodule PubkyRoomsWeb.UI.Feedback do
       </div>
       <button
         type="button"
-        class="group mt-0.5 cursor-pointer self-start text-muted-foreground hover:text-foreground"
+        class="group flex size-5 shrink-0 cursor-pointer items-center justify-center self-start text-muted-foreground hover:text-foreground"
         aria-label={gettext("close")}
       >
         <span class="lucide-x size-4" aria-hidden="true" />
