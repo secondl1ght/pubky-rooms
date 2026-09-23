@@ -124,7 +124,7 @@ defmodule PubkyRoomsWeb.MeLive do
               <.input
                 field={@nickname[:name]}
                 label="Display name in Rooms"
-                hint={"Up to #{LocalProfile.name_max()} characters. Stored on your homeserver as /pub/pubky-rooms/profile.json; a Pubky App profile takes precedence."}
+                hint={"Up to #{LocalProfile.name_max()} characters. A Pubky App profile name takes precedence."}
                 placeholder="How should people see you?"
                 maxlength={LocalProfile.name_max()}
                 autocomplete="nickname"
