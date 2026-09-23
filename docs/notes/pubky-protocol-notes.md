@@ -39,6 +39,7 @@ Verified against pubky.org docs, the `pubky-homeserver` (v0.11.0) source, the Ru
 - Durable credential (SDK-compatible): `pubky-grant-credential-v1:<hs z32>:<b64url client secret 32B>:<grant jws>`; restoring re-exchanges for a fresh bearer. Treat as a bearer-equivalent secret.
 
 ## pubky-app-specs v0.7 (only for interop with pubky.app)
+What Rooms mirrors, and the conformance test against the vendored package data, is kept in `pubky-app-specs-mirror.md` (living document). Timestamps in spec files (`created_at`) are Unix **microseconds**.
 - All under `/pub/pubky.app/`: `profile.json` `{name(3..50), bio(≤160), image(url ≤300), links[≤5]{title,url}, status(≤50)}`; `posts/<ts id>` `{content, kind: short|long|image|video|link|file|collection, parent, embed{kind,uri}, attachments[], lock}`; `tags/<hash id>` `{uri, label(trim+lowercase ≤20), created_at}`; `bookmarks/<hash id>`; `follows/<z32>`; `mutes/<z32>`; `files/<ts id>` `{name, created_at, src, content_type, size}`; `blobs/<hash id>` raw bytes; `feeds/<hash id>`; `last_read`.
 - Link posts: kind `link`, URL lives in `content`; `embed` is only for reposts/quotes.
 - **Universal tags (Nexus ≥ 0.4):** any app may write a `PubkyAppTag` at `/pub/<app>/tags/<hash id>`; Nexus indexes the tagged URI as a *Resource* under that app namespace (`ExtendedParsedUri::UniversalTag`; the namespace comes from the tag file's path, not from the tagged URI). Resource id = hex(blake3(normalized uri)[0..16]).

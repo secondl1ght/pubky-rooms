@@ -1,0 +1,45 @@
+{
+  "source": "pubky-app-specs 0.7.0 (npm package, PubkySpecsBuilder) run on 2026-09-22; see README.md",
+  "tags": [
+    {
+      "uri": "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/pubky-rooms/rooms/0035PERXNDXFE",
+      "input_label": "  BitCoin ",
+      "label": "bitcoin",
+      "id": "QQ7S3FABJQ4MY9EFGE4G4EQKFW"
+    },
+    {
+      "uri": "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/pubky-rooms/rooms/0035PERXNDXFE",
+      "input_label": "room",
+      "label": "room",
+      "id": "1D7Y4B1SHTJWAF7S7ZFNXJWQXM"
+    },
+    {
+      "uri": "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/pubky-rooms/rooms/0035R2S3QP3RY",
+      "input_label": "art-deco_2",
+      "label": "art-deco_2",
+      "id": "JTMSYNCM87Q3TG9HHMY0BC4J14"
+    },
+    {
+      "uri": "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/pubky-rooms/rooms/0035R2S3QP3RY",
+      "input_label": "🔥",
+      "label": "🔥",
+      "id": "YASQE6ETC8ZCV3G697JXFGCKA4"
+    }
+  ],
+  "tag_rejected_labels": ["a b", "xxxxxxxxxxxxxxxxxxxxx"],
+  "tag_json_keys": ["uri", "label", "created_at"],
+  "tag_created_at_unit": "microseconds",
+  "timestamp_ids": [
+    {
+      "micros": 1790138102742000,
+      "id": "0035R7R1PSXZ0",
+      "note": "a PubkyAppFile id is the timestamp id of its created_at"
+    }
+  ],
+  "file_json_keys": ["name", "created_at", "src", "content_type", "size"],
+  "user_names": [
+    { "name": "Al", "valid": false },
+    { "name": "Bob", "valid": true },
+    { "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "valid": false }
+  ]
+}

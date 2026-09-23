@@ -3,7 +3,7 @@ defmodule PubkyRooms.Tags.Tag do
   Universal tags (`tags/<hash id>` in the Pubky Rooms namespace), the
   pubky-app-specs `PubkyAppTag` shape:
 
-      {"uri":"pubky://<creator>/pub/pubky-rooms/rooms/<room_id>","label":"bitcoin","created_at":1757600000000}
+      {"uri":"pubky://<creator>/pub/pubky-rooms/rooms/<room_id>","label":"bitcoin","created_at":1757600000000000}
 
   The id is the Crockford base32 of the first 16 bytes of
   `blake3("<uri>:<label>")`, so one user can tag one URI with one label
@@ -25,6 +25,7 @@ defmodule PubkyRooms.Tags.Tag do
           uri: String.t(),
           label: String.t(),
           created_at: non_neg_integer(),
+          # Unix microseconds, as pubky-app-specs writes it
           room_ref: Paths.room_ref() | nil
         }
 
@@ -141,7 +142,7 @@ defmodule PubkyRooms.Tags.Tag do
   @doc "Encodes a tag file."
   @spec encode(String.t(), String.t()) :: binary()
   def encode(uri, label),
-    do: JSON.encode!(%{uri: uri, label: label, created_at: System.os_time(:millisecond)})
+    do: JSON.encode!(%{uri: uri, label: label, created_at: System.os_time(:microsecond)})
 
   @doc """
   Decodes a tag file read from `owner`'s homeserver at `path` and checks that

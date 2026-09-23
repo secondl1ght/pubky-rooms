@@ -86,6 +86,12 @@ defmodule PubkyRooms.Profiles do
   @doc "The Pubky App profile path."
   def pubky_app_profile_path, do: @pubky_app_profile
 
+  @doc "Longest Pubky App profile name we accept (pubky-app-specs `userNameMaxLength`)."
+  def name_max, do: @name_max
+
+  @doc "Longest profile image URL we accept (pubky-app-specs `userImageUrlMaxLength`)."
+  def image_url_max, do: @image_url_max
+
   # ── fetching (runs in a task started by the cache) ─────────────────────────
 
   @doc false
