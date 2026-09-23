@@ -56,7 +56,7 @@ Seeded on 2026-09-21 from Claude's browser pass over the finish-phase work; the 
 - The mute/remove buttons in the members sheet appear on hover from `sm` up; on a real phone (< `sm`) they are always visible, so touch works. Verify on a device during QA. — open
 
 ## Polish (found by Claude, signed-in pass)
-- `/me` shows "No profile found yet" when the real problem is that the user's own key does not resolve (PKARR record gone; testnet relays lose them on recreation). Writes still succeed via the session, so a saved nickname never appears. Consider surfacing "your key does not resolve right now" the way rooms flag unreachable members. Low priority: on mainnet Ring republishes records. — open
+- `/me` shows "No profile found yet" when the real problem is that the user's own key does not resolve (PKARR record gone; testnet relays lose them on recreation). Writes still succeed via the session, so a saved nickname never appears. Not distinguishable today: `Pubky.Storage.get` returns the resolver's `:not_found` unchanged, the same atom as a missing file, so the profile fetcher reads both as "no profile" (the stream layer sees the resolver error directly, hence rooms can flag it). Fix: wrap resolution failures in the library (`{:error, {:resolve, reason}}`), map to a distinct profile source in the cache, show "Your key does not resolve right now" on `/me`. ~1 h with tests. Low priority: on mainnet Ring republishes records. — open
 
 ## Questions
 - Member-list discovery without an index (a joiner nobody on this node follows stays unknown until they sign in here) is the documented v1 limitation; revisit with the post-launch spec decision. — tracked in `docs/PROGRESS.md`
