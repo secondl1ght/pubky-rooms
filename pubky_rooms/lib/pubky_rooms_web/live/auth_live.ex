@@ -281,7 +281,7 @@ defmodule PubkyRoomsWeb.AuthLive do
                   <.icon name="lucide-sparkles" class="size-4 text-brand" /> New to Pubky?
                 </p>
                 <p class="text-muted-foreground">
-                  Rooms cannot create accounts. Get your keys with the
+                  Get your keys with the
                   <a
                     href={@pubky_ring_url}
                     target="_blank"
@@ -295,7 +295,7 @@ defmodule PubkyRoomsWeb.AuthLive do
                     rel="noopener"
                     class="text-brand hover:underline"
                   >Pubky App</a>
-                  (Ring approves it), then come back and scan this code. One identity works in every Pubky app.
+                  then come back and scan this code. One identity works in every Pubky client.
                 </p>
               </div>
             </.card_footer>
