@@ -270,14 +270,14 @@ defmodule PubkyRoomsWeb.LobbyLive do
               Directory
             </.sidebar_item>
           </div>
-          <div :if={@popular_tags != []} class="flex flex-col gap-2" id="popular-tags">
-            <.section_title class="mb-1">Tags</.section_title>
-            <.tag_chips tags={@popular_tags} filter={@tag_filter} class="flex-wrap" />
-          </div>
           <p class="flex items-center gap-2.5 text-sm text-secondary-foreground" id="lobby-online">
             <.live_dot />
             {@online_count} {if @online_count == 1, do: "person", else: "people"} online
           </p>
+          <div :if={@popular_tags != []} class="flex flex-col gap-2" id="popular-tags">
+            <.section_title class="mb-1">Tags</.section_title>
+            <.tag_chips tags={@popular_tags} filter={@tag_filter} class="flex-wrap" />
+          </div>
         </:sidebar>
 
         <%= if @current_user do %>
