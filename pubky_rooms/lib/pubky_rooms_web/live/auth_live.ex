@@ -189,14 +189,15 @@ defmodule PubkyRoomsWeb.AuthLive do
                 <.icon name="lucide-log-out" class="size-4 text-brand" />
                 Revoke access any time from Ring
               </li>
-              <li class="flex items-start gap-2">
-                <.icon name="lucide-cookie" class="mt-0.5 size-4 shrink-0 text-brand" />
-                <span>
-                  Your grant lives in this browser; the server holds it in memory only while you are connected, never on disk
-                </span>
+              <li class="flex items-center gap-2">
+                <.icon name="lucide-cookie" class="size-4 text-brand" />
+                Your grant lives in your browser; the server forgets it when you leave
               </li>
               <li class="flex items-center gap-2">
                 <.icon name="lucide-globe" class="size-4 text-brand" /> All rooms are public
+              </li>
+              <li class="flex items-center gap-2">
+                <.icon name="lucide-eye-off" class="size-4 text-brand" /> No analytics or tracking
               </li>
             </ul>
           </div>
