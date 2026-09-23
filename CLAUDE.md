@@ -57,4 +57,4 @@ Homeserver `8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo` at `http://loc
 1. Read `docs/PROGRESS.md`; `git log --oneline -20`; run tests to confirm baseline.
 2. Work in small committed steps.
 3. Before ending a milestone: run the **conformance pass** — walk `docs/notes/rooms-app-design.md` (and the plan's milestone list) for every module touched and mark each item in the *Design backlog* table of `docs/PROGRESS.md` as done / deferred → Mx / changed-with-reason. Nothing may be silently skipped. Then update the handoff note, refresh this file if commands/conventions changed, commit.
-4. Whenever session or credential handling changes, re-check the trust-model text in the sign-in page, `/me`, `README.md` and ADR 0005 so it stays exact.
+4. Whenever session or credential handling changes, re-check the trust-model text in the sign-in page (the six points), `README.md` and ADR 0005 so it stays exact (`/me` shows only the signed-in-with and access-granted facts).
