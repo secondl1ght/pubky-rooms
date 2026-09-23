@@ -370,12 +370,14 @@ defmodule PubkyRoomsWeb.LobbyLive do
             <.live_dot />
             {@online_count} {if @online_count == 1, do: "person", else: "people"} online
           </p>
-          <.tag_chips
-            :if={@popular_tags != []}
-            tags={@popular_tags}
-            filter={@tag_filter}
-            class="-mx-4 overflow-x-auto px-4 pb-1 lg:hidden"
-          />
+          <div :if={@popular_tags != []} class="flex flex-col gap-2 lg:hidden">
+            <.section_title class="text-xl">Tags</.section_title>
+            <.tag_chips
+              tags={@popular_tags}
+              filter={@tag_filter}
+              class="-mx-4 overflow-x-auto px-4 pb-1"
+            />
+          </div>
           <div class="flex flex-wrap items-baseline justify-between gap-3">
             <.section_title>
               Directory<span :if={@tag_filter} class="text-muted-foreground"> · {@tag_filter}</span>
