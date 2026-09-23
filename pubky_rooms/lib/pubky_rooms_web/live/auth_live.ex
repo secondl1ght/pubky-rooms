@@ -268,34 +268,36 @@ defmodule PubkyRoomsWeb.AuthLive do
               </div>
             </.card_content>
 
-            <.card_footer
-              id="onboarding"
-              class={[
-                "flex-col items-start gap-2 rounded-lg p-4 text-sm",
-                @no_account && "bg-brand/10 ring-1 ring-brand/40",
-                !@no_account && "bg-secondary/40"
-              ]}
-            >
-              <p class="flex items-center gap-2 font-semibold text-secondary-foreground">
-                <.icon name="lucide-sparkles" class="size-4 text-brand" /> New to Pubky?
-              </p>
-              <p class="text-muted-foreground">
-                Rooms cannot create accounts. Get your keys with the
-                <a
-                  href={@pubky_ring_url}
-                  target="_blank"
-                  rel="noopener"
-                  class="text-brand hover:underline"
-                >Pubky Ring</a>
-                app, sign up for a homeserver in
-                <a
-                  href={@pubky_app_url}
-                  target="_blank"
-                  rel="noopener"
-                  class="text-brand hover:underline"
-                >Pubky App</a>
-                (Ring approves it), then come back and scan this code. One identity works in every Pubky app.
-              </p>
+            <.card_footer>
+              <div
+                id="onboarding"
+                class={[
+                  "flex w-full flex-col items-start gap-2 rounded-lg p-4 text-sm",
+                  @no_account && "bg-brand/10 ring-1 ring-brand/40",
+                  !@no_account && "bg-secondary/40"
+                ]}
+              >
+                <p class="flex items-center gap-2 font-semibold text-secondary-foreground">
+                  <.icon name="lucide-sparkles" class="size-4 text-brand" /> New to Pubky?
+                </p>
+                <p class="text-muted-foreground">
+                  Rooms cannot create accounts. Get your keys with the
+                  <a
+                    href={@pubky_ring_url}
+                    target="_blank"
+                    rel="noopener"
+                    class="text-brand hover:underline"
+                  >Pubky Ring</a>
+                  app, sign up for a homeserver in
+                  <a
+                    href={@pubky_app_url}
+                    target="_blank"
+                    rel="noopener"
+                    class="text-brand hover:underline"
+                  >Pubky App</a>
+                  (Ring approves it), then come back and scan this code. One identity works in every Pubky app.
+                </p>
+              </div>
             </.card_footer>
 
             <.card_footer :if={@network == :testnet} class="text-xs text-muted-foreground">
