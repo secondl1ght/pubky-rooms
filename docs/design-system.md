@@ -43,6 +43,8 @@ https://pubky.app. Reference data: `docs/notes/pubky-app-design-system.md`, `doc
 | `Layouts.app current_user active back` | desktop header (logo, icon nav, avatar or sign-in pill), mobile header (back, logo), mobile tab bar (lobby, open a room, avatar or sign-in pill in size `tab`), flash |
 
 ## Rules
+
+- Borders: a box nested inside a card (a form group, an explainer panel) takes `border-input`, the same outline as inputs; separators between regions use `border-border`; cards themselves have no border. Two greys, each with one job.
 - Never copy code from `~/CODE/pubky-app`; only the recorded tokens/specs. Verify parity with side-by-side
   screenshots (`/dev/ui` vs pubky.app) and computed styles.
 - Prefer components over ad-hoc classes in LiveViews; extend the library when a pattern repeats.
