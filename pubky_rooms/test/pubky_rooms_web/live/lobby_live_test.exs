@@ -198,6 +198,13 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     {:ok, lobby2, _} = live(build_conn(), ~p"/?tag=dd")
     html = render(lobby2)
     assert html =~ "Busy tags"
+
+    # signed in with a filter: only the filtered directory, own-room sections hidden
+    {:ok, mine, html_mine} = live(alice_conn, ~p"/?tag=dd")
+    refute html_mine =~ "Your rooms"
+    assert length(Regex.scan(~r/Busy tags/, html_mine)) == 1
+    mine |> element("a", "Clear filter") |> render_click()
+    assert render(mine) =~ "Your rooms"
     assert html =~ ~r/data-label="dd"|>dd</
     # the room carries aa bb cc dd room: three shown, "+2" for the rest
     assert html =~ "+2"

@@ -176,7 +176,8 @@ defmodule PubkyRoomsWeb.LobbyLive do
     mine = MapSet.new(created ++ joined, &Room.ref/1)
 
     # without a filter, own rooms are listed above and not repeated; with a tag
-    # filter the list answers "which rooms are tagged X", own ones included
+    # filter the page is only the answer to "which rooms are tagged X" (own
+    # ones included, the own-room sections are hidden meanwhile)
     public =
       case socket.assigns.tag_filter do
         nil ->
@@ -280,7 +281,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
           </div>
         </:sidebar>
 
-        <%= if @current_user do %>
+        <%= if @current_user && is_nil(@tag_filter) do %>
           <section :if={@created != []} class="flex flex-col gap-3">
             <.section_title>Your rooms</.section_title>
             <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:gap-6">
