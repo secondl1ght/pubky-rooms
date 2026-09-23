@@ -173,8 +173,8 @@ defmodule PubkyRoomsWeb.AuthLive do
               Sign in to<br />Pubky <span class="text-brand">Rooms.</span>
             </.typography>
             <.typography size="md" class="max-w-md text-muted-foreground">
-              Scan the code with Pubky Ring to approve this app. Rooms only asks for its own
-              folder on your homeserver, and every message you send is stored there, under your keys.
+              Scan the code with Pubky Ring to approve Rooms. It asks for one folder on your homeserver
+              and nothing else, and everything you write here is stored in that folder, under your keys.
             </.typography>
             <ul class="mt-2 flex flex-col gap-2 text-sm text-secondary-foreground">
               <li class="flex items-center gap-2">
