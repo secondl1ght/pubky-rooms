@@ -133,7 +133,7 @@ defmodule PubkyRoomsWeb.MeLive do
               for={@nickname}
               id="nickname-form"
               phx-submit="save_nickname"
-              class="flex flex-col gap-3 rounded-md border border-input p-4"
+              class="flex flex-col gap-3 rounded-md border border-input/60 p-4"
             >
               <.input
                 field={@nickname[:name]}
@@ -171,7 +171,7 @@ defmodule PubkyRoomsWeb.MeLive do
               </dd>
             </dl>
 
-            <div class="flex flex-col gap-2 rounded-md border border-input p-4 text-sm text-secondary-foreground">
+            <div class="flex flex-col gap-2 rounded-md border border-input/60 p-4 text-sm text-secondary-foreground">
               <p class="font-semibold text-foreground">What Rooms can and cannot do</p>
               <p>
                 Rooms never sees your keys. Pubky Ring gave this app a grant limited to <code class="text-xs">/pub/pubky-rooms/</code>; it can write and delete files there on your behalf

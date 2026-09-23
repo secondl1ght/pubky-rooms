@@ -44,7 +44,7 @@ https://pubky.app. Reference data: `docs/notes/pubky-app-design-system.md`, `doc
 
 ## Rules
 
-- Borders: a box nested inside a card (a form group, an explainer panel) takes `border-input`, the same outline as inputs; separators between regions use `border-border`; cards themselves have no border. Two greys, each with one job.
+- Borders: a box nested inside a card (a form group, an explainer panel) takes `border-input/60`, the input outline at reduced opacity so it sits behind the inputs it contains; separators between regions use `border-border`; cards themselves have no border. Two greys, each with one job.
 - Never copy code from `~/CODE/pubky-app`; only the recorded tokens/specs. Verify parity with side-by-side
   screenshots (`/dev/ui` vs pubky.app) and computed styles.
 - Prefer components over ad-hoc classes in LiveViews; extend the library when a pattern repeats.
