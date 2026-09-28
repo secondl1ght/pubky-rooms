@@ -133,6 +133,7 @@ Source of truth for scope: `docs/PLAN.md` + `docs/notes/rooms-app-design.md`. At
 | `Events.Cursors` table growth (one row per user ever seen): bound or TTL | M7 | done ✓ (`cursor_ttl_ms` 7 days, hourly sweep) |
 | Trust-model text (sign-in, `/me`, README, ADR 0005) re-checked whenever session/credential handling changes | every session | rule |
 | Manual QA checklist `docs/qa/checklist.md` (full pass + **smoke** subset) run before every deploy; regression passes follow it, not memory | every deploy | rule (2026-09-28) |
+| Hooks vs LiveView bindings (simplify pass, before code review): the composer's typing throttle should become `phx-keyup` + `phx-throttle="2000"` (drops ~15 lines of JS, no downside). The tag input could move Enter/Backspace/blur/arrows to `phx-keydown`/`phx-blur`/server-side highlight, leaving a small hook for sanitising, clear-and-refocus and the limit placeholder (180 → ~70 lines, but the behaviour splits across hook and LiveView and arrow highlighting gains a round trip). Default: keep the hook unless the bindings version reads cleaner | simplify pass | decision pending (2026-09-28) |
 | Browser end-to-end suite (`phoenix_test` with the Playwright driver, against `Pubky.Fake` and `FakeGrantLogin`) covering the checklist's smoke items | after launch | deferred: the bigger lift; the hook unit tests (vitest) and the checklist carry the gap until then |
 
 ## Handoff note (update every session)
