@@ -26,6 +26,8 @@ Everything here is one node (no clustering in v1). Costs scale **per room and pe
 
 ## Runbook
 
+Before every deploy: green CI (both projects + hook tests) and the **smoke** items of `docs/qa/checklist.md` on the testnet.
+
 - **Rooms feel slow to open:** check the homeserver throttle first (is our IP whitelisted? are reads authenticated?), then `PUBKY_HTTP_POOL_SIZE` and `fetch_concurrency`.
 - **Members' messages stop arriving live in many rooms at once:** stream pool exhausted or a homeserver rejecting streams. `Subscriptions.info/0` shows per-user status; raise `PUBKY_STREAM_POOL_SIZE` or check the homeserver.
 - **Memory climbing:** count viewers and warm rooms (LiveDashboard); lower `max_idle_rooms` or move to a bigger machine.

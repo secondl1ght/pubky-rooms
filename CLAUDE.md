@@ -11,6 +11,7 @@ Sovereign live chat rooms on the Pubky protocol, built with Phoenix/Elixir. Part
 - `docs/notes/pubky-app-specs-mirror.md` — **living document**: every pubky-app-specs rule Rooms reimplements (Elixir cannot run the WASM package), pinned by `test/pubky_rooms/spec_mirror_test.exs` against `docs/fixtures/pubky-app-specs/`. Add a row whenever Rooms starts reading or writing anything spec'd; refresh the fixtures when the spec bumps.
 - `docs/notes/pubky-app-design-system.md` — Pubky App design tokens/specs (reference data only; never copy their code).
 - `docs/operations.md` — capacity limits table, what happens when each is hit, and the runbook (keep it current whenever a limit or config key changes).
+- `docs/qa/` — `README.md` (how findings are recorded), `findings.md` (open items, decisions, gotcha-bugs), `checklist.md` (the manual pass: every flow with expected results; **smoke** subset before each deploy).
 - `docs/design-system.md` — our clean-room component library (`PubkyRoomsWeb.UI.*`), tokens, and rules; gallery at `/dev/ui` in dev.
 - `docs/adr/` — architecture decision records.
 - `docs/fixtures/` — captured protocol payloads used by tests.

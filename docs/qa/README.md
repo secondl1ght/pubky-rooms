@@ -1,5 +1,7 @@
 # QA
 
+`checklist.md` is the manual pass itself: every flow, the expected result, which items need two identities, and the **smoke** subset to run before each deploy. It replaces ad-hoc regression passes and stands in for the browser end-to-end suite until one exists (post-launch backlog). Record each run in its table.
+
 The finish phase ends with a **QA pause**: the user's first full manual run-through of the app on the testnet, plus Claude's regression pass, before the code-review and security-review skills run on the near-final repository and the first deployment happens.
 
 What to record (decided 2026-09-22, to keep the file useful rather than complete): open or deferred items, decisions with their reason (so they are not re-argued), and bugs whose cause explains a gotcha. Trivial fixed items (a spacing tweak, a reworded hint) are not logged; the commit message is their record.
