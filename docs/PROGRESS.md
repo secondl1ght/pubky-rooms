@@ -103,7 +103,7 @@ Source of truth for scope: `docs/PLAN.md` + `docs/notes/rooms-app-design.md`. At
 | `mix phx.gen.release --docker`, Fly deploy, `PUBKY_DATA_DIR`, secrets, mainnet test with real Ring | M7 | open |
 | PWA: manifest, minimal service worker, icons, theme color (push-ready) | M7 | done ✓ (finish-phase step 3: `manifest.webmanifest`, `sw.js` cache-first for digested assets + network-only navigations + `offline.html`, icons rasterised from the Pubky mark, apple/app-capable metas) |
 | `PUBKY_SERVICE_CREDENTIAL` authenticated reads (operator: whitelist first, service account if bandwidth throttle bites) | after launch | deferred (2026-09-21): homeserver throttles only slow reads and the app degrades instead of failing; revisit if production shows it |
-| Full test suites + CI (GitHub Actions), dialyzer | M7 | done ✓ (`.github/workflows/ci.yml`; dialyzer clean in both projects; browser hooks remain manual-QA only) |
+| Full test suites + CI (GitHub Actions), dialyzer | M7 | done ✓ (`.github/workflows/ci.yml`; dialyzer clean in both projects; the five LiveView hooks have vitest + jsdom unit tests in `pubky_rooms/assets/test` since the QA pause, 2026-09-28 — LiveView's own client behaviour (locks, skip placeholders) stays manual; a browser end-to-end harness is a post-launch item) |
 | README: architecture, credible exit, restart semantics, run locally, deploy | M7 | done ✓ (finish-phase step 3: architecture diagram, data model, credible exit, restart semantics, trust model, tags/Nexus contract, run locally, configuration table, deploy outline; deploy steps get filled in at M7 deploy) |
 | `GET /api/rooms` summary API + `/api/rooms/featured` | M8 | open |
 | `?from=pubky.app` back link, Open Graph tags per room, share to Pubky App | M8 | open |

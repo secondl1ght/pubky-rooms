@@ -1,0 +1,13 @@
+{
+  "name": "pubky-rooms-assets",
+  "private": true,
+  "description": "Unit tests for the LiveView hooks in js/hooks (the bundle itself is built by mix esbuild; no \"type\": \"module\" here, vendor/topbar.js is CommonJS).",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.1",
+    "vitest": "^5.0.2"
+  }
+}

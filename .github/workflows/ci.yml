@@ -40,6 +40,22 @@ jobs:
       - run: mix credo --strict
       - run: mix test
 
+  hooks:
+    name: pubky_rooms · hooks (vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pubky_rooms/assets
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: pubky_rooms/assets/package-lock.json
+      - run: npm ci
+      - run: npm test
+
   dialyzer:
     name: ${{ matrix.project }} · dialyzer
     runs-on: ubuntu-latest
