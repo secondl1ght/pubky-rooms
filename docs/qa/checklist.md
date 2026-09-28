@@ -63,7 +63,7 @@ Legend: **smoke** = minimum pre-deploy set · **A+B** = needs both identities ·
 
 ## 5. Open a room (dialog)
 
-- [ ] **smoke** Name + Listed + one tag → "Open room" → toast "Room opened. It lives on your homeserver.", you are on the room page as creator and member, the room is in Your rooms and the Directory, the homeserver has `rooms/<id>`, `members/<you>/<id>` and `tags/<hash>` files for `room` and your label (`curl localhost:6286/storage/<z32>/pub/pubky-rooms/`).
+- [ ] **smoke** Name + Listed + one tag → "Open room" → toast "Room opened. Copy the link to invite people.", you are on the room page as creator and member, the room is in Your rooms and the Directory, the homeserver has `rooms/<id>`, `members/<you>/<id>` and `tags/<hash>` files for `room` and your label (`curl localhost:6286/storage/<z32>/pub/pubky-rooms/`).
 - [ ] Validation sentences: empty name → "Give the room a name of 1 to 64 characters."; 65 chars blocked by `maxlength`; topic 281 blocked; visibility cards select on click and via keyboard (arrows, space).
 - [ ] Tags input: "+" opens the field focused; typing "Bit Coin,X" becomes "bitcoinx"; Enter adds a chip in the label's colour; suggestions from known tags, arrows + Enter pick one; Backspace on empty removes the last chip; Escape clears then folds; blur on an empty field folds; the fixed `room` chip has no x and typing `room` adds nothing; the fifth tag turns the field read-only with a red "limit reached" that stays until you leave; remove one and the field is live again.
 - [ ] Two tags entered quickly (Enter, Enter within ~150 ms) with `enableLatencySim(400)`: both chips stay, none turn into an empty gap. (LiveView lock race, hooks are unit-tested but this needs the real client.)

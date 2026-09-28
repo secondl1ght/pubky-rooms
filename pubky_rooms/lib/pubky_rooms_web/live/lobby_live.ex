@@ -125,7 +125,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
     {:noreply,
      socket
      |> assign(creating: false)
-     |> put_flash(:success, "Room opened. It lives on your homeserver.")
+     |> put_flash(:success, "Room opened. Copy the link to invite people.")
      |> push_navigate(to: ~p"/r/#{room.creator}/#{room.id}")}
   end
 
