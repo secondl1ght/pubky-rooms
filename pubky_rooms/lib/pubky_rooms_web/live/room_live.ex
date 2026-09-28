@@ -1488,7 +1488,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                 value: "public",
                 title: "Listed",
                 description: "Shown in the directory and found by its tags.",
-                icon: "lucide-globe"
+                icon: "lucide-signpost"
               },
               %{
                 value: "unlisted",

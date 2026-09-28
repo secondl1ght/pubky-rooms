@@ -179,7 +179,7 @@ defmodule PubkyRoomsWeb.UI.Form do
   checked card gets the brand outline.
 
       <.choice_cards field={@form[:visibility]} label="Visibility" options={[
-        %{value: "public", title: "Listed", description: "…", icon: "lucide-globe"},
+        %{value: "public", title: "Listed", description: "…", icon: "lucide-signpost"},
         %{value: "unlisted", title: "Unlisted", description: "…", icon: "lucide-link"}
       ]} />
   """
