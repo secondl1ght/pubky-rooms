@@ -485,6 +485,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
               id="new-room-tags"
               name="room[tags]"
               labels={@tag_labels}
+              fixed={[Tag.auto_label()]}
               suggestions={@tag_suggestions}
               max={Tag.max_custom_labels()}
             />

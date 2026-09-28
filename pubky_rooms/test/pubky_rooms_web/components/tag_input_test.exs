@@ -15,7 +15,9 @@ defmodule PubkyRoomsWeb.UI.TagInputTest do
         max: 4
       )
 
-    assert html =~ ~s(phx-hook="TagInput")
+    # the hook sits on the control, not on the container that holds the chips
+    assert html =~ ~r/id="t-control"[^>]*phx-hook="TagInput"/
+    assert html =~ ~s(data-tag-input)
     assert html =~ ~s(data-on-add="add_tag")
     assert html =~ ~s(data-count="2")
     assert html =~ ~s(data-max="4")
@@ -25,6 +27,23 @@ defmodule PubkyRoomsWeb.UI.TagInputTest do
     assert html =~ ~s(data-role="field" hidden)
     assert html =~ ~s(data-role="suggestion" data-label="bitkit")
     refute html =~ ~r/data-role="add"[^>]*\sdisabled[\s>]/
+  end
+
+  test "fixed labels are chips without an x and do not count" do
+    html =
+      render_component(&TagInput.tag_input/1,
+        id: "t",
+        name: "room[tags]",
+        labels: ["a"],
+        fixed: ["room"],
+        max: 2
+      )
+
+    assert html =~ ~s(data-fixed="room")
+    assert html =~ ~s(title="Added automatically")
+    refute html =~ "Remove room"
+    assert html =~ ~s(data-count="1")
+    assert html =~ ~s(name="room[tags]" value="a")
   end
 
   test "at the limit the add button is disabled" do

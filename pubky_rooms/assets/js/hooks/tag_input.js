@@ -1,7 +1,13 @@
 // Drives `<.tag_input>` (PubkyRoomsWeb.UI.TagInput) the way Pubky App's tag
 // input behaves. The labels themselves live in the LiveView; this hook only
 // owns the field: open/closed, live sanitising, keyboard, suggestion
-// selection, and pushes the events named in the root's data attributes.
+// selection, and pushes the events named in its element's data attributes.
+//
+// The hook element is the "+"/field control, not the whole input: LiveView
+// locks a hook's element from pushEvent until the reply, and with two adds
+// in flight the chips inside a locked container went missing (the second
+// reply's skip placeholders found no node to keep). The chips live in the
+// enclosing `[data-tag-input]`, outside the lock.
 //
 // Banned characters mirror pubky-app-specs `tagInvalidChars` (comma, colon,
 // whitespace) and `PubkyRooms.Tags.Tag.banned_chars/0`; keep them in sync.
@@ -14,6 +20,7 @@ const TagInput = {
   mounted() {
     this.open = false
     this.selected = -1
+    this.root = this.el.closest("[data-tag-input]") || this.el
     this.input = this.el.querySelector("input[type=text]")
     if (!this.input) return
 
@@ -39,7 +46,9 @@ const TagInput = {
   },
 
   // The server re-renders the chips and the "+"/field wrappers on every
-  // change; reapply the client-side open state and limit afterwards.
+  // change; reapply the client-side open state and limit afterwards. At the
+  // limit the field is read-only, not disabled: disabling a focused input
+  // blurs it, which folded the field before "limit reached" could be read.
   updated() {
     this.apply()
   },
@@ -68,10 +77,10 @@ const TagInput = {
     const atLimit = count >= max
     add.hidden = this.open
     field.hidden = !this.open
-    this.input.disabled = atLimit
+    this.input.readOnly = atLimit
     this.input.placeholder = atLimit ? "limit reached" : this.input.dataset.placeholder || "add tag"
     this.input.classList.toggle("at-limit", atLimit)
-    if (this.open && !atLimit && document.activeElement !== this.input) this.input.focus()
+    if (this.open && document.activeElement !== this.input) this.input.focus()
     this.highlight()
   },
 
@@ -99,7 +108,7 @@ const TagInput = {
       }
       case "Backspace": {
         if (this.input.value === "") {
-          const chips = this.el.querySelectorAll("[data-label]:not([data-role])")
+          const chips = this.root.querySelectorAll("[data-label]:not([data-role])")
           const last = chips[chips.length - 1]
           if (last) {
             e.preventDefault()

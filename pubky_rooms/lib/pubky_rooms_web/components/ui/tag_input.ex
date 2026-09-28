@@ -5,8 +5,10 @@ defmodule PubkyRoomsWeb.UI.TagInput do
   field. Typing is lowercased and stripped of the spec's banned characters as
   you go, Enter adds, Backspace on an empty field removes the last chip, Escape
   or leaving the empty field folds it back to "+", and up to five matching
-  known labels are offered underneath. At the limit the field is disabled and
-  reads "limit reached".
+  known labels are offered underneath. At the limit the field turns read-only
+  and reads "limit reached" until it is left (Backspace still removes the last
+  chip). Labels added automatically (`fixed`) are shown first as chips without
+  an x and do not count against `max`.
 
   The labels live in the LiveView; the `TagInput` hook only drives the field
   and pushes three events, named through the attrs: `on_add` with `%{"label"
@@ -14,6 +16,11 @@ defmodule PubkyRoomsWeb.UI.TagInput do
   `%{"q" => text}` (answer it by assigning `suggestions`). With `name` set, a
   hidden input carries the labels space-separated so the surrounding form
   still receives them.
+
+  The hook sits on the "+"/field control, not on the container: a hook's
+  `pushEvent` locks its element until the reply, and with two adds in flight
+  LiveView patched the locked container's clone and lost chips. Outside the
+  lock, the chips and the hidden field are patched on every reply.
 
       <.tag_input id="room-tags" name="room[tags]" labels={@tag_labels}
         suggestions={@tag_suggestions} max={4} />
@@ -28,6 +35,11 @@ defmodule PubkyRoomsWeb.UI.TagInput do
   attr :id, :string, required: true
   attr :name, :string, default: nil, doc: "hidden field name; the labels are joined with spaces"
   attr :labels, :list, default: [], doc: "the chosen labels, in order"
+
+  attr :fixed, :list,
+    default: [],
+    doc: "labels added automatically: chips without an x, not counted against `max`"
+
   attr :suggestions, :list, default: [], doc: "labels to offer under the field"
   attr :max, :integer, default: nil, doc: "how many labels may be chosen"
   attr :on_add, :string, default: "add_tag"
@@ -43,17 +55,16 @@ defmodule PubkyRoomsWeb.UI.TagInput do
       assign(assigns, :at_limit, assigns.max != nil and length(assigns.labels) >= assigns.max)
 
     ~H"""
-    <div
-      id={@id}
-      class={["flex flex-wrap items-center gap-1.5", @class]}
-      phx-hook="TagInput"
-      data-on-add={@on_add}
-      data-on-remove={@on_remove}
-      data-on-query={@on_query}
-      data-count={length(@labels)}
-      data-max={@max}
-    >
+    <div id={@id} class={["flex flex-wrap items-center gap-1.5", @class]} data-tag-input>
       <input :if={@name} type="hidden" name={@name} value={Enum.join(@labels, " ")} />
+      <.tag
+        :for={label <- @fixed}
+        label={label}
+        size={@size}
+        static
+        title="Added automatically"
+        data-fixed={label}
+      />
       <.tag
         :for={label <- @labels}
         label={label}
@@ -62,7 +73,18 @@ defmodule PubkyRoomsWeb.UI.TagInput do
         on_remove={@on_remove}
         data-label={label}
       />
-      <div :if={!@disabled} class="relative" data-role="control">
+      <div
+        :if={!@disabled}
+        id={"#{@id}-control"}
+        class="relative"
+        data-role="control"
+        phx-hook="TagInput"
+        data-on-add={@on_add}
+        data-on-remove={@on_remove}
+        data-on-query={@on_query}
+        data-count={length(@labels)}
+        data-max={@max}
+      >
         <button
           type="button"
           data-role="add"
@@ -97,7 +119,6 @@ defmodule PubkyRoomsWeb.UI.TagInput do
             class={[
               "h-full w-full min-w-0 bg-transparent font-bold text-foreground caret-foreground outline-none",
               "placeholder:font-bold placeholder:text-input [&.at-limit]:placeholder:text-destructive",
-              "disabled:opacity-100",
               (@size == "sm" && "text-xs") || "text-sm"
             ]}
             aria-label="New tag"

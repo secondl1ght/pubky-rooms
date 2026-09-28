@@ -164,6 +164,9 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
 
     assert has_element?(view, "#new-room-tags [data-label='bitcoin']")
     assert has_element?(view, "#new-room-tags input[type=hidden][value='bitcoin dev nostr art']")
+    # the automatic label is shown as a fixed chip, never as a removable one
+    assert has_element?(view, "#new-room-tags [data-fixed='room']")
+    refute has_element?(view, "#new-room-tags [data-label='room']")
     refute has_element?(view, "#new-room-tags [data-label='fifth']")
     assert has_element?(view, "#new-room-tags button[data-role=add][disabled]")
 
