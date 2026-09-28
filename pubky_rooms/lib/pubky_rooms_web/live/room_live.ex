@@ -1596,7 +1596,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           {map_size(@online)} online<span
             :if={Rooms.anonymous_count(@viewers, @online) > 0}
             title="Viewers who are not signed in"
-          > · {Rooms.anonymous_count(@viewers, @online)} anonymous</span>
+          > · {anonymous_label(Rooms.anonymous_count(@viewers, @online))}</span>
         </p>
       </:header>
       <div
@@ -1738,6 +1738,9 @@ defmodule PubkyRoomsWeb.RoomLive do
     </section>
     """
   end
+
+  defp anonymous_label(1), do: "1 anonymous viewer"
+  defp anonymous_label(n), do: "#{n} anonymous viewers"
 
   defp mute_label(app_muted, z32),
     do: if(MapSet.member?(app_muted, z32), do: "Muted in Pubky App", else: "Muted for you")
@@ -1902,7 +1905,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           class="hidden items-center gap-1 text-xs text-muted-foreground sm:flex xl:hidden"
           title="Viewers who are not signed in"
         >
-          <.icon name="lucide-eye" class="size-3.5" /> {@anonymous_count} anonymous
+          <.icon name="lucide-eye" class="size-3.5" /> {anonymous_label(@anonymous_count)}
         </span>
         <.button
           variant="secondary"

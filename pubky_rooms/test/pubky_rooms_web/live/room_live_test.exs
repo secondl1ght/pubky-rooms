@@ -717,7 +717,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     refute render(alice_view) =~ "anonymous"
 
     {:ok, anon, _} = live(ctx.conn, ctx.path)
-    html = wait_for(fn -> render(alice_view) end, &(&1 =~ "1 anonymous"))
+    html = wait_for(fn -> render(alice_view) end, &(&1 =~ "1 anonymous viewer"))
     assert html =~ "1 online"
     # the anonymous viewer sees the same totals
     assert wait_for(fn -> render(anon) end, &(&1 =~ "1 anonymous"))
