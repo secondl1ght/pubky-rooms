@@ -38,16 +38,35 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     refute html =~ "Join room"
     refute html =~ "room-loading"
 
-    {bob_sid, _bob} = Fixtures.login("bob")
-
-    html =
-      ctx.conn
-      |> init_test_session(Fixtures.cookie(bob_sid))
-      |> get(ctx.path)
-      |> html_response(200)
-
+    {bob_sid, bob} = Fixtures.login("bob")
+    bob_conn = init_test_session(ctx.conn, Fixtures.cookie(bob_sid))
+    html = bob_conn |> get(ctx.path) |> html_response(200)
     assert html =~ "Join room"
     refute html =~ "/settings\""
+
+    # a member who is not the creator: composer, no Join, no gear
+    :ok = Rooms.join(bob_sid, bob, Room.ref(ctx.room))
+    html = bob_conn |> get(ctx.path) |> html_response(200)
+    assert html =~ ~s(id="composer")
+    refute html =~ "Join room"
+    refute html =~ "/settings\""
+    assert html =~ "Members · 2"
+
+    # a warm room (its server is running, as after any refresh) paints everything:
+    # messages and the tag "+" included; nothing is left for the socket to fill in
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    view |> form("#composer", message: %{content: "first paint"}) |> render_submit()
+    render_async(view)
+    # the fake homeserver's event reaches the room server a moment after the reply
+    html =
+      wait_for(
+        fn -> ctx.alice_conn |> get(ctx.path) |> html_response(200) end,
+        &(&1 =~ "first paint")
+      )
+
+    assert html =~ "first paint"
+    assert html =~ ~s(id="room-tag-input")
+    refute html =~ "Loading messages"
 
     # a room this node has never seen: one loading state for the whole page
     html = ctx.conn |> get(~p"/r/#{ctx.alice}/0035R2S3QP3RY") |> html_response(200)

@@ -134,6 +134,24 @@ defmodule PubkyRooms.Rooms.RoomServer do
   @doc "The current snapshot without registering as a viewer."
   def snapshot(ref), do: GenServer.call(via(ref), :snapshot)
 
+  @doc """
+  The snapshot of a room server that is already running, or nil: never starts
+  one and gives up after a second (a server mid-bootstrap is busy). For the
+  disconnected first render of the room page, which must stay cheap.
+  """
+  @spec peek(ref()) :: map() | nil
+  def peek(ref) do
+    case whereis(ref) do
+      nil -> nil
+      pid -> pid |> GenServer.call(:snapshot, 1_000) |> unwrap_snapshot()
+    end
+  catch
+    :exit, _ -> nil
+  end
+
+  defp unwrap_snapshot({:ok, snapshot}), do: snapshot
+  defp unwrap_snapshot(_), do: nil
+
   @doc "Reads the newest `limit` messages from the room's ETS table, oldest first."
   @spec history(:ets.tid(), pos_integer()) :: [Message.t()]
   def history(table, limit \\ @history_limit) do

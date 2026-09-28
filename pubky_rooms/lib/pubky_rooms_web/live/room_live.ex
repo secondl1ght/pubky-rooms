@@ -82,7 +82,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         Directory.refresh_nexus_tags(ref)
         {:ok, socket |> load_mutes() |> attach() |> track_presence() |> load_tags()}
       else
-        {:ok, socket |> preview_from_directory() |> load_tags()}
+        {:ok, socket |> preview() |> load_tags()}
       end
     else
       {:ok, socket |> put_flash(:error, "That room link is not valid.") |> redirect(to: ~p"/")}
@@ -132,12 +132,25 @@ defmodule PubkyRoomsWeb.RoomLive do
     end
   end
 
-  # The disconnected first render (a hard refresh, a shared link): everything
-  # the Directory already knows about the room is painted right away, so the
-  # header, members, tags and the viewer's own composer state do not flash
-  # from placeholders to real values when the socket connects. Messages and
-  # live status wait for the room server (`status: :loading`). A room this
-  # node has never seen renders the page-level loading state instead.
+  # The disconnected first render (a hard refresh, a shared link) must not
+  # flash placeholders that the connected render then replaces. A warm room
+  # (its server is running, which a refresh guarantees) gives its whole
+  # snapshot, messages included, so the first paint is the final one. A cold
+  # room is painted from what the Directory knows (definition, members, tags,
+  # who is online, the viewer's own membership); only messages and live status
+  # wait for the room server. A room this node has never seen renders the
+  # page-level loading state. Mute lists are not read here (their first load
+  # may list two folders); a muted author can show until the socket connects.
+  defp preview(%{assigns: %{ref: ref}} = socket) do
+    case RoomServer.peek(ref) do
+      %{status: status} = snapshot when status in [:ready, :closed] ->
+        socket |> apply_snapshot(snapshot) |> assign_online(ref)
+
+      _ ->
+        preview_from_directory(socket)
+    end
+  end
+
   defp preview_from_directory(%{assigns: %{ref: ref}} = socket) do
     case Directory.get(ref) do
       nil ->
@@ -345,7 +358,8 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   # Nothing known yet, not even from the Directory: one loading state for the
   # whole page rather than placeholders in every component.
-  defp loading_shell?(assigns), do: is_nil(assigns.room) and assigns.status == :loading
+  defp loading_shell?(assigns),
+    do: is_nil(assigns.room) and assigns.status in [:loading, :bootstrapping]
 
   # ── events from the browser ────────────────────────────────────────────────
 
@@ -1330,7 +1344,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                 <.icon :if={@status == :ready} name="lucide-message-square-dashed" class="size-8" />
                 <.spinner :if={@status in [:loading, :bootstrapping]} class="size-6" />
                 <span :if={@status == :ready}>No messages yet. Say hello.</span>
-                <span :if={@status in [:loading, :bootstrapping]}>Loading the room from its members' homeservers…</span>
+                <span :if={@status in [:loading, :bootstrapping]}>Loading messages…</span>
                 <span :if={@status == :not_found}>This room does not exist on its creator's homeserver.</span>
                 <span :if={@status == :closed}>This room was closed by its creator; nothing was written in it.</span>
                 <span :if={match?({:error, _}, @status)}>The creator's homeserver could not be reached. Try again later.</span>
