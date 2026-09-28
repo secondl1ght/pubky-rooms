@@ -202,7 +202,7 @@ defmodule PubkyRoomsWeb.Dev.StyleguideLive do
                   field={@form[:visibility]}
                   type="select"
                   label="Visibility"
-                  options={[Public: "public", Unlisted: "unlisted"]}
+                  options={[Listed: "public", Unlisted: "unlisted"]}
                 />
                 <.input name="agree" value="true" type="checkbox" label="Publish tags for discovery" />
                 <div class="rounded-md border border-dashed border-input p-6">

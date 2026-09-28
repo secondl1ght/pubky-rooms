@@ -125,6 +125,31 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     assert html =~ "No rooms yet"
   end
 
+  test "switching the new room to Unlisted drops its tags; back to Listed starts empty",
+       %{conn: conn} do
+    {sid, _alice} = Fixtures.login("alice")
+    {:ok, view, _html} = live(init_test_session(conn, Fixtures.cookie(sid)), ~p"/rooms/new")
+
+    render_hook(view, "add_tag", %{"label" => "bitcoin"})
+    assert has_element?(view, "#new-room-tags [data-label='bitcoin']")
+    assert render(view) =~ "Listed rooms are tagged"
+
+    view
+    |> form("#new-room-form", room: %{name: "Quiet", visibility: "unlisted"})
+    |> render_change()
+
+    refute has_element?(view, "#new-room-tags")
+    refute has_element?(view, "input[name='room[tags]']")
+
+    view
+    |> form("#new-room-form", room: %{name: "Quiet", visibility: "public"})
+    |> render_change()
+
+    assert has_element?(view, "#new-room-tags")
+    refute has_element?(view, "#new-room-tags [data-label='bitcoin']")
+    assert has_element?(view, "#new-room-tags input[type=hidden][value='']")
+  end
+
   test "rooms can be created with tags; the lobby lists popular tags and filters by one",
        %{conn: conn} do
     {sid, alice} = Fixtures.login("alice")

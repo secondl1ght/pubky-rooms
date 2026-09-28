@@ -65,8 +65,14 @@ defmodule PubkyRoomsWeb.LobbyLive do
   end
 
   @impl true
+  # Unlisted rooms are never tagged, so switching to Unlisted drops the chips
+  # instead of carrying them invisibly until the room is opened.
   def handle_event("validate", %{"room" => params}, socket) do
-    {:noreply, assign(socket, form: form_for(params))}
+    socket = assign(socket, form: form_for(params))
+
+    if params["visibility"] == "unlisted",
+      do: {:noreply, assign(socket, tag_labels: [], tag_suggestions: [])},
+      else: {:noreply, socket}
   end
 
   # The tag input (UI.TagInput): chips live here, the hook only drives the field.
@@ -461,14 +467,14 @@ defmodule PubkyRoomsWeb.LobbyLive do
             options={[
               %{
                 value: "public",
-                title: "Public",
-                description: "Listed in the directory and found by tag.",
+                title: "Listed",
+                description: "Shown in the directory and found by its tags.",
                 icon: "lucide-globe"
               },
               %{
                 value: "unlisted",
                 title: "Unlisted",
-                description: "Only people with the link. Still readable by anyone who has it.",
+                description: "Left out of the directory. Anyone with the link can still read it.",
                 icon: "lucide-link"
               }
             ]}
@@ -483,7 +489,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
               max={Tag.max_custom_labels()}
             />
             <p class="text-xs text-muted-foreground">
-              Up to {Tag.max_custom_labels()}, one word each. Public rooms are tagged "room" automatically.
+              Up to {Tag.max_custom_labels()}. Listed rooms are tagged "room" automatically.
             </p>
             <.error :for={{msg, _} <- Keyword.get_values(@form.errors, :tags)}>{msg}</.error>
           </div>

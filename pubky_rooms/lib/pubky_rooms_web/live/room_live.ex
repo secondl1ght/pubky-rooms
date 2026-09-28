@@ -1486,14 +1486,14 @@ defmodule PubkyRoomsWeb.RoomLive do
             options={[
               %{
                 value: "public",
-                title: "Public",
-                description: "Listed in the directory and found by tag.",
+                title: "Listed",
+                description: "Shown in the directory and found by its tags.",
                 icon: "lucide-globe"
               },
               %{
                 value: "unlisted",
                 title: "Unlisted",
-                description: "Only people with the link. Still readable by anyone who has it.",
+                description: "Left out of the directory. Anyone with the link can still read it.",
                 icon: "lucide-link"
               }
             ]}

@@ -78,7 +78,7 @@ defmodule PubkyRooms.Rooms.Room do
         :topic,
         "The topic contains unsupported characters."
       )
-      |> check(visibility in @visibilities, :visibility, "Choose public or unlisted.")
+      |> check(visibility in @visibilities, :visibility, "Choose listed or unlisted.")
 
     if errors == [],
       do: {:ok, %{name: name, topic: topic, visibility: visibility}},

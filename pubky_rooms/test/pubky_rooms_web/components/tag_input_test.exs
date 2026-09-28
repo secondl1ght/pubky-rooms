@@ -61,7 +61,12 @@ defmodule PubkyRoomsWeb.UI.TagInputTest do
         field: field,
         label: "Visibility",
         options: [
-          %{value: "public", title: "Public", description: "Listed", icon: "lucide-globe"},
+          %{
+            value: "public",
+            title: "Listed",
+            description: "In the directory",
+            icon: "lucide-globe"
+          },
           %{value: "unlisted", title: "Unlisted", description: "Link only", icon: "lucide-link"}
         ]
       )

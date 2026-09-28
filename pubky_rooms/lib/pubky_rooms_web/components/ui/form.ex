@@ -24,7 +24,7 @@ defmodule PubkyRoomsWeb.UI.Form do
 
       <.input field={@form[:name]} label="Room name" />
       <.input field={@form[:topic]} type="textarea" label="Topic" rows="3" />
-      <.input field={@form[:visibility]} type="select" options={[Public: "public", Unlisted: "unlisted"]} />
+      <.input field={@form[:visibility]} type="select" options={[Listed: "public", Unlisted: "unlisted"]} />
       <.input field={@form[:agree]} type="checkbox" label="I agree" />
   """
   attr :id, :any, default: nil
@@ -179,7 +179,7 @@ defmodule PubkyRoomsWeb.UI.Form do
   checked card gets the brand outline.
 
       <.choice_cards field={@form[:visibility]} label="Visibility" options={[
-        %{value: "public", title: "Public", description: "…", icon: "lucide-globe"},
+        %{value: "public", title: "Listed", description: "…", icon: "lucide-globe"},
         %{value: "unlisted", title: "Unlisted", description: "…", icon: "lucide-link"}
       ]} />
   """
