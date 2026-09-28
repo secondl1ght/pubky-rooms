@@ -98,6 +98,32 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     refute html =~ "from bob"
     assert html =~ "lucide-volume-x"
 
+    # the lists cannot be loaded in time: the first paint keeps the header,
+    # members and composer but leaves every message to the socket, so nothing
+    # muted can show and then vanish (anonymous visitors are unaffected)
+    PubkyRooms.Mutes.reset()
+    :sys.suspend(PubkyRooms.Mutes)
+
+    try do
+      html = ctx.alice_conn |> get(ctx.path) |> html_response(200)
+      assert html =~ "Members · 2"
+      assert html =~ ~s(id="composer")
+      assert html =~ "Loading messages…"
+      refute html =~ "first paint"
+      refute html =~ "from bob"
+
+      html = ctx.conn |> get(ctx.path) |> html_response(200)
+      assert html =~ "first paint"
+      assert html =~ "from bob"
+    after
+      :sys.resume(PubkyRooms.Mutes)
+    end
+
+    # and the connected render after such a first paint is the usual one
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    html = wait_for(fn -> render(view) end, &(&1 =~ "first paint"))
+    refute html =~ "from bob"
+
     # a cold archive: closed badge and notice from the definition, no gear
     {sid, _} = Fixtures.login("alice")
 

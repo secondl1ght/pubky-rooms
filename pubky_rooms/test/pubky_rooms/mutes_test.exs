@@ -38,6 +38,26 @@ defmodule PubkyRooms.MutesTest do
     assert Mutes.fetch(alice, 1_000) == {:ok, %{own: own, app: app}}
     Mutes.reset()
     assert Mutes.fetch(alice, 1_000) == {:ok, %{own: own, app: app}}
+
+    # a cold cache whose load does not finish in time reports the timeout
+    # instead of empty lists (of/1 would); a warm cache is answered regardless
+    Mutes.reset()
+    :sys.suspend(Mutes)
+
+    try do
+      assert Mutes.fetch(alice, 50) == :timeout
+    after
+      :sys.resume(Mutes)
+    end
+
+    assert Mutes.fetch(alice, 1_000) == {:ok, %{own: own, app: app}}
+    :sys.suspend(Mutes)
+
+    try do
+      assert Mutes.fetch(alice, 50) == {:ok, %{own: own, app: app}}
+    after
+      :sys.resume(Mutes)
+    end
   end
 
   test "mute writes a marker, unmute deletes it, both update the cache and announce" do
