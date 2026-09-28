@@ -1405,7 +1405,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                   </div>
                 <% is_nil(@current_user) -> %>
                   <div class="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-                    <span>Sign in with Pubky Ring to chat.</span>
+                    <span>Sign in to chat.</span>
                     <.button navigate={~p"/login?return_to=#{room_path(assigns)}"}>
                       <.icon name="lucide-key-round" class="size-4" /> Sign in
                     </.button>

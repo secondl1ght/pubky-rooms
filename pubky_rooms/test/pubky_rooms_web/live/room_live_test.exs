@@ -42,7 +42,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
 
     # an anonymous visitor: the sign-in prompt, no composer, no Join, no gear
     html = ctx.conn |> get(ctx.path) |> html_response(200)
-    assert html =~ "Sign in with Pubky Ring to chat."
+    assert html =~ "Sign in to chat."
     refute html =~ ~s(id="composer")
     refute html =~ "Join room"
     refute html =~ "/settings\""
@@ -184,7 +184,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
 
   test "another viewer sees messages live; anonymous visitors are read-only", ctx do
     {:ok, anon, html} = live(ctx.conn, ctx.path)
-    assert html =~ "Sign in with Pubky Ring to chat"
+    assert html =~ "Sign in to chat"
     refute has_element?(anon, "#composer")
 
     {:ok, alice, _} = live(ctx.alice_conn, ctx.path)
