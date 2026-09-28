@@ -75,6 +75,22 @@ defmodule PubkyRooms.Mutes do
     end
   end
 
+  @doc """
+  The lists, loading them within `timeout` when the cache is cold, or
+  `:timeout` when the homeserver did not answer in time (unlike `of/1`, which
+  quietly returns empty lists). For the room page's first render, which must
+  not paint messages it cannot filter and must not wait long either.
+  """
+  @spec fetch(String.t(), timeout()) :: {:ok, lists()} | :timeout
+  def fetch(z32, timeout) do
+    case cached(z32) do
+      nil -> {:ok, GenServer.call(__MODULE__, {:load, z32}, timeout)}
+      lists -> {:ok, lists}
+    end
+  catch
+    :exit, _ -> :timeout
+  end
+
   @doc "Everyone the user muted, in Rooms or in Pubky App."
   @spec all(String.t()) :: MapSet.t(String.t())
   def all(z32) do

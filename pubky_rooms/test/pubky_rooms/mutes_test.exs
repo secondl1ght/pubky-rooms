@@ -35,6 +35,9 @@ defmodule PubkyRooms.MutesTest do
     assert app == MapSet.new([bob])
     assert Mutes.all(alice) == MapSet.new([bob, carol])
     assert Mutes.cached(alice) == %{own: own, app: app}
+    assert Mutes.fetch(alice, 1_000) == {:ok, %{own: own, app: app}}
+    Mutes.reset()
+    assert Mutes.fetch(alice, 1_000) == {:ok, %{own: own, app: app}}
   end
 
   test "mute writes a marker, unmute deletes it, both update the cache and announce" do

@@ -90,6 +90,14 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     refute html =~ "from bob"
     assert html =~ "lucide-volume-x"
 
+    # a cold mute cache (server restart, an hour away) is loaded before the first paint
+    PubkyRooms.Mutes.reset()
+    assert PubkyRooms.Mutes.cached(ctx.alice) == nil
+    html = ctx.alice_conn |> get(ctx.path) |> html_response(200)
+    assert html =~ "first paint"
+    refute html =~ "from bob"
+    assert html =~ "lucide-volume-x"
+
     # a cold archive: closed badge and notice from the definition, no gear
     {sid, _} = Fixtures.login("alice")
 

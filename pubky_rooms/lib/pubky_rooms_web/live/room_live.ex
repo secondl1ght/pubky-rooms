@@ -139,13 +139,15 @@ defmodule PubkyRoomsWeb.RoomLive do
   # room is painted from what the Directory knows (definition, members, tags,
   # who is online, the viewer's own membership); only messages and live status
   # wait for the room server. A room this node has never seen renders the
-  # page-level loading state. Mute lists come from their cache only (warm
-  # after any refresh; a first visit may show a muted author for an instant).
+  # page-level loading state. Messages are never painted without the viewer's
+  # mute lists: cached after any refresh, otherwise loaded here within a
+  # second; if that times out the messages wait for the socket instead, so a
+  # muted author never shows and then vanishes.
   defp preview(%{assigns: %{ref: ref}} = socket) do
-    socket = preview_mutes(socket)
+    {socket, mutes_known?} = preview_mutes(socket)
 
     case RoomServer.peek(ref) do
-      %{status: status} = snapshot when status in [:ready, :closed] ->
+      %{status: status} = snapshot when status in [:ready, :closed] and mutes_known? ->
         socket |> apply_snapshot(snapshot) |> assign_online(ref)
 
       _ ->
@@ -154,13 +156,16 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   defp preview_mutes(%{assigns: %{current_user: %{pubky: z32}}} = socket) do
-    case Mutes.cached(z32) do
-      %{own: own, app: app} -> assign(socket, muted: MapSet.union(own, app), app_muted: app)
-      nil -> socket
+    case Mutes.fetch(z32, 1_000) do
+      {:ok, %{own: own, app: app}} ->
+        {assign(socket, muted: MapSet.union(own, app), app_muted: app), true}
+
+      :timeout ->
+        {socket, false}
     end
   end
 
-  defp preview_mutes(socket), do: socket
+  defp preview_mutes(socket), do: {socket, true}
 
   defp preview_from_directory(%{assigns: %{ref: ref}} = socket) do
     case Directory.get(ref) do
