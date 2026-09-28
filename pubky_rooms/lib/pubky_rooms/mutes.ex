@@ -62,6 +62,19 @@ defmodule PubkyRooms.Mutes do
     end
   end
 
+  @doc """
+  The cached mute lists, fresh or stale, or nil when never loaded. Never lists
+  the homeserver: for the room page's disconnected first render, where a
+  refresh finds the row warm and a first visit accepts a moment without it.
+  """
+  @spec cached(String.t()) :: %{own: MapSet.t(String.t()), app: MapSet.t(String.t())} | nil
+  def cached(z32) do
+    case :ets.lookup(@table, z32) do
+      [{^z32, lists, _loaded_at}] -> lists
+      [] -> nil
+    end
+  end
+
   @doc "Everyone the user muted, in Rooms or in Pubky App."
   @spec all(String.t()) :: MapSet.t(String.t())
   def all(z32) do

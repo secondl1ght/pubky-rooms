@@ -68,6 +68,18 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert html =~ ~s(id="room-tag-input")
     refute html =~ "Loading messages"
 
+    # mutes come from their (warm) cache too: a muted author is absent from the first paint
+    {:ok, bob_view, _} = live(bob_conn, ctx.path)
+    bob_view |> form("#composer", message: %{content: "from bob"}) |> render_submit()
+    render_async(bob_view)
+    wait_for(fn -> render(view) end, &(&1 =~ "from bob"))
+    view |> element("#member-#{bob} button[aria-label='Mute for me']") |> render_click()
+    render_async(view)
+    refute render(view) =~ "from bob"
+    html = ctx.alice_conn |> get(ctx.path) |> html_response(200)
+    refute html =~ "from bob"
+    assert html =~ "lucide-volume-x"
+
     # a room this node has never seen: one loading state for the whole page
     html = ctx.conn |> get(~p"/r/#{ctx.alice}/0035R2S3QP3RY") |> html_response(200)
     assert html =~ ~s(id="room-loading")

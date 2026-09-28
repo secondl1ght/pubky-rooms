@@ -28,10 +28,13 @@ defmodule PubkyRooms.MutesTest do
     Fake.seed(alice, Paths.mute(carol), ~s({"v":1,"created_at":1}))
 
     Mutes.reset()
+    # the cache-only read never lists; it answers once of/1 has loaded the row
+    assert Mutes.cached(alice) == nil
     assert %{own: own, app: app} = Mutes.of(alice)
     assert own == MapSet.new([carol])
     assert app == MapSet.new([bob])
     assert Mutes.all(alice) == MapSet.new([bob, carol])
+    assert Mutes.cached(alice) == %{own: own, app: app}
   end
 
   test "mute writes a marker, unmute deletes it, both update the cache and announce" do

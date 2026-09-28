@@ -139,9 +139,11 @@ defmodule PubkyRoomsWeb.RoomLive do
   # room is painted from what the Directory knows (definition, members, tags,
   # who is online, the viewer's own membership); only messages and live status
   # wait for the room server. A room this node has never seen renders the
-  # page-level loading state. Mute lists are not read here (their first load
-  # may list two folders); a muted author can show until the socket connects.
+  # page-level loading state. Mute lists come from their cache only (warm
+  # after any refresh; a first visit may show a muted author for an instant).
   defp preview(%{assigns: %{ref: ref}} = socket) do
+    socket = preview_mutes(socket)
+
     case RoomServer.peek(ref) do
       %{status: status} = snapshot when status in [:ready, :closed] ->
         socket |> apply_snapshot(snapshot) |> assign_online(ref)
@@ -150,6 +152,15 @@ defmodule PubkyRoomsWeb.RoomLive do
         preview_from_directory(socket)
     end
   end
+
+  defp preview_mutes(%{assigns: %{current_user: %{pubky: z32}}} = socket) do
+    case Mutes.cached(z32) do
+      %{own: own, app: app} -> assign(socket, muted: MapSet.union(own, app), app_muted: app)
+      nil -> socket
+    end
+  end
+
+  defp preview_mutes(socket), do: socket
 
   defp preview_from_directory(%{assigns: %{ref: ref}} = socket) do
     case Directory.get(ref) do
