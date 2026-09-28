@@ -82,7 +82,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         Directory.refresh_nexus_tags(ref)
         {:ok, socket |> load_mutes() |> attach() |> track_presence() |> load_tags()}
       else
-        {:ok, socket}
+        {:ok, socket |> preview_from_directory() |> load_tags()}
       end
     else
       {:ok, socket |> put_flash(:error, "That room link is not valid.") |> redirect(to: ~p"/")}
@@ -129,6 +129,24 @@ defmodule PubkyRoomsWeb.RoomLive do
 
       {:error, reason} ->
         assign(socket, status: {:error, reason})
+    end
+  end
+
+  # The disconnected first render (a hard refresh, a shared link): everything
+  # the Directory already knows about the room is painted right away, so the
+  # header, members, tags and the viewer's own composer state do not flash
+  # from placeholders to real values when the socket connects. Messages and
+  # live status wait for the room server (`status: :loading`). A room this
+  # node has never seen renders the page-level loading state instead.
+  defp preview_from_directory(%{assigns: %{ref: ref}} = socket) do
+    case Directory.get(ref) do
+      nil ->
+        socket
+
+      %Room{} = room ->
+        socket
+        |> assign_room(%{status: :loading, room: room, members: Directory.members_of(ref)})
+        |> assign_online(ref)
     end
   end
 
@@ -310,12 +328,24 @@ defmodule PubkyRoomsWeb.RoomLive do
   # Signed-in viewers are tracked in the room's presence; anonymous ones only
   # subscribe. `online` maps z32 → number of open tabs.
   defp track_presence(%{assigns: %{ref: ref, current_user: user}} = socket) do
-    topic = Presence.room_topic(ref)
-    Presence.subscribe(topic)
+    Presence.subscribe(Presence.room_topic(ref))
     if user, do: Presence.track_room(ref, user)
-    online = topic |> Presence.online() |> Map.new(fn {z32, metas} -> {z32, length(metas)} end)
+    assign_online(socket, ref)
+  end
+
+  defp assign_online(socket, ref) do
+    online =
+      ref
+      |> Presence.room_topic()
+      |> Presence.online()
+      |> Map.new(fn {z32, metas} -> {z32, length(metas)} end)
+
     Enum.reduce(Map.keys(online), assign(socket, online: online), &ensure_profile(&2, &1))
   end
+
+  # Nothing known yet, not even from the Directory: one loading state for the
+  # whole page rather than placeholders in every component.
+  defp loading_shell?(assigns), do: is_nil(assigns.room) and assigns.status == :loading
 
   # ── events from the browser ────────────────────────────────────────────────
 
@@ -1204,7 +1234,17 @@ defmodule PubkyRoomsWeb.RoomLive do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user} back={~p"/"}>
       <.container class="flex h-[calc(100dvh-5rem)] flex-col gap-3 pb-24 lg:h-[calc(100dvh-9rem)] lg:pb-6">
+        <div
+          :if={loading_shell?(assigns)}
+          id="room-loading"
+          class="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground"
+          role="status"
+        >
+          <.spinner class="size-6" />
+          <span>Loading the room…</span>
+        </div>
         <.room_header
+          :if={not loading_shell?(assigns)}
           room={@room}
           status={@status}
           members={@members}
@@ -1224,7 +1264,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           suggestions={@tag_suggestions}
         />
 
-        <div class="flex min-h-0 flex-1 gap-6">
+        <div :if={not loading_shell?(assigns)} class="flex min-h-0 flex-1 gap-6">
           <div class="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-card">
             <div
               :if={@unreachable != []}
@@ -1929,7 +1969,10 @@ defmodule PubkyRoomsWeb.RoomLive do
           Leave
         </.button>
         <.button
-          :if={@current_user && @current_user.pubky == @creator && @room && @status == :ready}
+          :if={
+            @current_user && @current_user.pubky == @creator && @room &&
+              !Room.closed?(@room) && @status in [:loading, :ready]
+          }
           variant="secondary"
           size="icon"
           patch={~p"/r/#{@creator}/#{@room_id}/settings"}

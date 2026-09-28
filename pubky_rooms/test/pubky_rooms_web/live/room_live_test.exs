@@ -28,6 +28,33 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert {:error, {:redirect, %{to: "/"}}} = live(conn, "/r/nope/0000000000001")
   end
 
+  test "the disconnected first render already shows what the directory knows", ctx do
+    # a hard refresh paints the real header, members and composer state, not placeholders
+    html = ctx.alice_conn |> get(ctx.path) |> html_response(200)
+    assert html =~ ">Slice · Pubky Rooms</title>"
+    assert html =~ ~r/<h1[^>]*>\s*Slice\s*<\/h1>/
+    assert html =~ "Members · 1"
+    assert html =~ ~s(href="#{ctx.path}/settings")
+    refute html =~ "Join room"
+    refute html =~ "room-loading"
+
+    {bob_sid, _bob} = Fixtures.login("bob")
+
+    html =
+      ctx.conn
+      |> init_test_session(Fixtures.cookie(bob_sid))
+      |> get(ctx.path)
+      |> html_response(200)
+
+    assert html =~ "Join room"
+    refute html =~ "/settings\""
+
+    # a room this node has never seen: one loading state for the whole page
+    html = ctx.conn |> get(~p"/r/#{ctx.alice}/0035R2S3QP3RY") |> html_response(200)
+    assert html =~ ~s(id="room-loading")
+    refute html =~ "Members ·"
+  end
+
   test "the creator sends a message that is confirmed by the homeserver event", ctx do
     {:ok, view, _html} = live(ctx.alice_conn, ctx.path)
     assert render(view) =~ "No messages yet"
