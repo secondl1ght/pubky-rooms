@@ -284,7 +284,7 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
       assert has_element?(view, "#closed-rooms", "Bygone room")
       # …and only there
       assert length(String.split(html, "Bygone room")) == 2
-      assert has_element?(view, "#closed-rooms a span", "closed")
+      assert has_element?(view, "#closed-rooms a span", "Closed")
     end
   end
 
@@ -326,7 +326,7 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     # the lobby now lists it
     {:ok, _view, html} = live(conn, ~p"/")
     assert html =~ "Test room"
-    assert html =~ "unlisted"
+    assert html =~ "Unlisted"
   end
 
   defp wait_for(fun, pred, tries \\ 50) do

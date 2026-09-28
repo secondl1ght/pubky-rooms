@@ -1391,10 +1391,10 @@ defmodule PubkyRoomsWeb.RoomLive do
                 <% @status in [:closed, :not_found] -> %>
                   <div
                     id="closed-notice"
-                    class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+                    class="flex items-start gap-2 text-sm text-muted-foreground"
                     role="status"
                   >
-                    <.icon name="lucide-door-closed" class="size-4 text-destructive" />
+                    <.icon name="lucide-door-closed" class="mt-0.5 size-4 shrink-0 text-destructive" />
                     <span :if={@status == :closed}>
                       This room was closed by its creator and is read-only now. Messages stay on
                       their authors' homeservers.
@@ -1413,10 +1413,10 @@ defmodule PubkyRoomsWeb.RoomLive do
                 <% @banned? -> %>
                   <div
                     id="banned-notice"
-                    class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+                    class="flex items-start gap-2 text-sm text-muted-foreground"
                     role="status"
                   >
-                    <.icon name="lucide-shield-ban" class="size-4 text-destructive" />
+                    <.icon name="lucide-shield-ban" class="mt-0.5 size-4 shrink-0 text-destructive" />
                     <span>
                       You were removed from this room by its creator<span :if={
                         @bans[@current_user.pubky]
@@ -1426,7 +1426,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                   </div>
                 <% not @is_member -> %>
                   <div class="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-                    <span>Join the room to chat. Joining writes a small marker file to your homeserver.</span>
+                    <span>Join the room to chat.</span>
                     <.button variant="brand" phx-click="join" disabled={@joining or @status != :ready}>
                       <.spinner :if={@joining} class="size-4" />
                       <.icon :if={!@joining} name="lucide-log-in" class="size-4" /> Join room
@@ -1673,11 +1673,8 @@ defmodule PubkyRoomsWeb.RoomLive do
           Members · {length(@members)}
         </.section_title>
         <p id={"#{@id_prefix}members-description"} class="text-xs text-muted-foreground">
-          <.live_dot class="mr-1 size-2 align-middle" />
-          {map_size(@online)} online<span
-            :if={Rooms.anonymous_count(@viewers, @online) > 0}
-            title="Viewers who are not signed in"
-          > · {anonymous_label(Rooms.anonymous_count(@viewers, @online))}</span>
+          <.live_dot class="mr-1 size-2 align-middle" active={members_online(@members, @online) > 0} />
+          {members_online(@members, @online)} online
         </p>
       </:header>
       <div
@@ -1776,11 +1773,27 @@ defmodule PubkyRoomsWeb.RoomLive do
         </div>
       </div>
     </.panel_section>
-    <.panel_section :if={visitors(@online, @members) != []} card={@card}>
+    <.panel_section
+      :if={visitors(@online, @members) != [] or Rooms.anonymous_count(@viewers, @online) > 0}
+      id={"#{@id_prefix}also-here"}
+      card={@card}
+    >
       <:header>
         <.section_title class="text-xl">Also here</.section_title>
-        <p class="text-xs text-muted-foreground">Signed in, not (yet) members</p>
+        <p class="text-xs text-muted-foreground">In the room without being members</p>
       </:header>
+      <div
+        :if={Rooms.anonymous_count(@viewers, @online) > 0}
+        class="flex items-center gap-3 text-sm text-muted-foreground"
+        title="Viewers who are not signed in"
+      >
+        <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-white/5">
+          <.icon name="lucide-eye" class="size-4" />
+        </span>
+        <span class="min-w-0 flex-1 truncate">
+          {anonymous_label(Rooms.anonymous_count(@viewers, @online))}
+        </span>
+      </div>
       <div :for={z32 <- visitors(@online, @members)} class="flex items-center gap-3">
         <.avatar
           src={profile_of(@profiles, z32).avatar_url}
@@ -1797,6 +1810,7 @@ defmodule PubkyRoomsWeb.RoomLive do
     """
   end
 
+  attr :id, :string, default: nil
   attr :card, :boolean, required: true
   slot :header, required: true
   slot :inner_block, required: true
@@ -1805,7 +1819,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   # the sheet (whose own panel is the surface; the header clears the close x).
   defp panel_section(%{card: true} = assigns) do
     ~H"""
-    <.card class="gap-3 py-5">
+    <.card id={@id} class="gap-3 py-5">
       <.card_header>{render_slot(@header)}</.card_header>
       <.card_content class="flex flex-col gap-3">{render_slot(@inner_block)}</.card_content>
     </.card>
@@ -1814,7 +1828,7 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   defp panel_section(assigns) do
     ~H"""
-    <section class="flex flex-col gap-4">
+    <section id={@id} class="flex flex-col gap-4">
       <div class="flex flex-col gap-1.5 pr-8">{render_slot(@header)}</div>
       <div class="flex flex-col gap-3">{render_slot(@inner_block)}</div>
     </section>
@@ -1884,6 +1898,8 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   defp visitors(online, members),
     do: online |> Map.keys() |> Enum.reject(&(&1 in members)) |> Enum.sort()
+
+  defp members_online(members, online), do: Enum.count(members, &Map.has_key?(online, &1))
 
   attr :typing, :map, required: true, doc: "z32 → expiry"
   attr :profiles, :map, required: true
@@ -1958,10 +1974,10 @@ defmodule PubkyRoomsWeb.RoomLive do
           variant="outline"
           class="hidden sm:inline-flex"
         >
-          <.icon name="lucide-link" class="size-3" /> unlisted
+          <.icon name="lucide-link" class="size-3" /> Unlisted
         </.badge>
         <.badge :if={@status == :closed} id="closed-badge" variant="destructive-soft">
-          <.icon name="lucide-door-closed" class="size-3" /> closed
+          <.icon name="lucide-door-closed" class="size-3" /> Closed
         </.badge>
       </div>
       <div class="flex shrink-0 items-center gap-2">
@@ -1979,7 +1995,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           class="flex items-center gap-1.5 text-xs text-muted-foreground xl:hidden"
           title="Signed-in people in the room right now"
         >
-          <.live_dot />
+          <.live_dot active={@online_count > 0} />
           <span id="online-count">{@online_count} online</span>
         </span>
         <span

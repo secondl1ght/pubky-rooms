@@ -85,16 +85,26 @@ defmodule PubkyRoomsWeb.UI.Feedback do
   used wherever the UI says "n online". The ring is still under
   `prefers-reduced-motion`. Decorative: pair it with visible text.
 
-      <.live_dot /> {@online} online
+      <.live_dot active={@online > 0} /> {@online} online
+
+  With `active={false}` (nobody there) it is a still, muted dot, so the lime
+  pulse always means someone is present.
   """
   attr :class, :any, default: "size-2"
+  attr :active, :boolean, default: true
   attr :rest, :global
 
   def live_dot(assigns) do
     ~H"""
     <span class={["relative inline-flex shrink-0", @class]} aria-hidden="true" {@rest}>
-      <span class="absolute inset-0 rounded-full bg-brand motion-safe:animate-live-ping"></span>
-      <span class="relative size-full rounded-full bg-brand"></span>
+      <span
+        :if={@active}
+        class="absolute inset-0 rounded-full bg-brand motion-safe:animate-live-ping"
+      ></span>
+      <span class={[
+        "relative size-full rounded-full",
+        (@active && "bg-brand") || "bg-muted-foreground/40"
+      ]}></span>
     </span>
     """
   end

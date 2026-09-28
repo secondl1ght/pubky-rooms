@@ -716,7 +716,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert_patch(view, ctx.path)
     html = wait_for(fn -> render(view) end, &(&1 =~ "Renamed"))
     assert html =~ "New topic"
-    assert html =~ "unlisted"
+    assert html =~ "Unlisted"
 
     assert {:ok, %Room{name: "Renamed", visibility: "unlisted"}} =
              Directory.fetch_room(Room.ref(ctx.room))
@@ -839,6 +839,9 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     {:ok, anon, _} = live(ctx.conn, ctx.path)
     html = wait_for(fn -> render(alice_view) end, &(&1 =~ "1 anonymous viewer"))
     assert html =~ "1 online"
+    # counted under "Also here" (not a member), never in the members heading
+    assert has_element?(alice_view, "#also-here", "1 anonymous viewer")
+    refute has_element?(alice_view, "#members-description", "anonymous")
     # the anonymous viewer sees the same totals
     assert wait_for(fn -> render(anon) end, &(&1 =~ "1 anonymous"))
 

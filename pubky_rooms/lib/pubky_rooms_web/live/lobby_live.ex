@@ -278,7 +278,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
             </.sidebar_item>
           </div>
           <p class="flex items-center gap-2.5 text-sm text-secondary-foreground" id="lobby-online">
-            <.live_dot />
+            <.live_dot active={@online_count > 0} />
             {@online_count} {if @online_count == 1, do: "person", else: "people"} online
           </p>
           <div :if={@popular_tags != []} class="flex flex-col gap-2" id="popular-tags">
@@ -373,7 +373,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
 
         <section id="directory" class="flex flex-col gap-3">
           <p class="flex items-center gap-2.5 text-sm text-secondary-foreground lg:hidden">
-            <.live_dot />
+            <.live_dot active={@online_count > 0} />
             {@online_count} {if @online_count == 1, do: "person", else: "people"} online
           </p>
           <div :if={@popular_tags != []} class="flex flex-col gap-2 lg:hidden">
@@ -635,10 +635,10 @@ defmodule PubkyRoomsWeb.LobbyLive do
           <div class="flex items-start justify-between gap-3">
             <.card_title class="truncate">{@room.name}</.card_title>
             <.badge :if={Room.closed?(@room)} variant="destructive-soft">
-              <.icon name="lucide-door-closed" class="size-3" /> closed
+              <.icon name="lucide-door-closed" class="size-3" /> Closed
             </.badge>
             <.badge :if={@room.visibility == "unlisted" and not Room.closed?(@room)} variant="outline">
-              <.icon name="lucide-link" class="size-3" /> unlisted
+              <.icon name="lucide-link" class="size-3" /> Unlisted
             </.badge>
           </div>
           <.card_description :if={@room.topic} class="line-clamp-2">{@room.topic}</.card_description>
@@ -662,6 +662,9 @@ defmodule PubkyRoomsWeb.LobbyLive do
             <span class="truncate">{@creator.name}</span>
           </span>
           <span class="flex shrink-0 items-center gap-3">
+            <span class="flex items-center gap-1" title="Members">
+              <.icon name="lucide-users" class="size-3.5" /> {@member_count}
+            </span>
             <span
               :if={@online > 0}
               class="flex items-center gap-1 text-secondary-foreground"
@@ -672,7 +675,6 @@ defmodule PubkyRoomsWeb.LobbyLive do
             <span :if={@anonymous > 0} class="flex items-center gap-1" title="Anonymous viewers">
               <.icon name="lucide-eye" class="size-3.5" /> {@anonymous}
             </span>
-            <span class="flex items-center gap-1"><.icon name="lucide-users" class="size-3.5" /> {@member_count}</span>
             <span :if={@activity}>{Format.relative(@activity)}</span>
           </span>
         </.card_footer>

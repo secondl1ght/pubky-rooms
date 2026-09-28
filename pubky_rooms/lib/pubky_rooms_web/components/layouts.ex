@@ -193,7 +193,7 @@ defmodule PubkyRoomsWeb.Layouts do
         kind={:error}
         title={gettext("Connection lost")}
         phx-disconnected={
-          show(".phx-client-error #client-error")
+          show(".phx-client-error #client-error", display: "flex")
           |> JS.remove_attribute("hidden", to: ".phx-client-error #client-error")
         }
         phx-connected={hide("#client-error") |> JS.set_attribute({"hidden", ""})}
@@ -208,7 +208,7 @@ defmodule PubkyRoomsWeb.Layouts do
         kind={:error}
         title={gettext("Something went wrong")}
         phx-disconnected={
-          show(".phx-server-error #server-error")
+          show(".phx-server-error #server-error", display: "flex")
           |> JS.remove_attribute("hidden", to: ".phx-server-error #server-error")
         }
         phx-connected={hide("#server-error") |> JS.set_attribute({"hidden", ""})}

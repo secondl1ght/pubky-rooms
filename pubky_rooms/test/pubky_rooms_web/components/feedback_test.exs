@@ -24,6 +24,12 @@ defmodule PubkyRoomsWeb.UI.FeedbackTest do
     assert html =~ ~s(aria-hidden="true")
     assert html =~ "bg-brand"
     assert html =~ "motion-safe:animate-live-ping"
+
+    # nobody there: still and muted, never a lime pulse
+    html = render_component(&Feedback.live_dot/1, active: false)
+    refute html =~ "animate-live-ping"
+    refute html =~ "bg-brand"
+    assert html =~ "bg-muted-foreground/40"
   end
 
   test "the delay can be set per toast" do
