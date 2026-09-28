@@ -37,6 +37,16 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert html =~ ~s(href="#{ctx.path}/settings")
     refute html =~ "Join room"
     refute html =~ "room-loading"
+    # the room is cold (no server yet): only the messages wait
+    assert html =~ "Loading messages…"
+
+    # an anonymous visitor: the sign-in prompt, no composer, no Join, no gear
+    html = ctx.conn |> get(ctx.path) |> html_response(200)
+    assert html =~ "Sign in with Pubky Ring to chat."
+    refute html =~ ~s(id="composer")
+    refute html =~ "Join room"
+    refute html =~ "/settings\""
+    assert html =~ "Members · 1"
 
     {bob_sid, bob} = Fixtures.login("bob")
     bob_conn = init_test_session(ctx.conn, Fixtures.cookie(bob_sid))
@@ -79,6 +89,18 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     html = ctx.alice_conn |> get(ctx.path) |> html_response(200)
     refute html =~ "from bob"
     assert html =~ "lucide-volume-x"
+
+    # a cold archive: closed badge and notice from the definition, no gear
+    {sid, _} = Fixtures.login("alice")
+
+    {:ok, archive} =
+      Rooms.create_room(sid, ctx.alice, %{"name" => "Old", "visibility" => "public"})
+
+    :ok = Rooms.close_room(sid, ctx.alice, archive)
+    html = ctx.alice_conn |> get(~p"/r/#{ctx.alice}/#{archive.id}") |> html_response(200)
+    assert html =~ ~s(id="closed-badge")
+    assert html =~ ~s(id="closed-notice")
+    refute html =~ "/settings\""
 
     # a room this node has never seen: one loading state for the whole page
     html = ctx.conn |> get(~p"/r/#{ctx.alice}/0035R2S3QP3RY") |> html_response(200)

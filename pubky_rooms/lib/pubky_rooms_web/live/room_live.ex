@@ -168,8 +168,10 @@ defmodule PubkyRoomsWeb.RoomLive do
         socket
 
       %Room{} = room ->
+        status = if Room.closed?(room), do: :closed, else: :loading
+
         socket
-        |> assign_room(%{status: :loading, room: room, members: Directory.members_of(ref)})
+        |> assign_room(%{status: status, room: room, members: Directory.members_of(ref)})
         |> assign_online(ref)
     end
   end
