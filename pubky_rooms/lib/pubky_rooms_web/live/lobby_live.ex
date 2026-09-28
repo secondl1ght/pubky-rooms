@@ -489,7 +489,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
               max={Tag.max_custom_labels()}
             />
             <p class="text-xs text-muted-foreground">
-              Up to {Tag.max_custom_labels()}. Listed rooms are tagged "room" automatically.
+              Listed rooms are tagged "room" automatically.
             </p>
             <.error :for={{msg, _} <- Keyword.get_values(@form.errors, :tags)}>{msg}</.error>
           </div>
