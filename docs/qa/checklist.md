@@ -7,8 +7,13 @@ change to sessions, the room server, the hooks or the shell. The full pass
 takes about 90 minutes; the items marked **smoke** take about 15 and are the
 minimum before a deploy.
 
-Findings go into `findings.md` per `README.md`. Record each run in the table at
-the end.
+**Living document.** The list is a starting point, not a script: whoever runs it
+adds the check they wish had been there (in the same commit as the fix, when a
+finding leads to one), removes checks for features that no longer exist, and
+rewrites steps that have drifted from the UI. Anything worth verifying that is
+not on the list yet belongs on it, so the pass gets more complete each time
+rather than more stale. Findings go into `findings.md` per `README.md`. Record
+each run in the table at the end.
 
 ## Setup
 
