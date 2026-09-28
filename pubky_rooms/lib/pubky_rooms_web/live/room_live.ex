@@ -1585,7 +1585,10 @@ defmodule PubkyRoomsWeb.RoomLive do
     ~H"""
     <.card class="gap-3 py-5">
       <.card_header :if={@heading}>
-        <.section_title class="text-xl">Members · {length(@members)}</.section_title>
+        <.section_title class="flex items-center gap-2 text-xl">
+          <.icon name="lucide-users" class="size-5 text-muted-foreground" />
+          Members · {length(@members)}
+        </.section_title>
         <p class="text-xs text-muted-foreground">
           <.live_dot class="mr-1 size-2 align-middle" />
           {map_size(@online)} online<span
@@ -1865,13 +1868,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           <.icon name="lucide-users" class="size-3.5" /> {length(@members)}
         </button>
         <span
-          class="hidden items-center gap-1 text-xs text-muted-foreground xl:flex"
-          title="Members"
-        >
-          <.icon name="lucide-users" class="size-3.5" /> {length(@members)}
-        </span>
-        <span
-          class="flex items-center gap-1.5 text-xs text-muted-foreground"
+          class="flex items-center gap-1.5 text-xs text-muted-foreground xl:hidden"
           title="Signed-in people in the room right now"
         >
           <.live_dot />
@@ -1880,7 +1877,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         <span
           :if={@anonymous_count > 0}
           id="anonymous-count"
-          class="hidden items-center gap-1 text-xs text-muted-foreground sm:flex"
+          class="hidden items-center gap-1 text-xs text-muted-foreground sm:flex xl:hidden"
           title="Viewers who are not signed in"
         >
           <.icon name="lucide-eye" class="size-3.5" /> {@anonymous_count} anonymous
