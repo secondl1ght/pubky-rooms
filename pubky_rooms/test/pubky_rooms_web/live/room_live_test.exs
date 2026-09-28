@@ -508,7 +508,11 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
 
     view |> element("#members-button") |> render_click()
     assert has_element?(view, "#members-sheet")
-    assert has_element?(view, "#members-sheet h2", "Members · 2")
+    assert has_element?(view, "#members-sheet h2#sheet-members-title", "Members · 2")
+    # the same panel as the xl sidebar card: users icon, live online line, rows
+    assert has_element?(view, "#sheet-members-title span.lucide-users")
+    assert has_element?(view, "#members-sheet #sheet-members-description", "2 online")
+    assert has_element?(view, "#members-sheet [aria-labelledby=sheet-members-title]")
     assert has_element?(view, "#sheet-member-#{bob}")
     # the sidebar rows keep their ids; nothing is duplicated
     assert has_element?(view, "#member-#{bob}")

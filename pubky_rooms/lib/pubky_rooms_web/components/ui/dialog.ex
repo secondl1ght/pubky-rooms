@@ -29,6 +29,12 @@ defmodule PubkyRoomsWeb.UI.Dialog do
   attr :show, :boolean, default: false
   attr :on_cancel, JS, default: %JS{}
   attr :class, :any, default: nil, doc: "extra classes for the panel"
+
+  attr :labelled_by, :string,
+    default: nil,
+    doc: "id of a heading rendered in the body, when the title slot is not used"
+
+  attr :described_by, :string, default: nil, doc: "id of a description rendered in the body"
   slot :title
   slot :description
   slot :inner_block, required: true
@@ -50,8 +56,8 @@ defmodule PubkyRoomsWeb.UI.Dialog do
       />
       <div
         class="fixed inset-0 overflow-y-auto"
-        aria-labelledby={"#{@id}-title"}
-        aria-describedby={"#{@id}-description"}
+        aria-labelledby={@labelled_by || "#{@id}-title"}
+        aria-describedby={@described_by || "#{@id}-description"}
         role="dialog"
         aria-modal="true"
         tabindex="0"

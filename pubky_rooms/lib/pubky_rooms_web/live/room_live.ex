@@ -1430,17 +1430,12 @@ defmodule PubkyRoomsWeb.RoomLive do
         show
         on_cancel={JS.push("close_members")}
         class="xl:hidden"
+        labelled_by="sheet-members-title"
+        described_by="sheet-members-description"
       >
-        <:title>Members · {length(@members)}</:title>
-        <:description>
-          {map_size(@online)} online<span :if={Rooms.anonymous_count(@viewers, @online) > 0}> · {Rooms.anonymous_count(
-            @viewers,
-            @online
-          )} anonymous</span>
-        </:description>
         <.members_panel
           id_prefix="sheet-"
-          heading={false}
+          card={false}
           members={@members}
           bans={@bans}
           online={@online}
@@ -1562,7 +1557,10 @@ defmodule PubkyRoomsWeb.RoomLive do
     required: true,
     doc: "keeps row ids unique when the panel is shown twice"
 
-  attr :heading, :boolean, default: true
+  attr :card, :boolean,
+    default: true,
+    doc: "in a card (the xl sidebar) or plain (inside the members sheet)"
+
   attr :members, :list, required: true
   attr :bans, :map, required: true
   attr :online, :map, required: true
@@ -1579,87 +1577,89 @@ defmodule PubkyRoomsWeb.RoomLive do
   attr :busy, :boolean, default: false
 
   # The members list with per-member status markers and actions, the
-  # creator's "Removed by you" list and the signed-in visitors. Shown in the
-  # sidebar from `xl` and inside `#members-sheet` on narrower screens.
+  # creator's "Removed by you" list and the signed-in visitors. One component
+  # for both places it appears: as cards in the sidebar from `xl`, and plain
+  # inside `#members-sheet` below (same heading, same rows, same actions).
   defp members_panel(assigns) do
     ~H"""
-    <.card class="gap-3 py-5">
-      <.card_header :if={@heading}>
-        <.section_title class="flex items-center gap-2 text-xl">
+    <.panel_section card={@card}>
+      <:header>
+        <.section_title
+          id={"#{@id_prefix}members-title"}
+          class="flex items-center gap-2 text-xl"
+        >
           <.icon name="lucide-users" class="size-5 text-muted-foreground" />
           Members · {length(@members)}
         </.section_title>
-        <p class="text-xs text-muted-foreground">
+        <p id={"#{@id_prefix}members-description"} class="text-xs text-muted-foreground">
           <.live_dot class="mr-1 size-2 align-middle" />
           {map_size(@online)} online<span
             :if={Rooms.anonymous_count(@viewers, @online) > 0}
             title="Viewers who are not signed in"
           > · {Rooms.anonymous_count(@viewers, @online)} anonymous</span>
         </p>
-      </.card_header>
-      <.card_content class="flex flex-col gap-3">
-        <div
-          :for={z32 <- sort_members(active_members(@members, @bans), @online, @profiles)}
-          class="group/member flex items-center gap-3"
-          id={"#{@id_prefix}member-#{z32}"}
+      </:header>
+      <div
+        :for={z32 <- sort_members(active_members(@members, @bans), @online, @profiles)}
+        class="group/member flex items-center gap-3"
+        id={"#{@id_prefix}member-#{z32}"}
+      >
+        <.avatar
+          src={profile_of(@profiles, z32).avatar_url}
+          name={profile_of(@profiles, z32).name}
+          pubky={z32}
+          size="md"
+          online={Map.has_key?(@online, z32)}
+        />
+        <span class={[
+          "min-w-0 flex-1 truncate text-sm font-semibold",
+          !Map.has_key?(@online, z32) && "text-muted-foreground"
+        ]}>
+          {profile_of(@profiles, z32).name}
+        </span>
+        <.badge :if={z32 == @creator} variant="brand-soft">creator</.badge>
+        <span
+          :if={z32 in @unreachable}
+          class="tooltip text-destructive"
+          data-tip="Homeserver unreachable"
+          aria-label="Homeserver unreachable"
         >
-          <.avatar
-            src={profile_of(@profiles, z32).avatar_url}
-            name={profile_of(@profiles, z32).name}
-            pubky={z32}
-            size="md"
-            online={Map.has_key?(@online, z32)}
-          />
-          <span class={[
-            "min-w-0 flex-1 truncate text-sm font-semibold",
-            !Map.has_key?(@online, z32) && "text-muted-foreground"
-          ]}>
-            {profile_of(@profiles, z32).name}
-          </span>
-          <.badge :if={z32 == @creator} variant="brand-soft">creator</.badge>
-          <span
-            :if={z32 in @unreachable}
-            class="tooltip text-destructive"
-            data-tip="Homeserver unreachable"
-            aria-label="Homeserver unreachable"
-          >
-            <.icon name="lucide-cloud-off" class="size-4" />
-          </span>
-          <span
-            :if={z32 in @live_unavailable and z32 not in @unreachable}
-            class="tooltip text-muted-foreground"
-            data-tip="Live updates unavailable, retrying"
-            aria-label="Live updates unavailable, retrying"
-          >
-            <.icon name="lucide-wifi-off" class="size-4" />
-          </span>
-          <span
-            :if={z32 in @polled}
-            class="tooltip text-muted-foreground"
-            data-tip="Checked once a minute (over the live budget)"
-            aria-label="Checked once a minute (over the live budget)"
-          >
-            <.icon name="lucide-timer" class="size-4" />
-          </span>
-          <span
-            :if={MapSet.member?(@muted, z32)}
-            class="tooltip text-muted-foreground"
-            data-tip={mute_label(@app_muted, z32)}
-            aria-label={mute_label(@app_muted, z32)}
-          >
-            <.icon name="lucide-volume-x" class="size-4" />
-          </span>
-          <.member_actions
-            :if={@current_user && @current_user.pubky != z32}
-            z32={z32}
-            muted={MapSet.member?(@muted, z32)}
-            app_muted={MapSet.member?(@app_muted, z32)}
-            can_ban={@is_creator and z32 != @creator}
-            busy={@busy}
-          />
-        </div>
-      </.card_content>
-      <.card_content
+          <.icon name="lucide-cloud-off" class="size-4" />
+        </span>
+        <span
+          :if={z32 in @live_unavailable and z32 not in @unreachable}
+          class="tooltip text-muted-foreground"
+          data-tip="Live updates unavailable, retrying"
+          aria-label="Live updates unavailable, retrying"
+        >
+          <.icon name="lucide-wifi-off" class="size-4" />
+        </span>
+        <span
+          :if={z32 in @polled}
+          class="tooltip text-muted-foreground"
+          data-tip="Checked once a minute (over the live budget)"
+          aria-label="Checked once a minute (over the live budget)"
+        >
+          <.icon name="lucide-timer" class="size-4" />
+        </span>
+        <span
+          :if={MapSet.member?(@muted, z32)}
+          class="tooltip text-muted-foreground"
+          data-tip={mute_label(@app_muted, z32)}
+          aria-label={mute_label(@app_muted, z32)}
+        >
+          <.icon name="lucide-volume-x" class="size-4" />
+        </span>
+        <.member_actions
+          :if={@current_user && @current_user.pubky != z32}
+          z32={z32}
+          muted={MapSet.member?(@muted, z32)}
+          app_muted={MapSet.member?(@app_muted, z32)}
+          can_ban={@is_creator and z32 != @creator}
+          busy={@busy}
+        />
+      </div>
+      <div
         :if={@is_creator and @bans != %{}}
         class="flex flex-col gap-3 border-t border-border/60 pt-4"
       >
@@ -1692,28 +1692,50 @@ defmodule PubkyRoomsWeb.RoomLive do
             Restore
           </.button>
         </div>
-      </.card_content>
-    </.card>
-    <.card :if={visitors(@online, @members) != []} class="gap-3 py-5">
-      <.card_header>
+      </div>
+    </.panel_section>
+    <.panel_section :if={visitors(@online, @members) != []} card={@card}>
+      <:header>
         <.section_title class="text-xl">Also here</.section_title>
         <p class="text-xs text-muted-foreground">Signed in, not (yet) members</p>
-      </.card_header>
-      <.card_content class="flex flex-col gap-3">
-        <div :for={z32 <- visitors(@online, @members)} class="flex items-center gap-3">
-          <.avatar
-            src={profile_of(@profiles, z32).avatar_url}
-            name={profile_of(@profiles, z32).name}
-            pubky={z32}
-            size="md"
-            online
-          />
-          <span class="min-w-0 flex-1 truncate text-sm font-semibold">
-            {profile_of(@profiles, z32).name}
-          </span>
-        </div>
-      </.card_content>
+      </:header>
+      <div :for={z32 <- visitors(@online, @members)} class="flex items-center gap-3">
+        <.avatar
+          src={profile_of(@profiles, z32).avatar_url}
+          name={profile_of(@profiles, z32).name}
+          pubky={z32}
+          size="md"
+          online
+        />
+        <span class="min-w-0 flex-1 truncate text-sm font-semibold">
+          {profile_of(@profiles, z32).name}
+        </span>
+      </div>
+    </.panel_section>
+    """
+  end
+
+  attr :card, :boolean, required: true
+  slot :header, required: true
+  slot :inner_block, required: true
+
+  # A section of the members panel: a card in the sidebar, a plain block in
+  # the sheet (whose own panel is the surface; the header clears the close x).
+  defp panel_section(%{card: true} = assigns) do
+    ~H"""
+    <.card class="gap-3 py-5">
+      <.card_header>{render_slot(@header)}</.card_header>
+      <.card_content class="flex flex-col gap-3">{render_slot(@inner_block)}</.card_content>
     </.card>
+    """
+  end
+
+  defp panel_section(assigns) do
+    ~H"""
+    <section class="flex flex-col gap-4">
+      <div class="flex flex-col gap-1.5 pr-8">{render_slot(@header)}</div>
+      <div class="flex flex-col gap-3">{render_slot(@inner_block)}</div>
+    </section>
     """
   end
 
