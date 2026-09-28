@@ -49,6 +49,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           tag_suggestions: [],
           muted: MapSet.new(),
           app_muted: MapSet.new(),
+          mutes_known: true,
           members_open: false,
           failed: %{},
           sent: %{},
@@ -158,10 +159,11 @@ defmodule PubkyRoomsWeb.RoomLive do
   defp preview_mutes(%{assigns: %{current_user: %{pubky: z32}}} = socket) do
     case Mutes.fetch(z32, 1_000) do
       {:ok, %{own: own, app: app}} ->
-        {assign(socket, muted: MapSet.union(own, app), app_muted: app), true}
+        {assign(socket, muted: MapSet.union(own, app), app_muted: app, mutes_known: true), true}
 
       :timeout ->
-        {socket, false}
+        # the members list hides mute markers and actions until the socket knows
+        {assign(socket, mutes_known: false), false}
     end
   end
 
@@ -324,7 +326,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   defp load_mutes(%{assigns: %{current_user: %{pubky: z32}}} = socket) do
     Mutes.subscribe(z32)
     %{own: own, app: app} = Mutes.of(z32)
-    assign(socket, muted: MapSet.union(own, app), app_muted: app)
+    assign(socket, muted: MapSet.union(own, app), app_muted: app, mutes_known: true)
   end
 
   defp load_mutes(socket), do: socket
@@ -1489,6 +1491,7 @@ defmodule PubkyRoomsWeb.RoomLive do
               live_unavailable={@live_unavailable}
               polled={@polled}
               muted={@muted}
+              mutes_known={@mutes_known}
               app_muted={@app_muted}
               busy={@joining}
             />
@@ -1520,6 +1523,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           live_unavailable={@live_unavailable}
           polled={@polled}
           muted={@muted}
+          mutes_known={@mutes_known}
           app_muted={@app_muted}
           busy={@joining}
         />
@@ -1646,6 +1650,11 @@ defmodule PubkyRoomsWeb.RoomLive do
   attr :polled, :list, required: true
   attr :muted, MapSet, required: true
   attr :app_muted, MapSet, required: true
+
+  attr :mutes_known, :boolean,
+    default: true,
+    doc: "false only in the first-render fallback: no mute markers or actions yet"
+
   attr :busy, :boolean, default: false
 
   # The members list with per-member status markers and actions, the
@@ -1715,7 +1724,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           <.icon name="lucide-timer" class="size-4" />
         </span>
         <span
-          :if={MapSet.member?(@muted, z32)}
+          :if={@mutes_known and MapSet.member?(@muted, z32)}
           class="tooltip text-muted-foreground"
           data-tip={mute_label(@app_muted, z32)}
           aria-label={mute_label(@app_muted, z32)}
@@ -1726,6 +1735,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           :if={@current_user && @current_user.pubky != z32}
           z32={z32}
           muted={MapSet.member?(@muted, z32)}
+          mutes_known={@mutes_known}
           app_muted={MapSet.member?(@app_muted, z32)}
           can_ban={@is_creator and z32 != @creator}
           busy={@busy}
@@ -1820,6 +1830,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   attr :z32, :string, required: true
   attr :muted, :boolean, required: true
   attr :app_muted, :boolean, default: false, doc: "muted through Pubky App (read-only here)"
+  attr :mutes_known, :boolean, default: true
   attr :can_ban, :boolean, required: true
   attr :busy, :boolean, default: false
 
@@ -1828,7 +1839,7 @@ defmodule PubkyRoomsWeb.RoomLive do
     ~H"""
     <span class="flex shrink-0 items-center gap-0.5 sm:opacity-0 sm:group-hover/member:opacity-100 sm:group-focus-within/member:opacity-100">
       <button
-        :if={!@app_muted}
+        :if={@mutes_known and !@app_muted}
         type="button"
         phx-click={if @muted, do: "unmute", else: "mute"}
         phx-value-z32={@z32}

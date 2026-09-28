@@ -89,6 +89,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     html = ctx.alice_conn |> get(ctx.path) |> html_response(200)
     refute html =~ "from bob"
     assert html =~ "lucide-volume-x"
+    assert html =~ ~s(aria-label="Unmute")
 
     # a cold mute cache (server restart, an hour away) is loaded before the first paint
     PubkyRooms.Mutes.reset()
@@ -111,6 +112,11 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
       assert html =~ "Loading messages…"
       refute html =~ "first paint"
       refute html =~ "from bob"
+      # no mute marker or mute/unmute action can be shown wrong: none is shown
+      refute html =~ "lucide-volume-x"
+      refute html =~ "Mute for me"
+      refute html =~ ~s(aria-label="Unmute")
+      assert html =~ ~s(aria-label="Remove from room")
 
       html = ctx.conn |> get(ctx.path) |> html_response(200)
       assert html =~ "first paint"
