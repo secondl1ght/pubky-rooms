@@ -1986,11 +1986,29 @@ defmodule PubkyRoomsWeb.RoomLive do
             size="md"
             class="opacity-60"
           />
-          <span class="flex min-w-0 flex-1 flex-col">
+          <span class="flex min-w-0 flex-1 items-center gap-1.5">
             <span class="truncate text-sm font-semibold text-muted-foreground">
               {profile_of(@profiles, z32).name}
             </span>
-            <span :if={reason} class="text-xs break-words text-muted-foreground">{reason}</span>
+            <%!-- the reason (up to 140 chars) lives in a popover on hover/focus,
+                 wrapping, anchored to the icon and kept inside the card --%>
+            <span :if={reason} class="group/reason relative inline-flex shrink-0">
+              <button
+                type="button"
+                class="flex size-5 cursor-help items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+                aria-label="Reason"
+                aria-describedby={"#{@id_prefix}banned-#{z32}-reason"}
+              >
+                <.icon name="lucide-info" class="size-3.5" />
+              </button>
+              <span
+                id={"#{@id_prefix}banned-#{z32}-reason"}
+                role="tooltip"
+                class="pointer-events-none absolute right-0 bottom-full z-20 mb-1.5 hidden w-56 rounded-md border border-border bg-secondary px-2.5 py-1.5 text-xs break-words text-secondary-foreground shadow-md group-hover/reason:block group-focus-within/reason:block"
+              >
+                {reason}
+              </span>
+            </span>
           </span>
           <.button
             :if={@is_creator}

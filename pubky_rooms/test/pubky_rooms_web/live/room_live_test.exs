@@ -779,7 +779,9 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     # everyone sees who was removed and why (the markers are public files); only
     # the owner can restore
     html = wait_for(fn -> render(bystander) end, &(&1 =~ "Removed by the owner"))
-    assert has_element?(bystander, "#banned-#{bob}", "spam")
+    # the reason sits in a popover behind an info icon, not in the row itself
+    assert has_element?(bystander, "#banned-#{bob} button[aria-label=Reason]")
+    assert has_element?(bystander, "#banned-#{bob}-reason[role=tooltip]", "spam")
     refute has_element?(bystander, "#banned-#{bob} button", "Restore")
     refute render(alice_view) =~ "Removed by the owner"
     assert Map.has_key?(Fake.files(ctx.alice), Paths.ban(ctx.room.id, bob))
