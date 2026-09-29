@@ -210,7 +210,6 @@ defmodule PubkyRooms.Rooms.RoomServer do
       retry_timer: nil,
       poll_timer: nil,
       viewers_timer: nil,
-      announced_viewers: 0,
       older: %{},
       paging: false,
       waiters: [],
@@ -478,21 +477,17 @@ defmodule PubkyRooms.Rooms.RoomServer do
     {:noreply, state |> viewers_changed() |> maybe_start_idle_timer()}
   end
 
+  # Always announced, even when the total is back where it was: a viewer that
+  # attached in between took its count from a snapshot that still included a
+  # page being closed (a refresh), and only this broadcast corrects it.
   def handle_info(:announce_viewers, state) do
-    state = %{state | viewers_timer: nil}
-    total = map_size(state.viewers)
+    Phoenix.PubSub.broadcast(
+      PubkyRooms.PubSub,
+      stats_topic(state.ref),
+      {:room_stats, state.ref, %{viewers: map_size(state.viewers)}}
+    )
 
-    if total == state.announced_viewers do
-      {:noreply, state}
-    else
-      Phoenix.PubSub.broadcast(
-        PubkyRooms.PubSub,
-        stats_topic(state.ref),
-        {:room_stats, state.ref, %{viewers: total}}
-      )
-
-      {:noreply, %{state | announced_viewers: total}}
-    end
+    {:noreply, %{state | viewers_timer: nil}}
   end
 
   def handle_info(:idle_stop, state) do

@@ -1535,7 +1535,7 @@ defmodule PubkyRoomsWeb.RoomLive do
             >
               <div
                 id="messages-top"
-                class={["flex shrink-0 justify-center py-1", !@has_more && "hidden"]}
+                class={["order-first flex shrink-0 justify-center py-1", !@has_more && "hidden"]}
               >
                 <.button
                   variant="ghost"

@@ -229,6 +229,23 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     refute render(bobv) =~ "gone for good"
   end
 
+  test "a refreshed page ends up with the right anonymous count", ctx do
+    # the new page attaches while the old one is still closing, so its snapshot
+    # counts both; the debounced announcement that follows must correct it
+    {:ok, old, _} = live(ctx.alice_conn, ctx.path)
+    {:ok, fresh, _} = live(ctx.alice_conn, ctx.path)
+    GenServer.stop(old.pid, :normal)
+    assert wait_for(fn -> render(fresh) end, &(not (&1 =~ "anonymous viewer")))
+
+    {:ok, old_anon, _} = live(ctx.conn, ctx.path)
+    {:ok, fresh_anon, _} = live(ctx.conn, ctx.path)
+    GenServer.stop(old_anon.pid, :normal)
+    one = ~r/(?<!\d)1 anonymous viewer(?!s)/
+    assert wait_for(fn -> render(fresh_anon) end, &(&1 =~ one))
+    assert wait_for(fn -> render(fresh) end, &(&1 =~ one))
+    refute render(fresh) =~ "2 anonymous"
+  end
+
   test "another viewer sees messages live; anonymous visitors are read-only", ctx do
     {:ok, anon, html} = live(ctx.conn, ctx.path)
     assert html =~ "Sign in to chat"
@@ -355,6 +372,8 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     # test config: the newest 5 are shown, with the "earlier" control
     refute html =~ "msg 07"
     assert has_element?(view, "#messages-top button", "Load earlier messages")
+    # the stream patches leave the static children after the rows: flex order keeps it on top
+    assert has_element?(view, "#messages-top.order-first")
 
     view |> element("#messages-top button") |> render_click()
     html = wait_for(fn -> render(view) end, &(&1 =~ "msg 04"))
