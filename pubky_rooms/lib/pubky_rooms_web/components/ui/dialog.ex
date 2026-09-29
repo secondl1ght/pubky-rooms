@@ -28,6 +28,12 @@ defmodule PubkyRoomsWeb.UI.Dialog do
   attr :id, :string, required: true
   attr :show, :boolean, default: false
   attr :on_cancel, JS, default: %JS{}
+
+  attr :size, :string,
+    default: "default",
+    values: ~w(default wide),
+    doc: "panel width from `sm` up: default 28rem, wide 34rem (forms)"
+
   attr :class, :any, default: nil, doc: "extra classes for the panel"
 
   attr :labelled_by, :string,
@@ -40,7 +46,13 @@ defmodule PubkyRoomsWeb.UI.Dialog do
   slot :inner_block, required: true
   slot :footer
 
+  # One width utility per panel: a `sm:w-auto` default in the base would win
+  # over a caller's width in CSS order (Tailwind sorts utilities, not classes).
+  @sizes %{"default" => "sm:w-[28rem]", "wide" => "sm:w-[34rem]"}
+
   def dialog(assigns) do
+    assigns = assign(assigns, :sizes, @sizes)
+
     ~H"""
     <div
       id={@id}
@@ -71,7 +83,8 @@ defmodule PubkyRoomsWeb.UI.Dialog do
             class={[
               "relative flex w-full max-h-[calc(100dvh-2rem)] flex-col gap-6 overflow-x-hidden overflow-y-auto border border-b-0",
               "bg-background p-6 shadow-lg rounded-t-xl",
-              "sm:w-auto sm:min-w-[28rem] sm:max-w-[calc(100vw-2rem)] sm:rounded-xl sm:border-b sm:p-8",
+              "sm:max-w-[calc(100vw-2rem)] sm:rounded-xl sm:border-b sm:p-8",
+              @sizes[@size],
               @class
             ]}
           >

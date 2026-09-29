@@ -716,7 +716,9 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert_patch(view, ctx.path <> "/settings")
     assert has_element?(view, "#room-settings-form")
     # same panel width as the Open-a-room dialog
-    assert render(element(view, "#room-settings-container")) =~ "sm:w-[34rem]"
+    panel = render(element(view, "#room-settings-container"))
+    assert panel =~ "sm:w-[34rem]"
+    refute panel =~ "sm:w-auto"
     assert has_element?(view, "#room-tag-input")
 
     view

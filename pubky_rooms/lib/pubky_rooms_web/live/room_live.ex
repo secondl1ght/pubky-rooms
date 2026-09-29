@@ -1581,7 +1581,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         id="room-settings"
         show
         on_cancel={JS.patch(room_path(assigns))}
-        class="sm:w-[34rem]"
+        size="wide"
       >
         <:title>Room settings</:title>
         <.form

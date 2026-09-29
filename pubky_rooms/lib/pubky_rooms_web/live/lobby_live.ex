@@ -436,7 +436,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
         id="new-room"
         show
         on_cancel={JS.patch(~p"/")}
-        class="sm:w-[34rem]"
+        size="wide"
       >
         <:title>Open a room</:title>
         <.form
