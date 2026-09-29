@@ -2384,18 +2384,6 @@ defmodule PubkyRoomsWeb.RoomLive do
           class="absolute -top-3.5 right-1 z-10 flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5 shadow-xs max-sm:hidden sm:opacity-0 sm:group-hover:opacity-100 sm:group-has-[:focus-visible]:opacity-100"
         >
           <button
-            type="button"
-            id={"#{@id}-copy"}
-            phx-hook="Clipboard"
-            data-copy={@msg.content}
-            phx-click={JS.add_class("max-sm:hidden", to: "##{@id}-actions")}
-            class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
-            aria-label="Copy text"
-            title="Copy text"
-          >
-            <.icon name="lucide-copy" class="size-4" />
-          </button>
-          <button
             :if={@can_reply}
             type="button"
             phx-click={
@@ -2421,6 +2409,18 @@ defmodule PubkyRoomsWeb.RoomLive do
             title="Reply"
           >
             <.icon name="lucide-reply" class="size-4" />
+          </button>
+          <button
+            type="button"
+            id={"#{@id}-copy"}
+            phx-hook="Clipboard"
+            data-copy={@msg.content}
+            phx-click={JS.add_class("max-sm:hidden", to: "##{@id}-actions")}
+            class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
+            aria-label="Copy text"
+            title="Copy text"
+          >
+            <.icon name="lucide-copy" class="size-4" />
           </button>
           <button
             :if={@can_edit}
