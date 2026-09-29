@@ -1995,11 +1995,11 @@ defmodule PubkyRoomsWeb.RoomLive do
             <span :if={reason} class="group/reason relative inline-flex shrink-0">
               <button
                 type="button"
-                class="flex size-5 cursor-help items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+                class="flex size-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
                 aria-label="Reason"
                 aria-describedby={"#{@id_prefix}banned-#{z32}-reason"}
               >
-                <.icon name="lucide-info" class="size-3.5" />
+                <.icon name="lucide-shield-ban" class="size-3.5" />
               </button>
               <span
                 id={"#{@id_prefix}banned-#{z32}-reason"}
