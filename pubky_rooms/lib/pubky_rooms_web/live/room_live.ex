@@ -1317,21 +1317,25 @@ defmodule PubkyRoomsWeb.RoomLive do
             <div
               :if={@live_unavailable != []}
               id="live-unavailable"
-              class="flex items-center gap-2 border-b border-border/60 bg-white/[0.03] px-4 py-2 text-sm text-secondary-foreground"
+              class="flex items-start gap-2 border-b border-border/60 px-4 py-2 text-xs text-muted-foreground"
               role="status"
             >
-              <.icon name="lucide-wifi-off" class="size-4 text-muted-foreground" />
-              Live updates from {members_phrase(length(@live_unavailable))} are unavailable right now
-              (their homeserver's event stream is down); new messages appear once it is back.
+              <.icon name="lucide-unplug" class="mt-px size-3.5 shrink-0" />
+              <span>
+                Live updates from {members_phrase(length(@live_unavailable))} are unavailable right now;
+                new messages appear once their homeserver is back.
+              </span>
             </div>
             <div
               :if={@polled != []}
               id="polled-members"
-              class="flex items-center gap-2 border-b border-border/60 bg-white/[0.03] px-4 py-2 text-sm text-secondary-foreground"
+              class="flex items-start gap-2 border-b border-border/60 px-4 py-2 text-xs text-muted-foreground"
               role="status"
             >
-              <.icon name="lucide-timer" class="size-4 text-muted-foreground" />
-              This room is over the live-subscription budget: {members_phrase(length(@polled))} are checked for new messages about once a minute instead of live.
+              <.icon name="lucide-timer" class="mt-px size-3.5 shrink-0" />
+              <span>
+                This room is over the live-subscription budget: {members_phrase(length(@polled))} are checked for new messages about once a minute instead of live.
+              </span>
             </div>
             <div
               id="messages"
@@ -1710,7 +1714,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           data-tip="Live updates unavailable, retrying"
           aria-label="Live updates unavailable, retrying"
         >
-          <.icon name="lucide-wifi-off" class="size-4" />
+          <.icon name="lucide-unplug" class="size-4" />
         </span>
         <span
           :if={z32 in @polled}
