@@ -196,10 +196,37 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     view |> form("#composer", message: %{content: "will not land"}) |> render_submit()
     render_async(view)
     html = wait_for(fn -> render(view) end, &(&1 =~ "out of storage"))
-    assert html =~ "Retry"
+    # inline 24 px controls in the red row, not library buttons
+    assert html =~
+             ~r/<button[^>]*phx-click="retry"[^>]*class="inline-flex h-6[^"]*text-destructive/
 
+    assert html =~
+             ~r/<button[^>]*phx-click="discard"[^>]*class="inline-flex h-6[^"]*text-destructive/
+
+    # someone else chats meanwhile; a retry stores the same message in its original place
+    {bob_sid, bob} = Fixtures.login("bob")
+    :ok = Rooms.join(bob_sid, bob, Room.ref(ctx.room))
+    {:ok, bobv, _} = live(init_test_session(ctx.conn, Fixtures.cookie(bob_sid)), ctx.path)
+    bobv |> form("#composer", message: %{content: "meanwhile"}) |> render_submit()
+    render_async(bobv)
+    wait_for(fn -> render(view) end, &(&1 =~ "meanwhile"))
+
+    view |> element("button", "Retry") |> render_click()
+    render_async(view)
+    html = wait_for(fn -> render(view) end, &(&1 =~ "Stored on your homeserver"))
+    refute html =~ "Not stored"
+    assert ordered?(html, ["will not land", "meanwhile"])
+    assert wait_for(fn -> render(bobv) end, &(&1 =~ "will not land"))
+    assert ordered?(render(bobv), ["will not land", "meanwhile"])
+
+    # a second failure can be discarded; nothing was stored, so nothing to delete
+    Fake.fail_next_under(Paths.messages_dir(Room.ref(ctx.room)), :quota)
+    view |> form("#composer", message: %{content: "gone for good"}) |> render_submit()
+    render_async(view)
+    wait_for(fn -> render(view) end, &(&1 =~ "out of storage"))
     view |> element("button", "Discard") |> render_click()
-    refute render(view) =~ "will not land"
+    refute render(view) =~ "gone for good"
+    refute render(bobv) =~ "gone for good"
   end
 
   test "another viewer sees messages live; anonymous visitors are read-only", ctx do

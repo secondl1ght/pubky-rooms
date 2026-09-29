@@ -2680,8 +2680,22 @@ defmodule PubkyRoomsWeb.RoomLive do
         >
           <.icon name="lucide-circle-alert" class="size-3.5" />
           <span>Not stored: {Rooms.explain(@msg.fail_reason)}</span>
-          <.button variant="destructive-soft" size="sm" phx-click="retry" phx-value-id={@id}>Retry</.button>
-          <.button variant="ghost" size="sm" phx-click="discard" phx-value-id={@id}>Discard</.button>
+          <button
+            type="button"
+            phx-click="retry"
+            phx-value-id={@id}
+            class="inline-flex h-6 cursor-pointer items-center rounded-full border border-destructive/40 bg-destructive/16 px-2.5 font-medium text-destructive transition-colors outline-none hover:bg-destructive/25 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            Retry
+          </button>
+          <button
+            type="button"
+            phx-click="discard"
+            phx-value-id={@id}
+            class="inline-flex h-6 cursor-pointer items-center rounded-full px-1.5 font-medium text-destructive/80 underline-offset-2 transition-colors outline-none hover:text-destructive hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            Discard
+          </button>
         </div>
       </div>
     </article>
