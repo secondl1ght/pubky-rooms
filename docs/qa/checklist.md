@@ -139,3 +139,4 @@ Legend: **smoke** = minimum pre-deploy set · **A+B** = needs both identities ·
 | Date | Commit | Who | Scope | Result / findings |
 |------|--------|-----|-------|-------------------|
 | 2026-09-22 → 09-28 | `6ba3bae`…`1330f80` | user + Claude | signed-out screens, signed-in lobby, `/me`, Open-a-room dialog, room page (first paint, header, members, banners; composer and actions still to come) | see `findings.md` "Design", "Signed-in pass", "Bugs" |
+| 2026-09-28/29 | `560c96b`…`94d5dcb` | user (Chrome) + Claude (in-app), two identities live | room page: composer, actions, reactions, edit/delete/quotes, mute, leave/rejoin, ban/restore, members, settings dialog, lobby directory | findings in `findings.md` (2026-09-28/29); order-aware stream, leave semantics, owner wording |
