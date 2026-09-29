@@ -1283,6 +1283,11 @@ defmodule PubkyRoomsWeb.RoomLive do
     end
   end
 
+  # a muted author's words never reach the viewer, not even quoted
+  defp resolve_quote(%{mutes_known: true, muted: muted}, author, _msg_id)
+       when is_map_key(muted.map, author),
+       do: :muted
+
   defp resolve_quote(assigns, author, msg_id) do
     case stored_message(assigns, {msg_id, author}) do
       %Message{} = original ->
@@ -2253,7 +2258,7 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   attr :quote, :any,
     default: nil,
-    doc: "nil | :unavailable | {:missing, id} | %{id, name, content}"
+    doc: "nil | :unavailable | :muted | {:missing, id} | %{id, name, content}"
 
   defp message_row(assigns) do
     assigns =
@@ -2435,6 +2440,12 @@ defmodule PubkyRoomsWeb.RoomLive do
           class="mt-0.5 mb-1 border-l-2 border-border pl-2 text-xs italic text-muted-foreground"
         >
           Replying to a message that is no longer available
+        </span>
+        <span
+          :if={@quote == :muted}
+          class="mt-0.5 mb-1 border-l-2 border-border pl-2 text-xs italic text-muted-foreground"
+        >
+          Replying to someone you muted
         </span>
         <%!-- pre-wrap renders template whitespace, so the text hugs its tags --%>
         <p

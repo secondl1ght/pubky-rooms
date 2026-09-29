@@ -460,6 +460,53 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     wait_for(fn -> render(anon) end, &(&1 =~ "the answer"))
     refute has_element?(anon, "button[aria-label=Reply]")
 
+    # muting the original's author hides their words from the quote too, and
+    # unmuting brings them back
+    bob_view |> form("#composer", message: %{content: "asking again"}) |> render_submit()
+    render_async(bob_view)
+    wait_for(fn -> render(alice_view) end, &(&1 =~ "asking again"))
+    alice_view |> element("#member-#{bob} button[aria-label='Mute for me']") |> render_click()
+    render_async(alice_view)
+    html = wait_for(fn -> render(alice_view) end, &(not (&1 =~ "asking again")))
+    # every row of bob's is gone for alice while he is muted
+    refute html =~ "the answer"
+    alice_view |> element("#member-#{bob} button[aria-label='Unmute']") |> render_click()
+    render_async(alice_view)
+    wait_for(fn -> render(alice_view) end, &(&1 =~ "the answer"))
+
+    # alice replies to bob, then mutes him: her reply stays, the quote does not
+    alice_view |> element("##{reply_id} button[aria-label=Reply]") |> render_click()
+    alice_view |> form("#composer", message: %{content: "my reply to bob"}) |> render_submit()
+    render_async(alice_view)
+    wait_for(fn -> render(alice_view) end, &(&1 =~ "my reply to bob"))
+
+    [%Message{msg_id: mine_id}] =
+      Enum.filter(messages_on_homeserver(ctx.alice, ctx.room), &(&1.content == "my reply to bob"))
+
+    my_reply = "msg-#{ctx.alice}-#{mine_id}"
+
+    assert has_element?(
+             alice_view,
+             "##{my_reply} button[phx-click=jump][phx-value-id=#{reply_id}]"
+           )
+
+    alice_view |> element("#member-#{bob} button[aria-label='Mute for me']") |> render_click()
+    render_async(alice_view)
+    html = wait_for(fn -> render(alice_view) end, &(&1 =~ "Replying to someone you muted"))
+    assert html =~ "my reply to bob"
+    refute has_element?(alice_view, "##{my_reply} button[phx-click=jump]")
+    refute html =~ "the answer"
+
+    alice_view |> element("#member-#{bob} button[aria-label='Unmute']") |> render_click()
+    render_async(alice_view)
+    html = wait_for(fn -> render(alice_view) end, &(&1 =~ "the answer"))
+    refute html =~ "Replying to someone you muted"
+
+    assert has_element?(
+             alice_view,
+             "##{my_reply} button[phx-click=jump][phx-value-id=#{reply_id}]"
+           )
+
     # the quote follows the original: an edit changes its text for everyone…
     alice_view |> element("##{id} button[aria-label=Edit]") |> render_click()
     alice_view |> form("#composer", message: %{content: "edited question?"}) |> render_submit()
