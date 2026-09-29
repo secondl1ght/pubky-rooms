@@ -295,10 +295,25 @@ defmodule PubkyRoomsWeb.RoomLive do
       socket
     else
       guards = if oldest, do: [{:>=, :"$1", {oldest}}], else: []
-      msgs = :ets.select(table, [{{:"$1", :"$2"}, guards, [:"$2"]}])
-      Enum.reduce(unmuted(socket, msgs), socket, &stream_insert(&2, :messages, &1))
+      reinsert(socket, :ets.select(table, [{{:"$1", :"$2"}, guards, [:"$2"]}]))
     end
   end
+
+  # Re-renders rows from the table: the ones on screen in place, any other
+  # through the order check (a row the stream lacks must not just be appended,
+  # and a muted author's rows must not slip back in).
+  defp reinsert(socket, msgs) do
+    socket
+    |> unmuted(msgs)
+    |> Enum.reduce(socket, fn msg, s ->
+      if MapSet.member?(s.assigns.shown, msg.key),
+        do: stream_insert(s, :messages, msg),
+        else: arrive(s, msg)
+    end)
+  end
+
+  defp in_window?(%{assigns: %{oldest_key: nil}}, _msg), do: true
+  defp in_window?(%{assigns: %{oldest_key: oldest}}, %Message{key: key}), do: key >= oldest
 
   # Quotes are resolved at render time, so the loaded rows that reply to an
   # edited or deleted message are re-inserted to show the new text or the
@@ -314,8 +329,7 @@ defmodule PubkyRoomsWeb.RoomLive do
       table
       |> :ets.select([{{:"$1", :"$2"}, guards, [:"$2"]}])
       |> Enum.filter(&replies_to?(&1, author, msg_id))
-      |> then(&unmuted(socket, &1))
-      |> Enum.reduce(socket, &stream_insert(&2, :messages, &1))
+      |> then(&reinsert(socket, &1))
     end
   end
 
@@ -1093,7 +1107,7 @@ defmodule PubkyRoomsWeb.RoomLive do
       socket =
         case socket.assigns.table do
           nil -> socket
-          table -> Enum.reduce(authored_by(table, z32), socket, &stream_insert(&2, :messages, &1))
+          table -> reinsert(socket, Enum.filter(authored_by(table, z32), &in_window?(socket, &1)))
         end
 
       {:noreply, socket}

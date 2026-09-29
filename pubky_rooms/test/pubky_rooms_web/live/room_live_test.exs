@@ -516,6 +516,45 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert row_order(html, ["msg-#{bob}-#{older.msg_id}", "msg-#{alice}-#{live_id}"])
   end
 
+  test "a profile refresh re-renders rows in place and never appends a missing one at the bottom",
+       ctx do
+    %{alice: alice, room: room} = ctx
+    ref = Room.ref(room)
+    {bob_sid, bob} = Fixtures.login("bob")
+    :ok = Rooms.join(bob_sid, bob, ref)
+    bob_conn = init_test_session(ctx.conn, Fixtures.cookie(bob_sid))
+
+    {:ok, bob_view, _} = live(bob_conn, ctx.path)
+    bob_view |> form("#composer", message: %{content: "bob first"}) |> render_submit()
+    render_async(bob_view)
+    [bobs] = messages_on_homeserver(bob, room)
+    bob_id = "msg-#{bob}-#{bobs.msg_id}"
+
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    wait_for(fn -> render(view) end, &(&1 =~ "bob first"))
+    view |> form("#composer", message: %{content: "alice later"}) |> render_submit()
+    render_async(view)
+    [%Message{msg_id: later_id}] = messages_on_homeserver(alice, room)
+    later = "msg-#{alice}-#{later_id}"
+
+    # the stream loses bob's row while the table keeps it (the transient state a
+    # restore or a late backfill goes through); a profile refresh must put it
+    # back where it belongs, not under alice's newer message
+    send(view.pid, {:room_event, ref, {:message_deleted, bobs.key}})
+    wait_for(fn -> render(view) end, &(not (&1 =~ "bob first")))
+    send(view.pid, {:profile_updated, bob, Profiles.get(bob)})
+    html = wait_for(fn -> render(view) end, &(&1 =~ "bob first"))
+    assert row_order(html, [bob_id, later])
+
+    # and it never brings a muted author back
+    view |> element("#member-#{bob} button[aria-label='Mute for me']") |> render_click()
+    render_async(view)
+    wait_for(fn -> render(view) end, &(not (&1 =~ "bob first")))
+    send(view.pid, {:profile_updated, bob, Profiles.get(bob)})
+    render_async(view)
+    refute render(view) =~ "bob first"
+  end
+
   test "a failed edit restores the stored message", ctx do
     {:ok, view, _} = live(ctx.alice_conn, ctx.path)
     view |> form("#composer", message: %{content: "keep me"}) |> render_submit()
