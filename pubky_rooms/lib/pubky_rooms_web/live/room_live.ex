@@ -2210,18 +2210,22 @@ defmodule PubkyRoomsWeb.RoomLive do
       id={@id}
       class="group relative flex gap-2.5 rounded-md px-2 py-1 transition-colors hover:bg-white/[0.03]"
     >
-      <%!-- the toggle and the pill share a wrapper so a tap anywhere else (another
-           row's toggle included) closes the pill on phones; no-op from sm up --%>
+      <%!-- the toggle and the pill share a positioned box (click-away needs a
+           real box; `display: contents` is skipped) so a tap anywhere else closes
+           the pill on phones; opening one also closes the others; no-op from sm up --%>
       <div
         :if={@actions?}
         id={"#{@id}-menu"}
-        class="contents"
+        class="absolute top-0.5 right-1 size-7"
         phx-click-away={JS.add_class("max-sm:hidden", to: "##{@id}-actions")}
       >
         <button
           type="button"
-          phx-click={JS.toggle_class("max-sm:hidden", to: "##{@id}-actions")}
-          class="absolute top-0.5 right-1 flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground/70 hover:bg-white/10 hover:text-foreground sm:hidden"
+          phx-click={
+            JS.add_class("max-sm:hidden", to: "#messages [data-actions]:not(##{@id}-actions)")
+            |> JS.toggle_class("max-sm:hidden", to: "##{@id}-actions")
+          }
+          class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground/70 hover:bg-white/10 hover:text-foreground sm:hidden"
           aria-label="More actions"
           aria-controls={"#{@id}-actions"}
         >
@@ -2229,7 +2233,8 @@ defmodule PubkyRoomsWeb.RoomLive do
         </button>
         <div
           id={"#{@id}-actions"}
-          class="absolute -top-3 right-2 z-10 flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5 shadow-xs max-sm:hidden sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+          data-actions
+          class="absolute -top-3.5 right-1 z-10 flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5 shadow-xs max-sm:hidden sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
         >
           <button
             :if={@can_reply}
