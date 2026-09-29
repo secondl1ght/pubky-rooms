@@ -771,9 +771,17 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert html =~ "Members · 1"
 
     html = wait_for(fn -> render(bob_view) end, &(&1 =~ "removed from this room"))
-    assert html =~ "spam"
+    assert has_element?(bob_view, "#banned-reason", "spam")
+    assert html =~ "You have been removed from this room."
     refute has_element?(bob_view, "#composer")
+    refute has_element?(bob_view, "button[phx-click=leave]")
     assert html =~ "Members · 1"
+    # everyone sees who was removed and why (the markers are public files); only
+    # the owner can restore
+    html = wait_for(fn -> render(bystander) end, &(&1 =~ "Removed by the owner"))
+    assert has_element?(bystander, "#banned-#{bob}", "spam")
+    refute has_element?(bystander, "#banned-#{bob} button", "Restore")
+    refute render(alice_view) =~ "Removed by the owner"
     assert Map.has_key?(Fake.files(ctx.alice), Paths.ban(ctx.room.id, bob))
     # a bystander is told why bob's rows vanished; the creator has their own confirmation
     assert wait_for(
@@ -806,6 +814,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     alice_view |> element("#banned-#{bob} button", "Restore") |> render_click()
     render_async(alice_view)
     wait_for(fn -> render(bob_view) end, &has_composer?/1)
+    assert render(bob_view) =~ "You were restored by the owner; your messages are back."
     html = wait_for(fn -> render(alice_view) end, &(&1 =~ "bob speaks"))
     assert ordered?(html, ["bob speaks", "said during the ban"])
     assert html =~ "Members · 2"

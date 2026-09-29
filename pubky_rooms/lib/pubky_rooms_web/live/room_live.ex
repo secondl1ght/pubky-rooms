@@ -1211,7 +1211,10 @@ defmodule PubkyRoomsWeb.RoomLive do
     |> then(fn s ->
       cond do
         me? ->
-          s |> assign(banned?: true, composer_mode: :new) |> refresh_rows()
+          s
+          |> assign(banned?: true, composer_mode: :new)
+          |> refresh_rows()
+          |> put_flash(:error, "You have been removed from this room.")
 
         s.assigns.is_creator ->
           s
@@ -1234,7 +1237,10 @@ defmodule PubkyRoomsWeb.RoomLive do
     |> then(fn s ->
       cond do
         me? ->
-          s |> assign(banned?: false) |> refresh_rows()
+          s
+          |> assign(banned?: false)
+          |> refresh_rows()
+          |> put_flash(:info, "You were restored by the owner; your messages are back.")
 
         s.assigns.is_creator ->
           s
@@ -1464,6 +1470,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           online_count={map_size(@online)}
           anonymous_count={Rooms.anonymous_count(@viewers, @online)}
           is_member={@is_member}
+          banned={@banned?}
           current_user={@current_user}
           joining={@joining}
           creator={@creator}
@@ -1615,11 +1622,17 @@ defmodule PubkyRoomsWeb.RoomLive do
                     role="status"
                   >
                     <.icon name="lucide-shield-ban" class="mt-0.5 size-4 shrink-0 text-destructive" />
-                    <span>
-                      You were removed from this room by its owner<span :if={
-                        @bans[@current_user.pubky]
-                      }>: {@bans[@current_user.pubky]}</span>.
-                      Your messages stay on your homeserver; they are hidden here.
+                    <span class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                      <span>You were removed from this room by its owner.</span>
+                      <.badge
+                        :if={@bans[@current_user.pubky]}
+                        id="banned-reason"
+                        variant="destructive-soft"
+                      >
+                        <span class="sr-only">Reason:</span>
+                        {@bans[@current_user.pubky]}
+                      </.badge>
+                      <span>Your messages stay on your homeserver; they are hidden here.</span>
                     </span>
                   </div>
                 <% not @is_member -> %>
@@ -1878,7 +1891,8 @@ defmodule PubkyRoomsWeb.RoomLive do
   attr :busy, :boolean, default: false
 
   # The members list with per-member status markers and actions, the
-  # creator's "Removed by you" list and the signed-in visitors. One component
+  # removed list ("Removed by you" for the owner, who can restore; "Removed by
+  # the owner" for everyone else) and the signed-in visitors. One component
   # for both places it appears: as cards in the sidebar from `xl`, and plain
   # inside `#members-sheet` below (same heading, same rows, same actions).
   defp members_panel(assigns) do
@@ -1953,11 +1967,12 @@ defmodule PubkyRoomsWeb.RoomLive do
           busy={@busy}
         />
       </div>
-      <div
-        :if={@is_creator and @bans != %{}}
-        class="flex flex-col gap-3 border-t border-border/60 pt-4"
-      >
-        <p class="text-xs font-semibold text-muted-foreground">Removed by you</p>
+      <%!-- ban markers are public files on the owner's homeserver, so the list
+           is shown to everyone; only the owner can restore --%>
+      <div :if={@bans != %{}} class="flex flex-col gap-3 border-t border-border/60 pt-4">
+        <p class="text-xs font-semibold text-muted-foreground">
+          {if @is_creator, do: "Removed by you", else: "Removed by the owner"}
+        </p>
         <div
           :for={{z32, reason} <- Enum.sort(@bans)}
           class="flex items-center gap-3"
@@ -1974,9 +1989,12 @@ defmodule PubkyRoomsWeb.RoomLive do
             <span class="truncate text-sm font-semibold text-muted-foreground">
               {profile_of(@profiles, z32).name}
             </span>
-            <span :if={reason} class="truncate text-xs text-muted-foreground">{reason}</span>
+            <.badge :if={reason} variant="destructive-soft" class="mt-0.5 max-w-full truncate">
+              {reason}
+            </.badge>
           </span>
           <.button
+            :if={@is_creator}
             variant="ghost"
             size="sm"
             phx-click="unban"
@@ -2183,6 +2201,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   attr :online_count, :integer, required: true
   attr :anonymous_count, :integer, default: 0
   attr :is_member, :boolean, required: true
+  attr :banned, :boolean, default: false
   attr :current_user, :any, required: true
   attr :joining, :boolean, required: true
   attr :creator, :string, required: true
@@ -2257,7 +2276,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           <.icon name="lucide-link" class="size-4" />
         </.button>
         <.button
-          :if={@is_member && @current_user && @current_user.pubky != @creator}
+          :if={@is_member && !@banned && @current_user && @current_user.pubky != @creator}
           variant="ghost"
           size="sm"
           phx-click="leave"
