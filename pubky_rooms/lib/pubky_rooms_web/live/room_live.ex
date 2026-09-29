@@ -1929,7 +1929,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   attr :can_ban, :boolean, required: true
   attr :busy, :boolean, default: false
 
-  @hover_only "sm:opacity-0 sm:group-hover/member:opacity-100 sm:group-focus-within/member:opacity-100"
+  @hover_only "sm:opacity-0 sm:group-hover/member:opacity-100 sm:group-has-[:focus-visible]/member:opacity-100"
 
   # Per-member actions, revealed on hover/focus of the row. The mute control is
   # both the state and the action: a muted member's button stays visible in its
@@ -2294,7 +2294,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         <div
           id={"#{@id}-actions"}
           data-actions
-          class="absolute -top-3.5 right-1 z-10 flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5 shadow-xs max-sm:hidden sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+          class="absolute -top-3.5 right-1 z-10 flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5 shadow-xs max-sm:hidden sm:opacity-0 sm:group-hover:opacity-100 sm:group-has-[:focus-visible]:opacity-100"
         >
           <button
             :if={@can_reply}
