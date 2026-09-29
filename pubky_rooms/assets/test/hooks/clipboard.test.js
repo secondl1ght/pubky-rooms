@@ -45,6 +45,23 @@ describe("Clipboard", () => {
     vi.useRealTimers()
   })
 
+  it("an icon button without a tooltip only swaps the icon", async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true})
+    mounted = mountHook(
+      Clipboard,
+      `<button id="c" phx-hook="Clipboard" data-copy="k" aria-label="Copy text"><span class="lucide-copy size-4"></span></button>`
+    )
+    const {el} = mounted
+    el.click()
+    await flush()
+    expect(el.dataset.tip).toBeUndefined()
+    expect(el.querySelector("span").className).toContain("lucide-check")
+    expect(el.textContent).toBe("")
+    vi.advanceTimersByTime(1500)
+    expect(el.querySelector("span").className).toContain("lucide-copy")
+    vi.useRealTimers()
+  })
+
   it("reports a failed copy instead of pretending", async () => {
     writeText.mockImplementation(() => Promise.reject(new Error("denied")))
     mounted = mountHook(Clipboard, `<button id="c" phx-hook="Clipboard" data-copy="k" data-tip="Copy key"><span class="lucide-copy"></span></button>`)

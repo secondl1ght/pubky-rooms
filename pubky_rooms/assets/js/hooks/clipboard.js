@@ -1,6 +1,6 @@
 // Copies `data-copy` to the clipboard on click and briefly confirms it: a
-// text button swaps its label, an icon button with a `data-tip` tooltip swaps
-// the tooltip text and shows a check mark instead.
+// text button swaps its label, an icon button shows a check mark instead (and
+// a `data-tip` tooltip, when there is one, swaps its text too).
 const Clipboard = {
   mounted() {
     this.el.addEventListener("click", async () => {
@@ -18,8 +18,8 @@ const Clipboard = {
     const el = this.el
     const original = el.innerHTML
     const originalTip = el.dataset.tip
-    if (originalTip !== undefined) {
-      el.dataset.tip = label
+    if (originalTip !== undefined) el.dataset.tip = label
+    if (el.querySelector('[class*="lucide-"]')) {
       el.innerHTML = `<span class="${icon} size-4" aria-hidden="true"></span>`
     } else {
       el.innerHTML = label

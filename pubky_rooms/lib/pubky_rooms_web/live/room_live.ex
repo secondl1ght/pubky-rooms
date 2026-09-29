@@ -2388,10 +2388,10 @@ defmodule PubkyRoomsWeb.RoomLive do
             id={"#{@id}-copy"}
             phx-hook="Clipboard"
             data-copy={@msg.content}
-            data-tip="Copy text"
             phx-click={JS.add_class("max-sm:hidden", to: "##{@id}-actions")}
-            class="tooltip tooltip-bottom flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
+            class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
             aria-label="Copy text"
+            title="Copy text"
           >
             <.icon name="lucide-copy" class="size-4" />
           </button>
