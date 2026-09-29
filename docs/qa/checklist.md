@@ -97,7 +97,7 @@ Legend: **smoke** = minimum pre-deploy set · **A+B** = needs both identities ·
 ## 7. Room, as member and viewer (A+B)
 
 - [ ] **smoke** B opens A's link: history in order with names/avatars, Join → "You joined the room.", B appears in members and in A's presence; B sends and A sees it live with the check mark on B's side only.
-- [ ] Leave → B: "You left the room. Your messages went with you; join again to bring them back."; everyone else: "B left the room; their messages went with them."; B's rows leave for everyone (files still on B's homeserver), join marker gone, B can still read (public) but cannot write; Join again brings B's rows back; 21 joins in an hour → "Slow down".
+- [ ] Leave → confirm ("Leave the room? Your messages leave with you…"); then B: "You left the room. Your messages went with you; join again to bring them back."; everyone else: "B left the room; their messages went with them."; B's rows leave for everyone (files still on B's homeserver), join marker gone, B can still read (public) but cannot write; Join again brings B's rows back; 21 joins in an hour → "Slow down".
 - [ ] Names: a Pubky App profile name wins over a Rooms nickname over the truncated key; changing the nickname on `/me` updates rooms within the profile TTL (or immediately for your own tabs).
 - [ ] Pubky App mutes (mainnet only): a user muted in Pubky App is hidden here read-only. Testnet: skip, unit-tested.
 - [ ] anon in the same room: counted in "anonymous", never listed, sees everything live.

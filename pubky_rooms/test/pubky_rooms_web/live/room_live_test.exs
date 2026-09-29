@@ -443,6 +443,13 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     answer = "msg-#{ctx.alice}-#{ans_id}"
     assert has_element?(alice_view, "##{answer} button[phx-click=jump][phx-value-id=#{bob_id}]")
 
+    # leaving is confirmed first: taking your messages along is not what other
+    # chat apps do
+    assert has_element?(
+             bob_view,
+             "button[phx-click=leave][data-confirm*='messages leave with you']"
+           )
+
     render_click(bob_view, "leave", %{})
     render_async(bob_view)
     html = wait_for(fn -> render(bob_view) end, &(&1 =~ "Join the room to chat."))
@@ -477,6 +484,30 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
              end,
              & &1
            )
+  end
+
+  test "a message found by a poll (over-budget member, late history) goes to its place in time",
+       ctx do
+    %{alice: alice, room: room} = ctx
+    ref = Room.ref(room)
+    # with one live subscription the creator keeps it and bob is polled (100 ms in tests)
+    Application.put_env(:pubky_rooms, :max_members_subscribed, 1)
+    on_exit(fn -> Application.delete_env(:pubky_rooms, :max_members_subscribed) end)
+    {bob_sid, bob} = Fixtures.login("bob")
+    :ok = Rooms.join(bob_sid, bob, ref)
+
+    # bob's message is older than alice's, but its file only appears later
+    {:ok, older} = Message.new(bob, ref, "polled in late")
+
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    view |> form("#composer", message: %{content: "newer, live"}) |> render_submit()
+    render_async(view)
+    wait_for(fn -> render(view) end, &(&1 =~ "Stored on your homeserver"))
+    [%Message{msg_id: live_id}] = messages_on_homeserver(alice, room)
+
+    Fake.seed(bob, Message.path(older), Message.encode(older))
+    html = wait_for(fn -> render(view) end, &(&1 =~ "polled in late"))
+    assert row_order(html, ["msg-#{bob}-#{older.msg_id}", "msg-#{alice}-#{live_id}"])
   end
 
   test "a failed edit restores the stored message", ctx do

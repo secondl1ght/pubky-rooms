@@ -2209,6 +2209,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           variant="ghost"
           size="sm"
           phx-click="leave"
+          data-confirm="Leave the room? Your messages leave with you (they stay on your homeserver); joining again brings them back."
           disabled={@joining}
         >
           Leave
