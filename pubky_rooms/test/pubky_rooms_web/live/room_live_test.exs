@@ -801,6 +801,21 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     refute render(fresh) =~ "first from bob"
     assert render(fresh) =~ "Muted for you"
 
+    # bob's reaction on alice's message is hidden from her while he is muted
+    alice_view |> form("#composer", message: %{content: "react to me"}) |> render_submit()
+    render_async(alice_view)
+
+    [%Message{msg_id: mine_id}] =
+      Enum.filter(messages_on_homeserver(ctx.alice, ctx.room), &(&1.content == "react to me"))
+
+    mine = "msg-#{ctx.alice}-#{mine_id}"
+    wait_for(fn -> render(bob_view) end, &(&1 =~ "react to me"))
+    render_click(bob_view, "react", %{"id" => mine, "key" => "up"})
+    render_async(bob_view)
+    wait_for(fn -> render(bob_view) end, &(&1 =~ ~s(title="up · 1")))
+    refute render(alice_view) =~ ~s(title="up · 1")
+    refute has_element?(alice_view, "##{mine} button[aria-pressed]")
+
     # alice writes while bob is muted; unmuting puts his rows back in time order
     alice_view |> form("#composer", message: %{content: "while bob was muted"}) |> render_submit()
     render_async(alice_view)
@@ -811,6 +826,8 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     html = wait_for(fn -> render(alice_view) end, &(&1 =~ "second from bob"))
     assert html =~ "first from bob"
     assert ordered?(html, ["first from bob", "second from bob", "while bob was muted"])
+    # …and his reaction is counted again
+    assert html =~ ~s(title="up · 1")
     assert wait_for(fn -> Fake.files(ctx.alice) end, &(not Map.has_key?(&1, Paths.mute(bob))))
     html = wait_for(fn -> render(other_tab) end, &(&1 =~ "second from bob"))
     assert ordered?(html, ["first from bob", "second from bob", "while bob was muted"])

@@ -1531,6 +1531,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                 }
                 can_reply={can_post?(assigns)}
                 viewer={@current_user && @current_user.pubky}
+                muted={@muted}
                 quote={quote_of(assigns, msg)}
               />
             </div>
@@ -2283,6 +2284,15 @@ defmodule PubkyRoomsWeb.RoomLive do
     """
   end
 
+  # a mute is the viewer's own: it takes the muted people's reactions off every
+  # row for them (a ban does it for everyone, in the room server)
+  defp visible_reactions(reactions, muted) do
+    reactions
+    |> Enum.map(fn {key, reactors} -> {key, MapSet.difference(reactors, muted)} end)
+    |> Enum.reject(fn {_key, reactors} -> MapSet.size(reactors) == 0 end)
+    |> Map.new()
+  end
+
   defp fixed_tag?(%{label: label, taggers: taggers}, viewer, creator),
     do: viewer != nil and viewer == creator and label == Tag.auto_label() and viewer in taggers
 
@@ -2345,6 +2355,7 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   attr :can_reply, :boolean, default: false, doc: "also gates reacting"
   attr :viewer, :string, default: nil, doc: "the viewer's z32, to mark their own reactions"
+  attr :muted, :any, default: MapSet.new(), doc: "reactions by muted authors are left out"
 
   attr :quote, :any,
     default: nil,
@@ -2354,7 +2365,8 @@ defmodule PubkyRoomsWeb.RoomLive do
     assigns =
       assign(assigns,
         # copy is for every viewer, so a stored message always has a pill
-        actions?: assigns.msg.state == :confirmed
+        actions?: assigns.msg.state == :confirmed,
+        reactions: visible_reactions(assigns.msg.reactions, assigns.muted)
       )
 
     ~H"""
@@ -2558,9 +2570,9 @@ defmodule PubkyRoomsWeb.RoomLive do
             @msg.state == :pending && "opacity-60"
           ]}
         ><Linkify.linkify text={@msg.content} /></p>
-        <div :if={@msg.reactions != %{}} class="mt-1 flex flex-wrap gap-1">
+        <div :if={@reactions != %{}} class="mt-1 flex flex-wrap gap-1">
           <button
-            :for={{key, reactors} <- Enum.sort_by(@msg.reactions, &elem(&1, 0))}
+            :for={{key, reactors} <- Enum.sort_by(@reactions, &elem(&1, 0))}
             type="button"
             phx-click={@can_reply && JS.push("react", value: %{id: @id, key: key})}
             disabled={!@can_reply}
