@@ -711,6 +711,8 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
 
     {:ok, alice_view, _} = live(ctx.alice_conn, ctx.path)
     wait_for(fn -> render(alice_view) end, &(&1 =~ "bob speaks"))
+    {:ok, bystander, _} = live(ctx.conn, ctx.path)
+    wait_for(fn -> render(bystander) end, &(&1 =~ "bob speaks"))
     # bob has no moderation controls
     refute has_element?(bob_view, "#member-#{ctx.alice} button[aria-label='Remove from room']")
 
@@ -734,6 +736,13 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     refute has_element?(bob_view, "#composer")
     assert html =~ "Members · 1"
     assert Map.has_key?(Fake.files(ctx.alice), Paths.ban(ctx.room.id, bob))
+    # a bystander is told why bob's rows vanished; the creator has their own confirmation
+    assert wait_for(
+             fn -> render(bystander) end,
+             &(&1 =~ "was removed by the creator; their messages are hidden")
+           )
+
+    refute render(alice_view) =~ "was removed by the creator"
 
     # every write is off for the banned member: reactions, replies, tags, typing
     refute has_element?(bob_view, "button[aria-label=React]")
@@ -761,6 +770,12 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     html = wait_for(fn -> render(alice_view) end, &(&1 =~ "bob speaks"))
     assert ordered?(html, ["bob speaks", "said during the ban"])
     assert html =~ "Members · 2"
+
+    assert wait_for(
+             fn -> render(bystander) end,
+             &(&1 =~ "was restored by the creator; their messages are back")
+           )
+
     html = wait_for(fn -> render(bob_view) end, &(&1 =~ "bob speaks"))
     assert ordered?(html, ["bob speaks", "said during the ban"])
   end

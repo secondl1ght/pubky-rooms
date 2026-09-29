@@ -1184,6 +1184,8 @@ defmodule PubkyRoomsWeb.RoomLive do
     refresh_replies(socket, msg.key)
   end
 
+  # The creator gets their own confirmation, the removed member the notice
+  # under the messages; everyone else is told why rows just vanished.
   defp apply_room_event(socket, {:member_banned, z32, reason}) do
     me? = match?(%{pubky: ^z32}, socket.assigns.current_user)
 
@@ -1193,7 +1195,20 @@ defmodule PubkyRoomsWeb.RoomLive do
       typing: Map.delete(socket.assigns.typing, z32)
     )
     |> then(fn s ->
-      if me?, do: s |> assign(banned?: true, composer_mode: :new) |> refresh_rows(), else: s
+      cond do
+        me? ->
+          s |> assign(banned?: true, composer_mode: :new) |> refresh_rows()
+
+        s.assigns.is_creator ->
+          s
+
+        true ->
+          put_flash(
+            s,
+            :info,
+            "#{member_name(s, z32)} was removed by the creator; their messages are hidden."
+          )
+      end
     end)
   end
 
@@ -1202,8 +1217,25 @@ defmodule PubkyRoomsWeb.RoomLive do
 
     socket
     |> assign(bans: Map.delete(socket.assigns.bans, z32))
-    |> then(fn s -> if me?, do: s |> assign(banned?: false) |> refresh_rows(), else: s end)
+    |> then(fn s ->
+      cond do
+        me? ->
+          s |> assign(banned?: false) |> refresh_rows()
+
+        s.assigns.is_creator ->
+          s
+
+        true ->
+          put_flash(
+            s,
+            :info,
+            "#{member_name(s, z32)} was restored by the creator; their messages are back."
+          )
+      end
+    end)
   end
+
+  defp member_name(socket, z32), do: profile_of(socket.assigns.profiles, z32).name
 
   defp apply_room_event(socket, {:message_deleted, key}) do
     socket
