@@ -141,9 +141,17 @@ defmodule PubkyRooms.Rooms.RoomServerTest do
     assert Directory.member?(ref, bob)
     assert Rooms.member?(ref, alice)
 
+    # leaving takes bob's rows with him; joining again backfills them
     Fake.delete_as(bob, Paths.member(ref))
     assert_receive {:room_event, ^ref, {:member_left, ^bob}}, 1_000
     refute Directory.member?(ref, bob)
+    old_key = old.key
+    assert_receive {:room_event, ^ref, {:message_deleted, ^old_key}}, 1_000
+
+    Fake.write_as(bob, Paths.member(ref), Membership.encode(ref))
+    assert_receive {:room_event, ^ref, {:member_joined, ^bob}}, 1_000
+
+    assert_receive {:room_event, ^ref, {:message_upserted, %Message{key: ^old_key}}}, 2_000
   end
 
   test "unknown rooms report not_found; closing the room broadcasts", %{alice: alice, ref: ref} do

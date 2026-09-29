@@ -404,6 +404,46 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert wait_for(fn -> render(anon) end, &(not (&1 =~ "typo fixed")))
   end
 
+  test "leaving takes your messages with you (everyone is told); joining again brings them back",
+       ctx do
+    {bob_sid, bob} = Fixtures.login("bob")
+    :ok = Rooms.join(bob_sid, bob, Room.ref(ctx.room))
+    bob_conn = init_test_session(ctx.conn, Fixtures.cookie(bob_sid))
+
+    {:ok, alice_view, _} = live(ctx.alice_conn, ctx.path)
+    alice_view |> form("#composer", message: %{content: "from alice"}) |> render_submit()
+    render_async(alice_view)
+    [alices] = messages_on_homeserver(ctx.alice, ctx.room)
+    alice_id = "msg-#{ctx.alice}-#{alices.msg_id}"
+
+    {:ok, bob_view, _} = live(bob_conn, ctx.path)
+    bob_view |> form("#composer", message: %{content: "from bob"}) |> render_submit()
+    render_async(bob_view)
+    [bobs] = messages_on_homeserver(bob, ctx.room)
+    bob_id = "msg-#{bob}-#{bobs.msg_id}"
+    wait_for(fn -> render(bob_view) end, &(&1 =~ "from alice"))
+    wait_for(fn -> render(alice_view) end, &(&1 =~ "from bob"))
+
+    render_click(bob_view, "leave", %{})
+    render_async(bob_view)
+    html = wait_for(fn -> render(bob_view) end, &(&1 =~ "Join the room to chat."))
+    # bob's rows are gone for him and for alice; both are told why; his file stays
+    refute has_element?(bob_view, "##{bob_id}")
+    assert html =~ "You left the room. Your messages went with you"
+    html = wait_for(fn -> render(alice_view) end, &(not (&1 =~ "from bob")))
+    assert html =~ "left the room; their messages went with them"
+    assert [%Message{content: "from bob"}] = messages_on_homeserver(bob, ctx.room)
+    # alice's message offers bob nothing now
+    refute has_element?(bob_view, "##{alice_id}-actions")
+
+    render_click(bob_view, "join", %{})
+    render_async(bob_view)
+    html = wait_for(fn -> render(bob_view) end, &(&1 =~ "from bob"))
+    assert html =~ ~s(id="composer")
+    assert has_element?(bob_view, "##{bob_id} button[aria-label=Edit]")
+    assert wait_for(fn -> render(alice_view) end, &(&1 =~ "from bob"))
+  end
+
   test "a failed edit restores the stored message", ctx do
     {:ok, view, _} = live(ctx.alice_conn, ctx.path)
     view |> form("#composer", message: %{content: "keep me"}) |> render_submit()

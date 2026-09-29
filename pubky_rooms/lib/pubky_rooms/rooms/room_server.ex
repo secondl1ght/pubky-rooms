@@ -641,12 +641,14 @@ defmodule PubkyRooms.Rooms.RoomServer do
     Events.unsubscribe_user(z32)
     broadcast(state, {:member_left, z32})
 
+    # the room only ever shows what current members hold: the leaver's rows go
+    # with them (their files stay on their homeserver; a rejoin backfills them)
     state
     |> set_polled(MapSet.delete(state.polled, z32))
     |> set_live_unavailable(MapSet.delete(state.live_unavailable, z32))
     |> Map.update!(:members, &MapSet.delete(&1, z32))
     |> Map.update!(:subscribed, &MapSet.delete(&1, z32))
-    |> Map.update!(:older, &Map.delete(&1, z32))
+    |> drop_author(z32)
   end
 
   # ── bans ───────────────────────────────────────────────────────────────────
@@ -692,7 +694,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
       state = put_in(state.bans[z32], %{created_at: System.os_time(:millisecond), reason: nil})
       broadcast(state, {:member_banned, z32, nil})
       fetch_ban_reason(state, z32)
-      hide_author(state, z32)
+      drop_author(state, z32)
     end
   end
 
@@ -717,9 +719,10 @@ defmodule PubkyRooms.Rooms.RoomServer do
     end)
   end
 
-  # A banned author's messages leave the table (each one announced as deleted)
-  # and their reactions leave every row; paging forgets their entries too.
-  defp hide_author(state, z32) do
+  # An author's messages leave the table (each one announced as deleted) and
+  # their reactions leave every row; paging forgets their entries too. Shared
+  # by bans and by leaving: both mean the room no longer holds that author.
+  defp drop_author(state, z32) do
     keys = :ets.select(state.table, [{{{:_, z32}, :_}, [], [{:element, 1, :"$_"}]}])
 
     Enum.each(keys, fn key ->

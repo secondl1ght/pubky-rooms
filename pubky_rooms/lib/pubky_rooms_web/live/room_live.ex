@@ -472,7 +472,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   def handle_event("edit", %{"id" => id}, %{assigns: %{current_user: %{pubky: me}}} = socket) do
-    case can_write?(socket) and lookup_message(socket, id) do
+    case can_post?(socket) and lookup_message(socket, id) do
       %Message{author: ^me} = msg ->
         {:noreply,
          socket
@@ -973,12 +973,9 @@ defmodule PubkyRoomsWeb.RoomLive do
     {:noreply, socket |> assign(joining: false) |> put_flash(:error, Rooms.explain(reason))}
   end
 
+  # the room's {:member_left} event carries the toast, so it shows once
   def handle_async(:leave, {:ok, :ok}, socket) do
-    {:noreply,
-     socket
-     |> assign(joining: false, is_member: false)
-     |> refresh_rows()
-     |> put_flash(:info, "You left the room.")}
+    {:noreply, socket |> assign(joining: false, is_member: false) |> refresh_rows()}
   end
 
   def handle_async(:leave, {:ok, {:error, reason}}, socket) do
@@ -1159,10 +1156,20 @@ defmodule PubkyRoomsWeb.RoomLive do
     |> maybe_set_member(z32, true)
   end
 
+  # Their rows leave with them ({:message_deleted} each); the toast says why.
   defp apply_room_event(socket, {:member_left, z32}) do
+    me? = match?(%{pubky: ^z32}, socket.assigns.current_user)
+
+    notice =
+      if me?,
+        do: "You left the room. Your messages went with you; join again to bring them back.",
+        else:
+          "#{profile_of(socket.assigns.profiles, z32).name} left the room; their messages went with them."
+
     socket
     |> assign_members(List.delete(socket.assigns.members, z32))
     |> maybe_set_member(z32, false)
+    |> put_flash(:info, notice)
   end
 
   defp apply_room_event(socket, {:room_updated, room}),
@@ -1451,6 +1458,9 @@ defmodule PubkyRoomsWeb.RoomLive do
                 profile={Map.get(@profiles, msg.author) || Profiles.get(msg.author)}
                 own={@current_user != nil && @current_user.pubky == msg.author}
                 can_edit={
+                  @current_user != nil && @current_user.pubky == msg.author && can_post?(assigns)
+                }
+                can_delete={
                   @current_user != nil && @current_user.pubky == msg.author && can_write?(assigns)
                 }
                 can_reply={can_post?(assigns)}
@@ -2252,7 +2262,16 @@ defmodule PubkyRoomsWeb.RoomLive do
   attr :msg, Message, required: true
   attr :profile, :map, required: true
   attr :own, :boolean, default: false, doc: "shows the delivery state"
-  attr :can_edit, :boolean, default: false, doc: "own message in an open room, not banned"
+
+  attr :can_edit, :boolean,
+    default: false,
+    doc: "own message, still a member (editing needs the composer)"
+
+  attr :can_delete, :boolean,
+    default: false,
+    doc:
+      "own message in an open room, not banned; membership is not needed to delete your own file"
+
   attr :can_reply, :boolean, default: false, doc: "also gates reacting"
   attr :viewer, :string, default: nil, doc: "the viewer's z32, to mark their own reactions"
 
@@ -2263,7 +2282,9 @@ defmodule PubkyRoomsWeb.RoomLive do
   defp message_row(assigns) do
     assigns =
       assign(assigns,
-        actions?: assigns.msg.state == :confirmed and (assigns.can_reply or assigns.can_edit)
+        actions?:
+          assigns.msg.state == :confirmed and
+            (assigns.can_reply or assigns.can_edit or assigns.can_delete)
       )
 
     ~H"""
@@ -2338,7 +2359,7 @@ defmodule PubkyRoomsWeb.RoomLive do
             <.icon name="lucide-pencil" class="size-4" />
           </button>
           <button
-            :if={@can_edit}
+            :if={@can_delete}
             type="button"
             phx-click={
               JS.push("delete", value: %{id: @id})
