@@ -150,8 +150,11 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
 
   test "the creator sends a message that is confirmed by the homeserver event", ctx do
     {:ok, view, _html} = live(ctx.alice_conn, ctx.path)
-    assert render(view) =~ "No messages yet"
-    assert has_element?(view, "#composer")
+    html = render(view)
+    assert html =~ "No messages yet"
+    # the invitation lives in the composer only, not repeated under the placeholder
+    refute html =~ "Say hello."
+    assert has_element?(view, "#composer-input[placeholder='Say hello…']")
 
     view |> form("#composer", message: %{content: "hello sovereign world"}) |> render_submit()
 

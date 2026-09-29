@@ -211,7 +211,7 @@ defmodule PubkyRoomsWeb.Dev.StyleguideLive do
                     value=""
                     type="textarea"
                     variant="inline"
-                    placeholder="Say something…"
+                    placeholder="Say hello…"
                   />
                 </div>
                 <div class="flex justify-end gap-2">

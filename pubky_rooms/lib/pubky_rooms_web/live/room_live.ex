@@ -1370,9 +1370,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                   icon="lucide-message-square-dashed"
                   title="No messages yet"
                   class="bg-transparent"
-                >
-                  Say hello.
-                </.empty_state>
+                />
                 <.empty_state
                   :if={@status == :closed}
                   icon="lucide-door-closed"
@@ -1463,7 +1461,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                         type="textarea"
                         variant="inline"
                         id="composer-input"
-                        placeholder="Say something…"
+                        placeholder="Say hello…"
                         rows="1"
                         maxlength={Message.content_max()}
                         wrapper_class="flex-1"
