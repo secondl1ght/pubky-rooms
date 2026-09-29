@@ -424,6 +424,18 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     wait_for(fn -> render(bob_view) end, &(&1 =~ "from alice"))
     wait_for(fn -> render(alice_view) end, &(&1 =~ "from bob"))
 
+    # alice replies to bob before he leaves: her quote follows him out and back
+    alice_view |> element("##{bob_id} button[aria-label=Reply]") |> render_click()
+    alice_view |> form("#composer", message: %{content: "answering bob"}) |> render_submit()
+    render_async(alice_view)
+    wait_for(fn -> render(alice_view) end, &(&1 =~ "answering bob"))
+
+    [%Message{msg_id: ans_id}] =
+      Enum.filter(messages_on_homeserver(ctx.alice, ctx.room), &(&1.content == "answering bob"))
+
+    answer = "msg-#{ctx.alice}-#{ans_id}"
+    assert has_element?(alice_view, "##{answer} button[phx-click=jump][phx-value-id=#{bob_id}]")
+
     render_click(bob_view, "leave", %{})
     render_async(bob_view)
     html = wait_for(fn -> render(bob_view) end, &(&1 =~ "Join the room to chat."))
@@ -433,8 +445,10 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     html = wait_for(fn -> render(alice_view) end, &(not (&1 =~ "from bob")))
     assert html =~ "left the room; their messages went with them"
     assert [%Message{content: "from bob"}] = messages_on_homeserver(bob, ctx.room)
-    # alice's message offers bob nothing now
+    # alice's message offers bob nothing now; her reply to him lost its quote
     refute has_element?(bob_view, "##{alice_id}-actions")
+    assert wait_for(fn -> render(alice_view) end, &(&1 =~ "no longer available"))
+    refute has_element?(alice_view, "##{answer} button[phx-click=jump]")
 
     render_click(bob_view, "join", %{})
     render_async(bob_view)
@@ -442,6 +456,16 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert html =~ ~s(id="composer")
     assert has_element?(bob_view, "##{bob_id} button[aria-label=Edit]")
     assert wait_for(fn -> render(alice_view) end, &(&1 =~ "from bob"))
+    # …and the quote is back without a reload
+    assert wait_for(
+             fn ->
+               has_element?(
+                 alice_view,
+                 "##{answer} button[phx-click=jump][phx-value-id=#{bob_id}]"
+               )
+             end,
+             & &1
+           )
   end
 
   test "a failed edit restores the stored message", ctx do

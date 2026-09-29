@@ -1115,9 +1115,9 @@ defmodule PubkyRoomsWeb.RoomLive do
         do: socket,
         else: stream_insert(socket, :messages, msg)
 
-    # an edit changes what the replies quote (reaction-only upserts of a
-    # never-edited message skip the walk)
-    if msg.edited_at, do: refresh_replies(socket, msg.key), else: socket
+    # whatever changed (an edit, or a message coming back through a backfill
+    # after its author rejoined), the rows quoting it re-resolve their quote
+    refresh_replies(socket, msg.key)
   end
 
   defp apply_room_event(socket, {:member_banned, z32, reason}) do
