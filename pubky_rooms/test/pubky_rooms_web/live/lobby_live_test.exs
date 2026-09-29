@@ -133,6 +133,10 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     render_hook(view, "add_tag", %{"label" => "bitcoin"})
     assert has_element?(view, "#new-room-tags [data-label='bitcoin']")
     assert render(view) =~ "Listed rooms are tagged"
+    # the form dialog takes the wide panel (one width utility, no w-auto to beat it)
+    [panel_tag] = Regex.run(~r/<div[^>]*id="new-room-container"[^>]*>/, render(view))
+    assert panel_tag =~ "sm:w-[34rem]"
+    refute panel_tag =~ "sm:w-auto"
 
     view
     |> form("#new-room-form", room: %{name: "Quiet", visibility: "unlisted"})

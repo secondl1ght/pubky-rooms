@@ -716,9 +716,9 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert_patch(view, ctx.path <> "/settings")
     assert has_element?(view, "#room-settings-form")
     # same panel width as the Open-a-room dialog
-    panel = render(element(view, "#room-settings-container"))
-    assert panel =~ "sm:w-[34rem]"
-    refute panel =~ "sm:w-auto"
+    [panel_tag] = Regex.run(~r/<div[^>]*id="room-settings-container"[^>]*>/, render(view))
+    assert panel_tag =~ "sm:w-[34rem]"
+    refute panel_tag =~ "sm:w-auto"
     assert has_element?(view, "#room-tag-input")
 
     view
@@ -749,6 +749,23 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert wait_for(fn -> render(bob_view) end, &(&1 =~ "Renamed"))
     refute has_element?(bob_view, "#room-tag-input")
     refute has_element?(bob_view, "#room-tags")
+
+    # relisting writes "room" again and tagging comes back for everyone signed in
+    view |> element("a[aria-label='Room settings']") |> render_click()
+
+    view
+    |> form("#room-settings-form",
+      room: %{name: "Renamed", topic: "New topic", visibility: "public"}
+    )
+    |> render_submit()
+
+    render_async(view)
+    assert_patch(view, ctx.path)
+    assert wait_for(fn -> render(view) end, &(&1 =~ ~s(id="room-tag-input")))
+    refute has_element?(view, "#unlisted-label")
+    assert Directory.own_tags(Room.ref(ctx.room), ctx.alice) == ["room"]
+    assert wait_for(fn -> render(bob_view) end, &(&1 =~ ~s(id="room-tag-input")))
+    assert has_element?(bob_view, "#room-tags button[phx-value-label='room']")
 
     # bob has a message of his own he could edit before the room closes
     bob_view |> form("#composer", message: %{content: "bob before close"}) |> render_submit()

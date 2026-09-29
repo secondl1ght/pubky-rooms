@@ -1628,6 +1628,7 @@ defmodule PubkyRoomsWeb.RoomLive do
             <.button
               variant="destructive-soft"
               size="sm"
+              class="w-full sm:w-auto"
               phx-click="close_room"
               disabled={@saving}
               data-confirm="Close this room for everyone? This deletes the room definition from your homeserver."
