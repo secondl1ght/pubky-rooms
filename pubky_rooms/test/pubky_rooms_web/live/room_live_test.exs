@@ -365,14 +365,18 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     # the actions pill (hover from sm, behind a "More actions" toggle below)
     # exists for the author and not for a visitor who can do nothing
     assert has_element?(view, "##{id}-actions")
+    # copy is in the pill for everyone, the visitor included
+    assert has_element?(view, "##{id}-copy[phx-hook=Clipboard][data-copy='typo herre']")
+    assert has_element?(anon, "##{id}-copy[data-copy='typo herre']")
 
     assert has_element?(
              view,
              "##{id} button[aria-label='More actions'][aria-controls='#{id}-actions']"
            )
 
-    refute has_element?(anon, "##{id}-actions")
-    refute has_element?(anon, "##{id} button[aria-label='More actions']")
+    refute has_element?(anon, "##{id}-actions button[aria-label=Reply]")
+    refute has_element?(anon, "##{id}-actions button[aria-label=Edit]")
+    refute has_element?(anon, "##{id}-actions button[aria-label=Delete]")
     # the reaction palette lives in the actions box, so it opens where the click was
     assert has_element?(view, "##{id}-menu ##{id}-palette[role=group]")
     # the reaction palette is a flex row: JS.toggle must reveal it as flex, not block
@@ -459,8 +463,10 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     html = wait_for(fn -> render(alice_view) end, &(not (&1 =~ "from bob")))
     assert html =~ "left the room; their messages went with them"
     assert [%Message{content: "from bob"}] = messages_on_homeserver(bob, ctx.room)
-    # alice's message offers bob nothing now; her reply to him lost its quote
-    refute has_element?(bob_view, "##{alice_id}-actions")
+    # alice's message offers bob nothing but copy now; her reply to him lost its quote
+    refute has_element?(bob_view, "##{alice_id}-actions button[aria-label=Reply]")
+    refute has_element?(bob_view, "##{alice_id}-actions button[aria-label=React]")
+    assert has_element?(bob_view, "##{alice_id}-copy")
     assert wait_for(fn -> render(alice_view) end, &(&1 =~ "no longer available"))
     refute has_element?(alice_view, "##{answer} button[phx-click=jump]")
 
