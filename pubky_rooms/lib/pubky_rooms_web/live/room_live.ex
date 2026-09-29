@@ -2250,7 +2250,7 @@ defmodule PubkyRoomsWeb.RoomLive do
     ~H"""
     <article
       id={@id}
-      class="group relative flex gap-2.5 rounded-md px-2 py-1 transition-colors hover:bg-white/[0.03]"
+      class="group relative flex gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-white/[0.03]"
     >
       <%!-- the toggle and the pill share a positioned box (click-away needs a
            real box; `display: contents` is skipped) so a tap anywhere else closes
@@ -2258,7 +2258,7 @@ defmodule PubkyRoomsWeb.RoomLive do
       <div
         :if={@actions?}
         id={"#{@id}-menu"}
-        class="absolute top-0.5 right-1 size-7"
+        class="absolute top-1 right-1 size-7"
         phx-click-away={JS.add_class("max-sm:hidden", to: "##{@id}-actions")}
       >
         <button
