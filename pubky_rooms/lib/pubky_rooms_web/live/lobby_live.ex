@@ -427,7 +427,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
             icon="lucide-signpost"
             title="Nothing else listed"
           >
-            Every listed room is already one of yours. Share a link, or tag your rooms so others find them.
+            You're already in every listed room. Share a link to bring more people in.
           </.empty_state>
         </section>
 
