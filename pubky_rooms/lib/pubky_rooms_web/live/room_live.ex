@@ -2210,75 +2210,82 @@ defmodule PubkyRoomsWeb.RoomLive do
       id={@id}
       class="group relative flex gap-2.5 rounded-md px-2 py-1 transition-colors hover:bg-white/[0.03]"
     >
-      <button
-        :if={@actions?}
-        type="button"
-        phx-click={JS.toggle_class("max-sm:hidden", to: "##{@id}-actions")}
-        class="absolute top-0.5 right-1 flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground/70 hover:bg-white/10 hover:text-foreground sm:hidden"
-        aria-label="More actions"
-        aria-controls={"#{@id}-actions"}
-      >
-        <.icon name="lucide-ellipsis" class="size-4" />
-      </button>
+      <%!-- the toggle and the pill share a wrapper so a tap anywhere else (another
+           row's toggle included) closes the pill on phones; no-op from sm up --%>
       <div
         :if={@actions?}
-        id={"#{@id}-actions"}
-        class="absolute -top-3 right-2 z-10 flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5 shadow-xs max-sm:hidden sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+        id={"#{@id}-menu"}
+        class="contents"
+        phx-click-away={JS.add_class("max-sm:hidden", to: "##{@id}-actions")}
       >
         <button
-          :if={@can_reply}
           type="button"
-          phx-click={
-            JS.toggle(to: "##{@id}-palette")
-            |> JS.add_class("max-sm:hidden", to: "##{@id}-actions")
-          }
-          class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
-          aria-label="React"
-          title="React"
-          aria-controls={"#{@id}-palette"}
+          phx-click={JS.toggle_class("max-sm:hidden", to: "##{@id}-actions")}
+          class="absolute top-0.5 right-1 flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground/70 hover:bg-white/10 hover:text-foreground sm:hidden"
+          aria-label="More actions"
+          aria-controls={"#{@id}-actions"}
         >
-          <.icon name="lucide-face-slightly-smiling-plus" class="size-4" />
+          <.icon name="lucide-ellipsis" class="size-4" />
         </button>
-        <button
-          :if={@can_reply}
-          type="button"
-          phx-click={
-            JS.push("reply", value: %{id: @id})
-            |> JS.add_class("max-sm:hidden", to: "##{@id}-actions")
-          }
-          class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
-          aria-label="Reply"
-          title="Reply"
+        <div
+          id={"#{@id}-actions"}
+          class="absolute -top-3 right-2 z-10 flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5 shadow-xs max-sm:hidden sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
         >
-          <.icon name="lucide-reply" class="size-4" />
-        </button>
-        <button
-          :if={@can_edit}
-          type="button"
-          phx-click={
-            JS.push("edit", value: %{id: @id})
-            |> JS.add_class("max-sm:hidden", to: "##{@id}-actions")
-          }
-          class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
-          aria-label="Edit"
-          title="Edit"
-        >
-          <.icon name="lucide-pencil" class="size-4" />
-        </button>
-        <button
-          :if={@can_edit}
-          type="button"
-          phx-click={
-            JS.push("delete", value: %{id: @id})
-            |> JS.add_class("max-sm:hidden", to: "##{@id}-actions")
-          }
-          data-confirm="Delete this message from your homeserver?"
-          class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/20 hover:text-destructive"
-          aria-label="Delete"
-          title="Delete"
-        >
-          <.icon name="lucide-trash" class="size-4" />
-        </button>
+          <button
+            :if={@can_reply}
+            type="button"
+            phx-click={
+              JS.toggle(to: "##{@id}-palette")
+              |> JS.add_class("max-sm:hidden", to: "##{@id}-actions")
+            }
+            class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
+            aria-label="React"
+            title="React"
+            aria-controls={"#{@id}-palette"}
+          >
+            <.icon name="lucide-face-slightly-smiling-plus" class="size-4" />
+          </button>
+          <button
+            :if={@can_reply}
+            type="button"
+            phx-click={
+              JS.push("reply", value: %{id: @id})
+              |> JS.add_class("max-sm:hidden", to: "##{@id}-actions")
+            }
+            class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
+            aria-label="Reply"
+            title="Reply"
+          >
+            <.icon name="lucide-reply" class="size-4" />
+          </button>
+          <button
+            :if={@can_edit}
+            type="button"
+            phx-click={
+              JS.push("edit", value: %{id: @id})
+              |> JS.add_class("max-sm:hidden", to: "##{@id}-actions")
+            }
+            class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
+            aria-label="Edit"
+            title="Edit"
+          >
+            <.icon name="lucide-pencil" class="size-4" />
+          </button>
+          <button
+            :if={@can_edit}
+            type="button"
+            phx-click={
+              JS.push("delete", value: %{id: @id})
+              |> JS.add_class("max-sm:hidden", to: "##{@id}-actions")
+            }
+            data-confirm="Delete this message from your homeserver?"
+            class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/20 hover:text-destructive"
+            aria-label="Delete"
+            title="Delete"
+          >
+            <.icon name="lucide-trash" class="size-4" />
+          </button>
+        </div>
       </div>
       <.avatar
         src={@profile.avatar_url}
@@ -2300,14 +2307,14 @@ defmodule PubkyRoomsWeb.RoomLive do
           <span :if={@msg.edited_at} class="shrink-0 text-[11px] text-muted-foreground">(edited)</span>
           <span
             :if={@own and @msg.state == :pending}
-            class="tooltip inline-flex shrink-0 self-center text-muted-foreground"
+            class="tooltip tooltip-bottom inline-flex shrink-0 self-center text-muted-foreground"
             data-tip="Sending to your homeserver…"
           >
             <.icon name="lucide-clock" class="size-3" />
           </span>
           <span
             :if={@own and @msg.state == :confirmed}
-            class="tooltip inline-flex shrink-0 self-center text-brand/80"
+            class="tooltip tooltip-bottom inline-flex shrink-0 self-center text-brand/80"
             data-tip="Stored on your homeserver"
           >
             <.icon name="lucide-check" class="size-3" />

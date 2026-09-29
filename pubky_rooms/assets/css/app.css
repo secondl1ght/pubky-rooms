@@ -223,3 +223,17 @@
     transform: translateX(-50%) translateY(0);
   }
 }
+
+/* Tooltip below the element, for rows at the top of a scrolling container
+   where one above would be clipped. */
+@utility tooltip-bottom {
+  &::after {
+    bottom: auto;
+    top: calc(100% + 0.5rem);
+    transform: translateX(-50%) translateY(-0.25rem);
+  }
+  &:hover::after,
+  &:focus-visible::after {
+    transform: translateX(-50%) translateY(0);
+  }
+}

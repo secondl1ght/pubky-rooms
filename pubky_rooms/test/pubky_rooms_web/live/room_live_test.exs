@@ -168,6 +168,8 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     html = wait_for(fn -> render(view) end, &(&1 =~ "Stored on your homeserver"))
     assert html =~ "hello sovereign world"
     refute html =~ "Sending to your homeserver"
+    # the delivery tooltip opens downwards (a top row's upward tooltip is clipped)
+    assert html =~ ~s(class="tooltip tooltip-bottom)
     # pre-wrap text hugs its tags: no template newline rendered as a blank line
     assert html =~ ~r/<p[^>]*whitespace-pre-wrap[^>]*>hello sovereign world<\/p>/
 
@@ -364,6 +366,8 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
 
     refute has_element?(anon, "##{id}-actions")
     refute has_element?(anon, "##{id} button[aria-label='More actions']")
+    # toggle and pill share a wrapper whose click-away closes the pill on phones
+    assert has_element?(view, "##{id}-menu[phx-click-away*='#{id}-actions']")
 
     # edit: the composer switches to edit mode with the text, the same file is overwritten
     view |> element("##{id} button[aria-label=Edit]") |> render_click()
