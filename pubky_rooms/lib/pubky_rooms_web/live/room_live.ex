@@ -1365,12 +1365,23 @@ defmodule PubkyRoomsWeb.RoomLive do
                 id="messages-empty"
                 class="hidden flex-1 flex-col items-center justify-center gap-2 py-16 text-center text-sm text-muted-foreground [#messages:not(:has(>_[id^=msg-]))_&]:flex"
               >
-                <.icon :if={@status == :ready} name="lucide-message-square-dashed" class="size-8" />
+                <.empty_state
+                  :if={@status == :ready}
+                  icon="lucide-message-square-dashed"
+                  title="No messages yet"
+                  class="bg-transparent"
+                >
+                  Say hello.
+                </.empty_state>
+                <.empty_state
+                  :if={@status == :closed}
+                  icon="lucide-door-closed"
+                  title="No messages"
+                  class="bg-transparent"
+                />
                 <.spinner :if={@status in [:loading, :bootstrapping]} class="size-6" />
-                <span :if={@status == :ready}>No messages yet. Say hello.</span>
                 <span :if={@status in [:loading, :bootstrapping]}>Loading messages…</span>
                 <span :if={@status == :not_found}>This room does not exist on its creator's homeserver.</span>
-                <span :if={@status == :closed}>This room was closed by its creator; nothing was written in it.</span>
                 <span :if={match?({:error, _}, @status)}>The creator's homeserver could not be reached. Try again later.</span>
               </div>
               <.message_row
