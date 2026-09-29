@@ -22,6 +22,7 @@ each run in the table at the end.
 - Identities: **A** (creator) in the in-app browser, **B** (member) in Chrome; both via Simulator → Add pubky → Shortcut → paste the sign-in link. **anon** is a private window. Simulator identities vanish on reload; Rooms cookies survive.
 - Tools: DevTools console (CSP violations, JS errors) and network tab open; `liveSocket.enableLatencySim(400)` for race checks, `disableLatencySim()` after; `resize_window`/DevTools at 375 px for **phone** items.
 - Automation notes: `data-confirm` buttons need `window.confirm = () => true`; hidden tabs never run `requestAnimationFrame`, so check `document.title` in a visible tab; the in-app browser's Return key does not reach the page (dispatch a `KeyboardEvent` or call `form.requestSubmit()`).
+- Screenshots for review: a throwaway Playwright script (Chromium in `~/.cache/ms-playwright`, package in `~/CODE/pubky-app/node_modules`) can drive the dev server headless as an anonymous viewer, open sheets, trigger the connection toast (`liveSocket.disconnect()`) and save PNGs; states only the fake homeserver can produce (a member's history unreachable) come from a throwaway ExUnit test that writes `render(view)` into an HTML file with the CSS linked absolutely.
 - A room this node has never seen, or a big room for paging: `cd pubky_rooms && mix run --no-start scripts/headless_room.exs [count]` writes one straight to the homeserver from a fresh headless identity and prints its URL (the first visit is the only "unknown" one; afterwards the room is warm). A member nobody follows stays invisible to the directory until they sign in here.
 
 Legend: **smoke** = minimum pre-deploy set · **A+B** = needs both identities · **anon** = private window · **phone** = 375 px wide.
@@ -137,4 +138,4 @@ Legend: **smoke** = minimum pre-deploy set · **A+B** = needs both identities ·
 
 | Date | Commit | Who | Scope | Result / findings |
 |------|--------|-----|-------|-------------------|
-| 2026-09-22 → 09-28 | `6ba3bae`…`8fe25ae` | user + Claude | signed-out screens, signed-in lobby, `/me`, Open-a-room dialog (design first) | see `findings.md` "Design", "Signed-in pass", "Bugs" |
+| 2026-09-22 → 09-28 | `6ba3bae`…`1330f80` | user + Claude | signed-out screens, signed-in lobby, `/me`, Open-a-room dialog, room page (first paint, header, members, banners; composer and actions still to come) | see `findings.md` "Design", "Signed-in pass", "Bugs" |
