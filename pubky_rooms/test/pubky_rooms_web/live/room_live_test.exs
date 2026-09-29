@@ -455,7 +455,10 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     html = wait_for(fn -> render(bob_view) end, &(&1 =~ "from bob"))
     assert html =~ ~s(id="composer")
     assert has_element?(bob_view, "##{bob_id} button[aria-label=Edit]")
-    assert wait_for(fn -> render(alice_view) end, &(&1 =~ "from bob"))
+    html = wait_for(fn -> render(alice_view) end, &(&1 =~ "from bob"))
+    # the backfilled row goes back to its place in time, not to the bottom
+    assert ordered?(html, ["from alice", "from bob", "answering bob"])
+    assert ordered?(render(bob_view), ["from alice", "from bob", "answering bob"])
     # …and the quote is back without a reload
     assert wait_for(
              fn ->

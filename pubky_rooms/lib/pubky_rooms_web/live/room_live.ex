@@ -67,6 +67,8 @@ defmodule PubkyRoomsWeb.RoomLive do
           has_more: false,
           loading_older: false,
           jump_target: nil,
+          shown: MapSet.new(),
+          newest_key: nil,
           jump_rounds: 0,
           typing: %{},
           typing_timer: nil,
@@ -205,7 +207,62 @@ defmodule PubkyRoomsWeb.RoomLive do
       loading_older: false
     )
     |> assign_room(snapshot)
-    |> stream(:messages, unmuted(socket, history), reset: true)
+    |> show_window(unmuted(socket, history))
+  end
+
+  # The stream is a window onto the room's table, which is sorted by key. Rows
+  # are appended in arrival order, so a row that belongs *before* the newest
+  # one on screen (a rejoin backfill, a restored ban, a late history) cannot be
+  # slotted in: the window is rebuilt from the table instead. `shown` and
+  # `newest_key` are the bookkeeping that tells the two cases apart.
+  defp show_window(socket, msgs) do
+    socket
+    |> assign(
+      shown: MapSet.new(msgs, & &1.key),
+      newest_key: Enum.max([nil | Enum.map(msgs, & &1.key)])
+    )
+    |> stream(:messages, msgs, reset: true)
+  end
+
+  defp note_shown(socket, msgs) do
+    keys = Enum.map(msgs, & &1.key)
+
+    assign(socket,
+      shown: Enum.into(keys, socket.assigns.shown),
+      newest_key: Enum.max([socket.assigns.newest_key | keys])
+    )
+  end
+
+  defp forget_shown(socket, key),
+    do: assign(socket, shown: MapSet.delete(socket.assigns.shown, key))
+
+  # A message from the room: in place when it is already on screen or the newest.
+  defp arrive(socket, %Message{key: key} = msg) do
+    %{shown: shown, newest_key: newest} = socket.assigns
+
+    if MapSet.member?(shown, key) or newest == nil or key > newest,
+      do: socket |> stream_insert(:messages, msg) |> note_shown([msg]),
+      else: rebuild_window(socket)
+  end
+
+  defp rebuild_window(%{assigns: %{table: nil}} = socket), do: socket
+
+  defp rebuild_window(%{assigns: %{table: table, oldest_key: oldest}} = socket) do
+    if :ets.info(table) == :undefined do
+      socket
+    else
+      guards = if oldest, do: [{:>=, :"$1", {oldest}}], else: []
+      stored = :ets.select(table, [{{:"$1", :"$2"}, guards, [:"$2"]}])
+      stored_keys = MapSet.new(stored, & &1.key)
+
+      # own messages still in flight or failed are not in the table yet
+      local =
+        (Map.values(socket.assigns.sent) ++ Map.values(socket.assigns.failed))
+        |> Enum.reject(&MapSet.member?(stored_keys, &1.key))
+        |> Enum.uniq_by(& &1.key)
+
+      show_window(socket, unmuted(socket, Enum.sort_by(stored ++ local, & &1.key)))
+    end
   end
 
   defp apply_snapshot(socket, snapshot), do: assign_room(socket, snapshot)
@@ -293,6 +350,7 @@ defmodule PubkyRoomsWeb.RoomLive do
     socket
     |> assign(oldest_key: oldest.key)
     |> stream(:messages, socket |> unmuted(msgs) |> Enum.reverse(), at: 0)
+    |> note_shown(msgs)
   end
 
   defp jump_to(socket, {_msg_id, author} = key) do
@@ -441,6 +499,7 @@ defmodule PubkyRoomsWeb.RoomLive do
              socket
              |> stop_typing()
              |> stream_insert(:messages, msg)
+             |> note_shown([msg])
              |> assign(
                composer: composer_form(),
                composer_mode: :new,
@@ -501,6 +560,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         {:noreply,
          socket
          |> stream_delete(:messages, msg)
+         |> forget_shown(msg.key)
          |> start_async({:delete, msg.key}, fn -> Rooms.delete_message(sid, msg) end)}
 
       _ ->
@@ -541,6 +601,7 @@ defmodule PubkyRoomsWeb.RoomLive do
            sent: Map.put(socket.assigns.sent, msg.key, msg)
          )
          |> stream_insert(:messages, msg)
+         |> note_shown([msg])
          |> start_async({:publish, msg.key}, fn -> Rooms.retry_message(sid, msg) end)}
 
       :error ->
@@ -552,7 +613,10 @@ defmodule PubkyRoomsWeb.RoomLive do
     case Map.fetch(failed, id) do
       {:ok, msg} ->
         {:noreply,
-         socket |> assign(failed: Map.delete(failed, id)) |> stream_delete(:messages, msg)}
+         socket
+         |> assign(failed: Map.delete(failed, id))
+         |> stream_delete(:messages, msg)
+         |> forget_shown(msg.key)}
 
       :error ->
         {:noreply, socket}
@@ -1113,7 +1177,7 @@ defmodule PubkyRoomsWeb.RoomLive do
     socket =
       if MapSet.member?(socket.assigns.muted, msg.author),
         do: socket,
-        else: stream_insert(socket, :messages, msg)
+        else: arrive(socket, msg)
 
     # whatever changed (an edit, or a message coming back through a backfill
     # after its author rejoined), the rows quoting it re-resolve their quote
@@ -1144,6 +1208,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   defp apply_room_event(socket, {:message_deleted, key}) do
     socket
     |> stream_delete_by_dom_id(:messages, dom_id(key))
+    |> forget_shown(key)
     |> refresh_replies(key)
   end
 
@@ -1203,7 +1268,7 @@ defmodule PubkyRoomsWeb.RoomLive do
 
     case socket.assigns.table do
       nil -> socket
-      table -> stream(socket, :messages, unmuted(socket, RoomServer.history(table)), reset: true)
+      table -> show_window(socket, unmuted(socket, RoomServer.history(table)))
     end
   end
 
