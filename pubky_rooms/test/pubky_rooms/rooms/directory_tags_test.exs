@@ -112,12 +112,20 @@ defmodule PubkyRooms.Rooms.DirectoryTagsTest do
     refute Map.has_key?(Fake.files(bob), Tag.path(uri, "lightning"))
     refute Directory.tagged_by?(ref, "lightning", bob)
 
-    # unlisting removes the creator's tags (bob's would stay); relisting restores "room"
+    # unlisting removes the creator's tags; bob's stay (they are his files) but
+    # nobody can add new ones; relisting restores "room"
+    assert {:ok, "lightning"} = Rooms.tag_room(bob_sid, bob, ref, "lightning")
+
     {:ok, room} =
       Rooms.update_room(sid, alice, room, %{"name" => "Room", "visibility" => "unlisted"})
 
     assert Directory.own_tags(ref, alice) == []
     refute Map.has_key?(Fake.files(alice), Tag.path(uri, "room"))
+    assert Enum.map(Directory.tags_of(ref), & &1.label) == ["lightning"]
+    assert {:error, "Unlisted rooms have no tags."} = Rooms.tag_room(bob_sid, bob, ref, "new")
+    assert {:error, "Unlisted rooms have no tags."} = Rooms.tag_room(sid, alice, ref, "room")
+    assert :ok = Rooms.untag_room(bob_sid, bob, ref, "lightning")
+    assert Directory.tags_of(ref) == []
 
     {:ok, room} =
       Rooms.update_room(sid, alice, room, %{"name" => "Room", "visibility" => "public"})

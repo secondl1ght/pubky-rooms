@@ -97,6 +97,7 @@ defmodule PubkyRooms.Rooms do
           {:ok, String.t()} | {:error, String.t() | Pubky.reason()}
   def tag_room(sid, user, ref, label) do
     with {:ok, label} <- Tag.normalize(label),
+         true <- listed?(Directory.get(ref)) || {:error, "Unlisted rooms have no tags."},
          true <-
            length(Directory.own_tags(ref, user)) < @max_own_tags ||
              {:error, "at most #{@max_own_tags} tags per room"},
@@ -107,6 +108,10 @@ defmodule PubkyRooms.Rooms do
       {:ok, label}
     end
   end
+
+  # A room this node has not indexed yet is given the benefit of the doubt.
+  defp listed?(%Room{visibility: "unlisted"}), do: false
+  defp listed?(_room), do: true
 
   @doc "Removes the user's own tag from a room (already gone counts as done)."
   @spec untag_room(sid(), String.t(), Paths.room_ref(), String.t()) ::

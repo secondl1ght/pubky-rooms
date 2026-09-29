@@ -220,6 +220,11 @@ defmodule PubkyRoomsWeb.RoomLive do
   defp can_write?(%{current_user: user, status: status, banned?: banned?}),
     do: user != nil and status == :ready and not banned?
 
+  # Unlisted rooms take no new tags (the lobby never shows them and Pubky App
+  # would); tags added before a room was unlisted stay removable by their owners.
+  defp can_tag?(%{room: %Room{visibility: "public"}} = assigns), do: can_write?(assigns)
+  defp can_tag?(_assigns), do: false
+
   defp can_post?(%{assigns: assigns}), do: can_post?(assigns)
   defp can_post?(%{is_member: member?} = assigns), do: member? and can_write?(assigns)
 
@@ -1299,10 +1304,11 @@ defmodule PubkyRoomsWeb.RoomLive do
           room_id={@room_id}
         />
         <.tag_row
-          :if={@room && (@tags != [] or can_write?(assigns))}
+          :if={@room && (@tags != [] or can_tag?(assigns))}
           tags={@tags}
           viewer={@current_user && @current_user.pubky}
-          writer={can_write?(assigns)}
+          writer={can_tag?(assigns)}
+          remover={can_write?(assigns)}
           suggestions={@tag_suggestions}
         />
 
@@ -1575,6 +1581,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         id="room-settings"
         show
         on_cancel={JS.patch(room_path(assigns))}
+        class="sm:w-[34rem]"
       >
         <:title>Room settings</:title>
         <.form
@@ -2089,12 +2096,13 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   attr :tags, :list, required: true, doc: "`Directory.tags_of/1` result"
   attr :viewer, :string, default: nil, doc: "marks the viewer's own tags"
-  attr :writer, :boolean, default: false, doc: "whether the viewer may add or remove tags"
+  attr :writer, :boolean, default: false, doc: "whether the viewer may add tags"
+  attr :remover, :boolean, default: false, doc: "whether the viewer may remove their own tags"
   attr :suggestions, :list, default: [], doc: "labels offered by the tag input"
 
   # Universal tags on the room: click to add or remove your own; the tag input
   # (same one as the create dialog) adds a new label. Anonymous viewers just
-  # see them.
+  # see them; on an unlisted room only removing your own tag is possible.
   defp tag_row(assigns) do
     ~H"""
     <div id="room-tags" class="flex flex-wrap items-center gap-1.5">
@@ -2104,7 +2112,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         count={t.count}
         size="sm"
         selected={@viewer != nil and @viewer in t.taggers}
-        disabled={!@writer}
+        disabled={not (@writer or (@remover and @viewer != nil and @viewer in t.taggers))}
         phx-click="toggle_tag"
         phx-value-label={t.label}
         title={if @viewer in t.taggers, do: "Remove your tag", else: "Tag this room too"}

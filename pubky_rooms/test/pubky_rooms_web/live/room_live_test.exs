@@ -715,6 +715,9 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     view |> element("a[aria-label='Room settings']") |> render_click()
     assert_patch(view, ctx.path <> "/settings")
     assert has_element?(view, "#room-settings-form")
+    # same panel width as the Open-a-room dialog
+    assert render(element(view, "#room-settings-container")) =~ "sm:w-[34rem]"
+    assert has_element?(view, "#room-tag-input")
 
     view
     |> form("#room-settings-form", room: %{name: "", topic: "x", visibility: "public"})
@@ -738,7 +741,12 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert {:ok, %Room{name: "Renamed", visibility: "unlisted"}} =
              Directory.fetch_room(Room.ref(ctx.room))
 
+    # an unlisted room takes no new tags: the input is gone for everyone,
+    # the creator's own "room" tag was deleted, so the row disappears
+    refute has_element?(view, "#room-tag-input")
     assert wait_for(fn -> render(bob_view) end, &(&1 =~ "Renamed"))
+    refute has_element?(bob_view, "#room-tag-input")
+    refute has_element?(bob_view, "#room-tags")
 
     # bob has a message of his own he could edit before the room closes
     bob_view |> form("#composer", message: %{content: "bob before close"}) |> render_submit()
