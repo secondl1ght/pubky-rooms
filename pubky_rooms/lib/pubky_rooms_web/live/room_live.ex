@@ -1954,11 +1954,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         ]}
         aria-pressed={to_string(@muted)}
         aria-label={if @muted, do: "Unmute", else: "Mute for me"}
-        title={
-          if @muted,
-            do: "Muted for you (click to unmute)",
-            else: "Mute for me (saved to your homeserver, all devices)"
-        }
+        title={if @muted, do: "Muted for you", else: "Mute for me"}
       >
         <.icon name="lucide-volume-x" class="size-4" />
       </button>
