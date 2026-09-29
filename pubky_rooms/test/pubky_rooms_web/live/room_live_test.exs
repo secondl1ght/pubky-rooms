@@ -155,6 +155,11 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     # the invitation lives in the composer only, not repeated under the placeholder
     refute html =~ "Say hello."
     assert has_element?(view, "#composer-input[placeholder='Say hello…']")
+    # a click anywhere in the dashed box focuses the input (a client-only command)
+    assert has_element?(view, ~s(#composer-box[phx-click*="focus"][phx-click*="composer-input"]))
+    # the storage path is a tooltip on the info mark, not a permanent line
+    assert has_element?(view, ~s(#composer-storage-tip[data-tip^="Stored at pubky://"]))
+    refute html =~ "<code"
 
     view |> form("#composer", message: %{content: "hello sovereign world"}) |> render_submit()
 

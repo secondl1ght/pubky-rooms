@@ -1448,7 +1448,11 @@ defmodule PubkyRoomsWeb.RoomLive do
                 <% true -> %>
                   <.form for={@composer} id="composer" phx-submit="send" class="flex flex-col gap-2">
                     <.composer_context mode={@composer_mode} profiles={@profiles} />
-                    <div class="flex items-end gap-3 rounded-md border border-dashed border-input px-4 py-3 focus-within:border-ring">
+                    <div
+                      id="composer-box"
+                      phx-click={JS.focus(to: "#composer-input")}
+                      class="flex cursor-text items-end gap-3 rounded-md border border-dashed border-input px-4 py-3 focus-within:border-ring"
+                    >
                       <.avatar
                         src={@current_user.avatar_url}
                         name={@current_user.name}
@@ -1465,6 +1469,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                         rows="1"
                         maxlength={Message.content_max()}
                         wrapper_class="flex-1"
+                        class="py-1.5 md:py-2"
                         phx-hook="Composer"
                         data-typing-events
                         disabled={@status != :ready}
@@ -1480,9 +1485,17 @@ defmodule PubkyRoomsWeb.RoomLive do
                         <.icon name="lucide-send" class="size-4" />
                       </.button>
                     </div>
-                    <p class="px-1 text-xs text-muted-foreground">
-                      Enter to send, Shift+Enter for a new line. Stored at
-                      <code class="text-[11px]">pubky://{Profiles.short_key(@current_user.pubky)}/pub/pubky-rooms/…</code>
+                    <p class="flex flex-wrap items-center gap-1.5 px-1 text-xs text-muted-foreground">
+                      <span>Enter to send, Shift+Enter for a new line.</span>
+                      <button
+                        type="button"
+                        id="composer-storage-tip"
+                        class="tooltip inline-flex rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:text-foreground"
+                        data-tip={"Stored at pubky://#{Profiles.short_key(@current_user.pubky)}/pub/pubky-rooms/…"}
+                        aria-label={"Stored at pubky://#{Profiles.short_key(@current_user.pubky)}/pub/pubky-rooms/…"}
+                      >
+                        <.icon name="lucide-info" class="size-3.5" />
+                      </button>
                     </p>
                   </.form>
               <% end %>

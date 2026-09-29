@@ -39,6 +39,18 @@ describe("Composer", () => {
     expect(form.requestSubmit).not.toHaveBeenCalled()
   })
 
+  it("grows with its content and caps at eight rows plus its own padding", () => {
+    el.style.lineHeight = "24px"
+    el.style.paddingTop = "8px"
+    el.style.paddingBottom = "8px"
+    Object.defineProperty(el, "scrollHeight", {configurable: true, get: () => 100})
+    input(el, "a\nb\nc")
+    expect(el.style.height).toBe("100px")
+    Object.defineProperty(el, "scrollHeight", {configurable: true, get: () => 5000})
+    input(el, "many\nmore\nlines")
+    expect(el.style.height).toBe("208px")
+  })
+
   it("reports typing at most every two seconds and stop_typing on blur or when emptied", () => {
     input(el, "h")
     input(el, "he")

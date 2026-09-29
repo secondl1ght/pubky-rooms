@@ -47,9 +47,12 @@ const Composer = {
     this.pushEvent("stop_typing", {})
   },
   resize() {
-    const line = parseFloat(getComputedStyle(this.el).lineHeight) || 24
+    const style = getComputedStyle(this.el)
+    const line = parseFloat(style.lineHeight) || 24
+    // vertical padding centres a single line against the avatar and button
+    const padding = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0)
     this.el.style.height = "auto"
-    this.el.style.height = Math.min(this.el.scrollHeight, line * MAX_ROWS) + "px"
+    this.el.style.height = Math.min(this.el.scrollHeight, line * MAX_ROWS + padding) + "px"
   }
 }
 
