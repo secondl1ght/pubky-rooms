@@ -210,6 +210,8 @@ defmodule PubkyRoomsWeb.RoomLive do
     |> show_window(unmuted(socket, history))
   end
 
+  defp apply_snapshot(socket, snapshot), do: assign_room(socket, snapshot)
+
   # The stream is a window onto the room's table, which is sorted by key. Rows
   # are appended in arrival order, so a row that belongs *before* the newest
   # one on screen (a rejoin backfill, a restored ban, a late history) cannot be
@@ -264,8 +266,6 @@ defmodule PubkyRoomsWeb.RoomLive do
       show_window(socket, unmuted(socket, Enum.sort_by(stored ++ local, & &1.key)))
     end
   end
-
-  defp apply_snapshot(socket, snapshot), do: assign_room(socket, snapshot)
 
   defp load_tags(socket), do: assign(socket, tags: Directory.tags_of(socket.assigns.ref))
 
@@ -374,7 +374,7 @@ defmodule PubkyRoomsWeb.RoomLive do
       MapSet.member?(muted, author) ->
         put_flash(socket, :info, "That message is from someone you muted.")
 
-      in_window?(socket, key) ->
+      on_screen?(socket, key) ->
         push_event(socket, "scroll_to", %{id: dom_id(key)})
 
       more? and oldest != nil and not loading? ->
@@ -390,7 +390,7 @@ defmodule PubkyRoomsWeb.RoomLive do
     rounds = socket.assigns.jump_rounds + 1
 
     cond do
-      in_window?(socket, key) ->
+      on_screen?(socket, key) ->
         socket |> assign(jump_target: nil) |> push_event("scroll_to", %{id: dom_id(key)})
 
       more? and msgs != [] and rounds < @max_jump_rounds ->
@@ -409,7 +409,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   # Held by the room and inside the loaded window (so its row is in the DOM).
-  defp in_window?(%{assigns: %{oldest_key: oldest}} = socket, key),
+  defp on_screen?(%{assigns: %{oldest_key: oldest}} = socket, key),
     do: oldest != nil and key >= oldest and stored_message(socket, key) != nil
 
   defp parse_dom_id("msg-" <> rest) when byte_size(rest) == 66 do
@@ -1255,8 +1255,6 @@ defmodule PubkyRoomsWeb.RoomLive do
     end)
   end
 
-  defp member_name(socket, z32), do: profile_of(socket.assigns.profiles, z32).name
-
   defp apply_room_event(socket, {:message_deleted, key}) do
     socket
     |> stream_delete_by_dom_id(:messages, dom_id(key))
@@ -1307,6 +1305,8 @@ defmodule PubkyRoomsWeb.RoomLive do
     do: assign(socket, live_unavailable: members)
 
   defp apply_room_event(socket, _other), do: socket
+
+  defp member_name(socket, z32), do: profile_of(socket.assigns.profiles, z32).name
 
   defp maybe_set_member(%{assigns: %{current_user: %{pubky: z32}}} = socket, z32, value),
     do: socket |> assign(is_member: value) |> refresh_rows()
