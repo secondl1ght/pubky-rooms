@@ -739,10 +739,10 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     # a bystander is told why bob's rows vanished; the creator has their own confirmation
     assert wait_for(
              fn -> render(bystander) end,
-             &(&1 =~ "was removed by the creator; their messages are hidden")
+             &(&1 =~ "was removed by the owner; their messages are hidden")
            )
 
-    refute render(alice_view) =~ "was removed by the creator"
+    refute render(alice_view) =~ "was removed by the owner"
 
     # every write is off for the banned member: reactions, replies, tags, typing
     refute has_element?(bob_view, "button[aria-label=React]")
@@ -773,7 +773,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
 
     assert wait_for(
              fn -> render(bystander) end,
-             &(&1 =~ "was restored by the creator; their messages are back")
+             &(&1 =~ "was restored by the owner; their messages are back")
            )
 
     html = wait_for(fn -> render(bob_view) end, &(&1 =~ "bob speaks"))

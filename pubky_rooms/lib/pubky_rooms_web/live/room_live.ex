@@ -490,7 +490,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         {:noreply, put_flash(socket, :error, "Join the room to chat.")}
 
       socket.assigns.banned? ->
-        {:noreply, put_flash(socket, :error, "You were removed from this room by its creator.")}
+        {:noreply, put_flash(socket, :error, "You were removed from this room by its owner.")}
 
       true ->
         case prepare(socket.assigns.composer_mode, sid, user.pubky, ref, content) do
@@ -1206,7 +1206,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           put_flash(
             s,
             :info,
-            "#{member_name(s, z32)} was removed by the creator; their messages are hidden."
+            "#{member_name(s, z32)} was removed by the owner; their messages are hidden."
           )
       end
     end)
@@ -1229,7 +1229,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           put_flash(
             s,
             :info,
-            "#{member_name(s, z32)} was restored by the creator; their messages are back."
+            "#{member_name(s, z32)} was restored by the owner; their messages are back."
           )
       end
     end)
@@ -1276,7 +1276,7 @@ defmodule PubkyRoomsWeb.RoomLive do
     socket
     |> assign(status: :closed, composer_mode: :new, banning: nil)
     |> refresh_rows()
-    |> put_flash(:info, "The creator closed this room.")
+    |> put_flash(:info, "The owner closed this room.")
   end
 
   defp apply_room_event(socket, {:unavailable, status}), do: assign(socket, status: status)
@@ -1546,8 +1546,8 @@ defmodule PubkyRoomsWeb.RoomLive do
                 />
                 <.spinner :if={@status in [:loading, :bootstrapping]} class="size-6" />
                 <span :if={@status in [:loading, :bootstrapping]}>Loading messages…</span>
-                <span :if={@status == :not_found}>This room does not exist on its creator's homeserver.</span>
-                <span :if={match?({:error, _}, @status)}>The creator's homeserver could not be reached. Try again later.</span>
+                <span :if={@status == :not_found}>This room does not exist on its owner's homeserver.</span>
+                <span :if={match?({:error, _}, @status)}>The owner's homeserver could not be reached. Try again later.</span>
               </div>
               <.message_row
                 :for={{id, msg} <- @streams.messages}
@@ -1580,11 +1580,11 @@ defmodule PubkyRoomsWeb.RoomLive do
                   >
                     <.icon name="lucide-door-closed" class="mt-0.5 size-4 shrink-0 text-destructive" />
                     <span :if={@status == :closed}>
-                      This room was closed by its creator and is read-only now. Messages stay on
+                      This room was closed by its owner and is read-only now. Messages stay on
                       their authors' homeservers.
                     </span>
                     <span :if={@status == :not_found}>
-                      This room does not exist on its creator's homeserver.
+                      This room does not exist on its owner's homeserver.
                     </span>
                   </div>
                 <% is_nil(@current_user) -> %>
@@ -1602,7 +1602,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                   >
                     <.icon name="lucide-shield-ban" class="mt-0.5 size-4 shrink-0 text-destructive" />
                     <span>
-                      You were removed from this room by its creator<span :if={
+                      You were removed from this room by its owner<span :if={
                         @bans[@current_user.pubky]
                       }>: {@bans[@current_user.pubky]}</span>.
                       Your messages stay on your homeserver; they are hidden here.
@@ -1904,7 +1904,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         ]}>
           {profile_of(@profiles, z32).name}
         </span>
-        <.badge :if={z32 == @creator} variant="brand-soft">creator</.badge>
+        <.badge :if={z32 == @creator} variant="brand-soft">owner</.badge>
         <span
           :if={z32 in @unreachable}
           class="tooltip text-destructive"
