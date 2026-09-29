@@ -122,7 +122,9 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     {:ok, _view, html} = live(init_test_session(conn, Fixtures.cookie(sid)), ~p"/")
     assert html =~ "Your rooms"
     assert length(Regex.scan(~r/Busy room/, html)) == 1
-    assert html =~ "No rooms yet"
+    # nothing left for the directory, but not "no rooms yet": they are all hers
+    assert html =~ "Nothing else listed"
+    refute html =~ "No rooms yet"
   end
 
   test "switching the new room to Unlisted drops its tags; back to Listed starts empty",
@@ -238,7 +240,11 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     refute html_mine =~ "No rooms yet"
     assert length(Regex.scan(~r/Busy tags/, html_mine)) == 1
     mine |> element("a", "Clear filter") |> render_click()
-    assert render(mine) =~ "Your rooms"
+    html_mine = render(mine)
+    assert html_mine =~ "Your rooms"
+    # every listed room is alice's own: the directory says so instead of "No rooms yet"
+    assert html_mine =~ "Nothing else listed"
+    refute html_mine =~ "No rooms yet"
     assert html =~ ~r/data-label="dd"|>dd</
     # the room carries aa bb cc dd room: three shown, "+2" for the rest
     assert html =~ "+2"

@@ -416,11 +416,18 @@ defmodule PubkyRoomsWeb.LobbyLive do
             No room carries this tag yet.
           </.empty_state>
           <.empty_state
-            :if={@public == [] and !@tag_filter}
+            :if={@public == [] and !@tag_filter and @created ++ @joined == []}
             icon="lucide-signpost"
             title="No rooms yet"
           >
             Open the first one.
+          </.empty_state>
+          <.empty_state
+            :if={@public == [] and !@tag_filter and @created ++ @joined != []}
+            icon="lucide-signpost"
+            title="Nothing else listed"
+          >
+            Every listed room is already one of yours. Share a link, or tag your rooms so others find them.
           </.empty_state>
         </section>
 
