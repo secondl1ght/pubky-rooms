@@ -1412,6 +1412,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         <.room_header
           :if={not loading_shell?(assigns)}
           room={@room}
+          bans={@bans}
           status={@status}
           members={@members}
           online_count={map_size(@online)}
@@ -1842,11 +1843,14 @@ defmodule PubkyRoomsWeb.RoomLive do
           class="flex items-center gap-2 text-xl"
         >
           <.icon name="lucide-users" class="size-5 text-muted-foreground" />
-          Members · {length(@members)}
+          Members · {length(active_members(@members, @bans))}
         </.section_title>
         <p id={"#{@id_prefix}members-description"} class="text-xs text-muted-foreground">
-          <.live_dot class="mr-1 size-2 align-middle" active={members_online(@members, @online) > 0} />
-          {members_online(@members, @online)} online
+          <.live_dot
+            class="mr-1 size-2 align-middle"
+            active={members_online(active_members(@members, @bans), @online) > 0}
+          />
+          {members_online(active_members(@members, @bans), @online)} online
         </p>
       </:header>
       <div
@@ -2128,6 +2132,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   attr :room, :any, required: true
   attr :status, :any, required: true
   attr :members, :list, required: true
+  attr :bans, :map, required: true
   attr :online_count, :integer, required: true
   attr :anonymous_count, :integer, default: 0
   attr :is_member, :boolean, required: true
@@ -2175,7 +2180,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           title="Members"
           aria-label="Show members"
         >
-          <.icon name="lucide-users" class="size-3.5" /> {length(@members)}
+          <.icon name="lucide-users" class="size-3.5" /> {length(active_members(@members, @bans))}
         </button>
         <span
           class="flex items-center gap-1.5 text-xs text-muted-foreground xl:hidden"

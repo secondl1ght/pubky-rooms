@@ -726,10 +726,13 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     refute html =~ "bob speaks"
     assert html =~ ~s(id="banned-#{bob}")
     refute has_element?(alice_view, "#member-#{bob}")
+    # the counts match the list: a removed member is not counted
+    assert html =~ "Members · 1"
 
     html = wait_for(fn -> render(bob_view) end, &(&1 =~ "removed from this room"))
     assert html =~ "spam"
     refute has_element?(bob_view, "#composer")
+    assert html =~ "Members · 1"
     assert Map.has_key?(Fake.files(ctx.alice), Paths.ban(ctx.room.id, bob))
 
     # every write is off for the banned member: reactions, replies, tags, typing
@@ -757,6 +760,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     wait_for(fn -> render(bob_view) end, &has_composer?/1)
     html = wait_for(fn -> render(alice_view) end, &(&1 =~ "bob speaks"))
     assert ordered?(html, ["bob speaks", "said during the ban"])
+    assert html =~ "Members · 2"
     html = wait_for(fn -> render(bob_view) end, &(&1 =~ "bob speaks"))
     assert ordered?(html, ["bob speaks", "said during the ban"])
   end
