@@ -1984,7 +1984,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         </div>
         <.badge
           :if={@room && @room.visibility == "unlisted" && @status != :closed}
-          variant="outline"
+          variant="secondary"
           class="hidden sm:inline-flex"
         >
           <.icon name="lucide-link" class="size-3" /> Unlisted

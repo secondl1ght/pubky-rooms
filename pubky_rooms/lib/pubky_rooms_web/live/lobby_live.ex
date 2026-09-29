@@ -637,7 +637,10 @@ defmodule PubkyRoomsWeb.LobbyLive do
             <.badge :if={Room.closed?(@room)} variant="destructive-soft">
               <.icon name="lucide-door-closed" class="size-3" /> Closed
             </.badge>
-            <.badge :if={@room.visibility == "unlisted" and not Room.closed?(@room)} variant="outline">
+            <.badge
+              :if={@room.visibility == "unlisted" and not Room.closed?(@room)}
+              variant="secondary"
+            >
               <.icon name="lucide-link" class="size-3" /> Unlisted
             </.badge>
           </div>
