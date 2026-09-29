@@ -1273,26 +1273,37 @@ defmodule PubkyRoomsWeb.RoomLive do
   defp quote_of(_socket, %Message{reply_to: nil}), do: nil
 
   # `%{id, name, content}` when the room holds the original; `{:missing, id}`
-  # when it does not (yet: it may be further up in the history, or gone).
+  # when it may still be further up in the history; `:unavailable` when it
+  # cannot be (the whole history is loaded, or it would sit inside the loaded
+  # window: deleted, or never readable).
   defp quote_of(assigns, %Message{reply_to: uri}) do
     case Paths.parse_message_uri(uri) do
-      {:ok, {author, _ref, msg_id}} ->
-        case stored_message(assigns, {msg_id, author}) do
-          %Message{} = original ->
-            %{
-              id: dom_id(original),
-              name: profile_of(assigns.profiles, author).name,
-              content: Format.truncate(original.content, 140)
-            }
-
-          nil ->
-            {:missing, dom_id({msg_id, author})}
-        end
-
-      :error ->
-        :unavailable
+      {:ok, {author, _ref, msg_id}} -> resolve_quote(assigns, author, msg_id)
+      :error -> :unavailable
     end
   end
+
+  defp resolve_quote(assigns, author, msg_id) do
+    case stored_message(assigns, {msg_id, author}) do
+      %Message{} = original ->
+        %{
+          id: dom_id(original),
+          name: profile_of(assigns.profiles, author).name,
+          content: Format.truncate(original.content, 140)
+        }
+
+      nil ->
+        if within_window?(assigns, msg_id),
+          do: :unavailable,
+          else: {:missing, dom_id({msg_id, author})}
+    end
+  end
+
+  # Message ids are time-ordered, so an id at or after the oldest loaded one
+  # belongs inside the loaded window; with no more history there is no "earlier".
+  defp within_window?(%{has_more: false}, _msg_id), do: true
+  defp within_window?(%{oldest_key: {oldest, _author}}, msg_id), do: msg_id >= oldest
+  defp within_window?(_assigns, _msg_id), do: false
 
   defp composer_form(content \\ "", error \\ nil) do
     errors = if error, do: [content: {error, []}], else: []

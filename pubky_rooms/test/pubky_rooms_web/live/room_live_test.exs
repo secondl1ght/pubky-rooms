@@ -476,13 +476,15 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
                ~r/phx-value-id="#{id}"[^>]*>[^<]*<span[^>]*>[^<]*<\/span><span[^>]*>original question\?/
     end
 
-    # …and a delete turns it into the missing state, no stale text left behind
+    # …and a delete says so at once (the original sat inside the loaded window,
+    # so it is not "an earlier message" to page back to), no stale text left
     alice_view |> element("##{id} button[aria-label=Delete]") |> render_click()
     render_async(alice_view)
 
     for view <- [alice_view, bob_view, anon] do
-      html = wait_for(fn -> render(view) end, &(&1 =~ "Replying to an earlier message"))
+      html = wait_for(fn -> render(view) end, &(&1 =~ "no longer available"))
       refute html =~ "edited question?"
+      refute html =~ "Replying to an earlier message"
       refute has_element?(view, "##{reply_id} button[title='Show the original message']")
     end
   end
