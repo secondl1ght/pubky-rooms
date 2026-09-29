@@ -68,6 +68,7 @@ Seeded on 2026-09-21 from Claude's browser pass over the finish-phase work; the 
 - A closed room whose members' keys no longer resolve (testnet identities lost their PKARR records) shows "Live updates from N members are unavailable"; correct but the banner competes with the closed notice. Consider hiding live-status banners on archives. — open
 - PWA icons are rasterised from `pubky-favicon.svg` by a script (`docs/notes/rooms-app-design.md`, PWA); replace with design-team assets (and a 1024 px iOS icon) before wide release. — open
 - `apple-mobile-web-app-capable` is deprecated in favour of `mobile-web-app-capable`; both are set on purpose (older iOS still reads the Apple one). — not a bug
+- Close room and delete message confirm through the browser's native `confirm` (`data-confirm`), while removing a member opens a styled dialog because it takes a reason (2026-09-28). Kept for now: two rare destructive yes/no steps, accessible and PWA-safe for free. A styled confirm (delete via one shared dialog, close as a confirm state inside the settings dialog, buttons "Close room" / "Keep it") is about an hour with tests; revisit after launch. — open
 - The mute/remove buttons in the members sheet appear on hover from `sm` up; on a real phone (< `sm`) they are always visible, so touch works. Verify on a device during QA. — open
 
 ## Polish (found by Claude, signed-in pass)
