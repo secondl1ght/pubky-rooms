@@ -243,6 +243,30 @@ defmodule PubkyRoomsWeb.RoomLive do
     end
   end
 
+  # Quotes are resolved at render time, so the loaded rows that reply to an
+  # edited or deleted message are re-inserted to show the new text or the
+  # missing state (stream rows never re-render on their own).
+  defp refresh_replies(%{assigns: %{table: nil}} = socket, _key), do: socket
+
+  defp refresh_replies(%{assigns: %{table: table, oldest_key: oldest}} = socket, {msg_id, author}) do
+    if :ets.info(table) == :undefined do
+      socket
+    else
+      guards = if oldest, do: [{:>=, :"$1", {oldest}}], else: []
+
+      table
+      |> :ets.select([{{:"$1", :"$2"}, guards, [:"$2"]}])
+      |> Enum.filter(&replies_to?(&1, author, msg_id))
+      |> then(&unmuted(socket, &1))
+      |> Enum.reduce(socket, &stream_insert(&2, :messages, &1))
+    end
+  end
+
+  defp replies_to?(%Message{reply_to: nil}, _author, _msg_id), do: false
+
+  defp replies_to?(%Message{reply_to: uri}, author, msg_id),
+    do: match?({:ok, {^author, _ref, ^msg_id}}, Paths.parse_message_uri(uri))
+
   # Mutes hide an author's messages from this viewer (see `PubkyRooms.Mutes`).
   defp unmuted(%{assigns: %{muted: muted}}, msgs),
     do: Enum.reject(msgs, &MapSet.member?(muted, &1.author))
@@ -1089,9 +1113,14 @@ defmodule PubkyRoomsWeb.RoomLive do
       )
       |> ensure_profile(msg.author)
 
-    if MapSet.member?(socket.assigns.muted, msg.author),
-      do: socket,
-      else: stream_insert(socket, :messages, msg)
+    socket =
+      if MapSet.member?(socket.assigns.muted, msg.author),
+        do: socket,
+        else: stream_insert(socket, :messages, msg)
+
+    # an edit changes what the replies quote (reaction-only upserts of a
+    # never-edited message skip the walk)
+    if msg.edited_at, do: refresh_replies(socket, msg.key), else: socket
   end
 
   defp apply_room_event(socket, {:member_banned, z32, reason}) do
@@ -1116,7 +1145,9 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   defp apply_room_event(socket, {:message_deleted, key}) do
-    stream_delete_by_dom_id(socket, :messages, dom_id(key))
+    socket
+    |> stream_delete_by_dom_id(:messages, dom_id(key))
+    |> refresh_replies(key)
   end
 
   defp apply_room_event(socket, {:message_failed, key, reason}),

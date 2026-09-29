@@ -459,6 +459,32 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     {:ok, anon, _} = live(ctx.conn, ctx.path)
     wait_for(fn -> render(anon) end, &(&1 =~ "the answer"))
     refute has_element?(anon, "button[aria-label=Reply]")
+
+    # the quote follows the original: an edit changes its text for everyone…
+    alice_view |> element("##{id} button[aria-label=Edit]") |> render_click()
+    alice_view |> form("#composer", message: %{content: "edited question?"}) |> render_submit()
+    render_async(alice_view)
+
+    for view <- [alice_view, bob_view, anon] do
+      html =
+        wait_for(
+          fn -> render(view) end,
+          &(&1 =~ ~r/phx-value-id="#{id}"[^>]*>.*?edited question\?/s)
+        )
+
+      refute html =~
+               ~r/phx-value-id="#{id}"[^>]*>[^<]*<span[^>]*>[^<]*<\/span><span[^>]*>original question\?/
+    end
+
+    # …and a delete turns it into the missing state, no stale text left behind
+    alice_view |> element("##{id} button[aria-label=Delete]") |> render_click()
+    render_async(alice_view)
+
+    for view <- [alice_view, bob_view, anon] do
+      html = wait_for(fn -> render(view) end, &(&1 =~ "Replying to an earlier message"))
+      refute html =~ "edited question?"
+      refute has_element?(view, "##{reply_id} button[title='Show the original message']")
+    end
   end
 
   test "members react from the palette and toggle their reaction; others see counts", ctx do
