@@ -1628,6 +1628,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                         :if={@bans[@current_user.pubky]}
                         id="banned-reason"
                         variant="destructive-soft"
+                        class="whitespace-normal text-left"
                       >
                         <span class="sr-only">Reason:</span>
                         {@bans[@current_user.pubky]}
@@ -1989,9 +1990,9 @@ defmodule PubkyRoomsWeb.RoomLive do
             <span class="truncate text-sm font-semibold text-muted-foreground">
               {profile_of(@profiles, z32).name}
             </span>
-            <.badge :if={reason} variant="destructive-soft" class="mt-0.5 max-w-full truncate">
+            <span :if={reason} class="truncate text-xs text-muted-foreground" title={reason}>
               {reason}
-            </.badge>
+            </span>
           </span>
           <.button
             :if={@is_creator}
