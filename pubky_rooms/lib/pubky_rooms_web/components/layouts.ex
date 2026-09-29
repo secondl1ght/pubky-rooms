@@ -29,8 +29,8 @@ defmodule PubkyRoomsWeb.Layouts do
 
   def app(assigns) do
     ~H"""
-    <header class="sticky top-0 z-(--z-sticky-header) hidden w-full bg-linear-to-b from-background from-50% to-transparent lg:block lg:py-6">
-      <nav class="mx-auto flex h-24 max-w-(--container-max-width) items-center justify-between gap-6 px-6 xl:px-0">
+    <header class="sticky top-0 z-(--z-sticky-header) hidden w-full bg-linear-to-b from-background from-50% to-transparent lg:block lg:py-4">
+      <nav class="mx-auto flex h-20 max-w-(--container-max-width) items-center justify-between gap-6 px-6 xl:px-0">
         <.logo navigate={~p"/"} />
         <div class="flex items-center gap-3">
           <.nav_button

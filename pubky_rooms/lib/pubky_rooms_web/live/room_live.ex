@@ -1280,7 +1280,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_user={@current_user} back={~p"/"}>
-      <.container class="flex h-[calc(100dvh-5rem)] flex-col gap-3 pb-24 lg:h-[calc(100dvh-9rem)] lg:pb-6">
+      <.container class="flex h-[calc(100dvh-5rem)] flex-col gap-3 pb-24 lg:h-[calc(100dvh-7rem)] lg:pb-6">
         <div
           :if={loading_shell?(assigns)}
           id="room-loading"

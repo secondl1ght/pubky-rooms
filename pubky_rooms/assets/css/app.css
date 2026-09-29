@@ -139,7 +139,7 @@
   color-scheme: dark;
   --container-max-width: 1200px;
   --filter-bar-width: 180px;
-  --header-offset-main: 144px;
+  --header-offset-main: 112px; /* desktop header: h-20 row + py-4 */
   --mobile-tab-bar-height: 48px;
   --z-sticky-header: 20;
   --z-mobile-menu: 30;

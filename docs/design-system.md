@@ -14,7 +14,7 @@ https://pubky.app. Reference data: `docs/notes/pubky-app-design-system.md`, `doc
 - **Radii**: `rounded-xs` 4px, `rounded-md` 8px (chips, inputs, post cards), `rounded-xl` 16px (cards, dialogs),
   `rounded-full` (buttons, avatars, nav).
 - **Shadows**: `shadow-xs` … `shadow-xl`, tinted rgba(5,5,10).
-- **Layout vars**: `--container-max-width` 1200px, `--filter-bar-width` 180px, `--header-offset-main` 144px,
+- **Layout vars**: `--container-max-width` 1200px, `--filter-bar-width` 180px, `--header-offset-main` 112px (desktop header: 80 px row + 16 px padding, tighter than Pubky App's 144 so the room page loses less height; the sticky sidebars and the room page height follow it),
   `--z-sticky-header` 20, `--z-mobile-menu` 30. Z-order: 20 header · 30 mobile header · 40 FAB/tab bar ·
   50 dialogs · 60 toasts.
 - **Motion**: `animate-fade-in`, `animate-zoom-in`, `animate-slide-up`, `animate-pulse-soft`; LiveView JS
