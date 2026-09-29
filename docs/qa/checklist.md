@@ -103,6 +103,7 @@ Legend: **smoke** = minimum pre-deploy set · **A+B** = needs both identities ·
 - [ ] anon in the same room: counted in "anonymous", never listed, sees everything live.
 
 ## 8. History and paging
+- [ ] Paging fixture: `cd pubky_rooms && mix run --no-start scripts/headless_room.exs 300` writes a 300-message room; the first visit shows the newest page, "Load earlier messages" sits at the top of the list, scrolling up auto-loads 50 at a time with the spinner visible at the top, the reader's place is kept, and the button disappears at message 1.
 
 - [ ] Room with > 100 messages: the newest 100 load; scrolling to the top loads older pages, keeps the reader's place, and keeps paging short pages; the top button appears when a page is empty (a member's homeserver down) and pressing it retries; no request loop in the network tab.
 - [ ] "Earlier messages could not be loaded right now." when a member's homeserver is unreachable; Retry history works after it returns.
@@ -133,6 +134,18 @@ Legend: **smoke** = minimum pre-deploy set · **A+B** = needs both identities ·
 - [ ] Logs during the whole pass carry no public keys, IPs or message content at info and above (grep the dev log for a z32 you used).
 - [ ] `Subscriptions.info/0` and `/healthz` agree on streams; the capacity warning fires when the pool crosses 80 % (lower `PUBKY_STREAM_POOL_SIZE` to test).
 - [ ] `priv/data/directory.dets` survives a restart; rooms, memberships and tags are still listed.
+
+## 13. Real infrastructure (staging, before production) — the dependency unknowns
+Never exercised on the testnet; each one is verified on the staging deploy before anyone else gets the link.
+- [ ] **smoke** Sign in with the real Pubky Ring (grant auth; the APK is shared with the team until Ring ships it): the deep link opens Ring, the grant lands, `/me` shows the identity.
+- [ ] **smoke** A real write to `homeserver.pubky.app` through the grant session (open a room, send a message): the library detects that the homeserver lacks `path-addressed-storage` (`/info` fails) and uses legacy addressing (`/pub/...` + `pubky-host`); the message confirms. If the production homeserver has been upgraded meanwhile, path addressing is used automatically.
+- [ ] **smoke** Live updates on mainnet: a second identity sees the message live (`/events-stream`), and a reconnect resumes from the cursor without duplicates.
+- [ ] PKARR resolution on mainnet: `pkarr.pubky.org` is tried first (`pkarr.pubky.app` allows about 10 requests per minute per IP), results are cached; a room whose members were never seen resolves them all without errors in the logs.
+- [ ] Anonymous read throttling from Fly's shared egress IP: a big room bootstraps (slowly is fine, errors are not).
+- [ ] Behind Fly's proxy: `fly-client-ip` arrives on the websocket connect (sign-in limiter), `check_origin` and the URL host match the Fly hostname, `/healthz` answers over the platform check, websockets stay up through a deploy.
+- [ ] Nexus (`NEXUS_URL=https://nexus.pubky.app`) contributes tag counts; with Nexus unreachable the app still works.
+- [ ] DETS volume survives a restart and a redeploy (rooms and tags still listed).
+- [ ] Before sharing the link: test rooms deleted, a few real rooms seeded, the directory reads well.
 
 ## Runs
 
