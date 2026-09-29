@@ -1621,7 +1621,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                     class="flex items-start gap-2 text-sm text-muted-foreground"
                     role="status"
                   >
-                    <.icon name="lucide-shield-ban" class="mt-0.5 size-4 shrink-0 text-destructive" />
+                    <.icon name="lucide-user-x" class="mt-0.5 size-4 shrink-0 text-destructive" />
                     <span class="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1">
                       <span>You were removed from this room by its owner.</span>
                       <%!-- not <.badge>: badges never wrap, a reason may be 140 chars --%>
@@ -1851,7 +1851,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           <.button variant="ghost" phx-click="cancel_ban">Cancel</.button>
           <.button variant="destructive" type="submit" form="ban-form" disabled={@joining}>
             <.spinner :if={@joining} class="size-4" />
-            <.icon :if={!@joining} name="lucide-shield-ban" class="size-4" /> Remove member
+            <.icon :if={!@joining} name="lucide-user-x" class="size-4" /> Remove member
           </.button>
         </:footer>
       </.dialog>
@@ -1999,7 +1999,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                 aria-label="Reason"
                 aria-describedby={"#{@id_prefix}banned-#{z32}-reason"}
               >
-                <.icon name="lucide-shield-ban" class="size-3.5" />
+                <.icon name="lucide-user-x" class="size-3.5" />
               </button>
               <span
                 id={"#{@id_prefix}banned-#{z32}-reason"}
