@@ -1622,17 +1622,17 @@ defmodule PubkyRoomsWeb.RoomLive do
                     role="status"
                   >
                     <.icon name="lucide-shield-ban" class="mt-0.5 size-4 shrink-0 text-destructive" />
-                    <span class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                    <span class="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1">
                       <span>You were removed from this room by its owner.</span>
-                      <.badge
+                      <%!-- not <.badge>: badges never wrap, a reason may be 140 chars --%>
+                      <span
                         :if={@bans[@current_user.pubky]}
                         id="banned-reason"
-                        variant="destructive-soft"
-                        class="whitespace-normal text-left"
+                        class="inline-block max-w-full rounded-md border border-destructive/40 bg-destructive/16 px-2 py-0.5 text-xs font-medium break-words text-destructive"
                       >
                         <span class="sr-only">Reason:</span>
                         {@bans[@current_user.pubky]}
-                      </.badge>
+                      </span>
                       <span>Your messages stay on your homeserver; they are hidden here.</span>
                     </span>
                   </div>
@@ -1990,9 +1990,7 @@ defmodule PubkyRoomsWeb.RoomLive do
             <span class="truncate text-sm font-semibold text-muted-foreground">
               {profile_of(@profiles, z32).name}
             </span>
-            <span :if={reason} class="truncate text-xs text-muted-foreground" title={reason}>
-              {reason}
-            </span>
+            <span :if={reason} class="text-xs break-words text-muted-foreground">{reason}</span>
           </span>
           <.button
             :if={@is_creator}
