@@ -1357,7 +1357,7 @@ defmodule PubkyRoomsWeb.RoomLive do
               phx-update="stream"
               phx-hook="ScrollToBottom"
               data-has-more={to_string(@has_more)}
-              class="flex flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto px-4 py-4 sm:px-6"
+              class="flex flex-1 flex-col overflow-x-hidden overflow-y-auto px-2 py-3 sm:px-4"
               aria-live="polite"
             >
               <div
@@ -1372,7 +1372,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                   class="text-muted-foreground"
                 >
                   <.spinner :if={@loading_older} class="size-4" />
-                  <.icon :if={!@loading_older} name="lucide-history" class="size-4" />
+                  <.icon :if={!@loading_older} name="lucide-clock-arrow-up" class="size-4" />
                   {if @loading_older, do: "Loading earlier messages…", else: "Load earlier messages"}
                 </.button>
               </div>
@@ -2200,31 +2200,52 @@ defmodule PubkyRoomsWeb.RoomLive do
     doc: "nil | :unavailable | {:missing, id} | %{id, name, content}"
 
   defp message_row(assigns) do
+    assigns =
+      assign(assigns,
+        actions?: assigns.msg.state == :confirmed and (assigns.can_reply or assigns.can_edit)
+      )
+
     ~H"""
     <article
       id={@id}
-      class="group relative flex gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-white/[0.03]"
+      class="group relative flex gap-2.5 rounded-md px-2 py-1 transition-colors hover:bg-white/[0.03]"
     >
+      <button
+        :if={@actions?}
+        type="button"
+        phx-click={JS.toggle_class("max-sm:hidden", to: "##{@id}-actions")}
+        class="absolute top-0.5 right-1 flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground/70 hover:bg-white/10 hover:text-foreground sm:hidden"
+        aria-label="More actions"
+        aria-controls={"#{@id}-actions"}
+      >
+        <.icon name="lucide-ellipsis" class="size-4" />
+      </button>
       <div
-        :if={@msg.state == :confirmed and (@can_reply or @can_edit)}
-        class="absolute -top-3 right-2 flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5 shadow-xs sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+        :if={@actions?}
+        id={"#{@id}-actions"}
+        class="absolute -top-3 right-2 z-10 flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5 shadow-xs max-sm:hidden sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
       >
         <button
           :if={@can_reply}
           type="button"
-          phx-click={JS.toggle(to: "##{@id}-palette")}
+          phx-click={
+            JS.toggle(to: "##{@id}-palette")
+            |> JS.add_class("max-sm:hidden", to: "##{@id}-actions")
+          }
           class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
           aria-label="React"
           title="React"
           aria-controls={"#{@id}-palette"}
         >
-          <.icon name="lucide-smile-plus" class="size-4" />
+          <.icon name="lucide-face-slightly-smiling-plus" class="size-4" />
         </button>
         <button
           :if={@can_reply}
           type="button"
-          phx-click="reply"
-          phx-value-id={@id}
+          phx-click={
+            JS.push("reply", value: %{id: @id})
+            |> JS.add_class("max-sm:hidden", to: "##{@id}-actions")
+          }
           class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
           aria-label="Reply"
           title="Reply"
@@ -2234,8 +2255,10 @@ defmodule PubkyRoomsWeb.RoomLive do
         <button
           :if={@can_edit}
           type="button"
-          phx-click="edit"
-          phx-value-id={@id}
+          phx-click={
+            JS.push("edit", value: %{id: @id})
+            |> JS.add_class("max-sm:hidden", to: "##{@id}-actions")
+          }
           class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
           aria-label="Edit"
           title="Edit"
@@ -2245,72 +2268,97 @@ defmodule PubkyRoomsWeb.RoomLive do
         <button
           :if={@can_edit}
           type="button"
-          phx-click="delete"
-          phx-value-id={@id}
+          phx-click={
+            JS.push("delete", value: %{id: @id})
+            |> JS.add_class("max-sm:hidden", to: "##{@id}-actions")
+          }
           data-confirm="Delete this message from your homeserver?"
           class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/20 hover:text-destructive"
           aria-label="Delete"
           title="Delete"
         >
-          <.icon name="lucide-trash-2" class="size-4" />
+          <.icon name="lucide-trash" class="size-4" />
         </button>
       </div>
       <.avatar
         src={@profile.avatar_url}
         name={@profile.name}
         pubky={@msg.author}
-        size="default"
+        size="md"
         class="mt-0.5"
       />
-      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div class="flex items-baseline gap-2">
-          <span class="truncate text-sm font-bold leading-5">{@profile.name}</span>
+      <div class="flex min-w-0 flex-1 flex-col">
+        <div class="flex min-w-0 items-baseline gap-x-2 pr-8 sm:pr-0">
+          <span class="truncate text-sm font-semibold leading-5">{@profile.name}</span>
           <time
             datetime={Format.iso(@msg.created_at)}
-            class="text-xs text-muted-foreground"
+            class="shrink-0 text-[11px] text-muted-foreground"
             title={Format.iso(@msg.created_at)}
           >
             {Format.clock(@msg.created_at)}
           </time>
-          <span :if={@msg.edited_at} class="text-xs text-muted-foreground">(edited)</span>
+          <span :if={@msg.edited_at} class="shrink-0 text-[11px] text-muted-foreground">(edited)</span>
+          <span
+            :if={@own and @msg.state == :pending}
+            class="tooltip inline-flex shrink-0 self-center text-muted-foreground"
+            data-tip="Sending to your homeserver…"
+          >
+            <.icon name="lucide-clock" class="size-3" />
+          </span>
+          <span
+            :if={@own and @msg.state == :confirmed}
+            class="tooltip inline-flex shrink-0 self-center text-brand/80"
+            data-tip="Stored on your homeserver"
+          >
+            <.icon name="lucide-check" class="size-3" />
+          </span>
+          <span
+            :if={@own and @msg.state == :failed}
+            class="inline-flex shrink-0 self-center text-destructive"
+          >
+            <.icon name="lucide-circle-x" class="size-3" />
+          </span>
         </div>
         <button
           :if={is_map(@quote)}
           type="button"
           phx-click="jump"
           phx-value-id={@quote.id}
-          class="mb-0.5 flex min-w-0 max-w-full cursor-pointer flex-col items-start gap-0.5 border-l-2 border-brand/60 pl-2 text-left text-xs text-muted-foreground hover:text-secondary-foreground"
+          class="mt-0.5 mb-1 flex min-w-0 max-w-full cursor-pointer items-baseline gap-1.5 border-l-2 border-brand/60 pl-2 text-left text-xs text-muted-foreground hover:text-secondary-foreground"
           title="Show the original message"
         >
-          <span class="font-semibold">{@quote.name}</span>
-          <span class="max-w-full truncate">{@quote.content}</span>
+          <span class="shrink-0 font-semibold">{@quote.name}</span>
+          <span class="min-w-0 truncate">{@quote.content}</span>
         </button>
         <button
           :if={match?({:missing, _}, @quote)}
           type="button"
           phx-click="jump"
           phx-value-id={elem(@quote, 1)}
-          class="mb-0.5 flex cursor-pointer items-center gap-1 border-l-2 border-border pl-2 text-xs italic text-muted-foreground hover:text-secondary-foreground"
+          class="mt-0.5 mb-1 flex cursor-pointer items-center gap-1 border-l-2 border-border pl-2 text-xs italic text-muted-foreground hover:text-secondary-foreground"
           title="Load earlier messages up to the original"
         >
-          <.icon name="lucide-history" class="size-3" /> Replying to an earlier message — show it
+          <.icon name="lucide-clock-arrow-up" class="size-3" />
+          Replying to an earlier message — show it
         </button>
         <span
           :if={@quote == :unavailable}
-          class="mb-0.5 border-l-2 border-border pl-2 text-xs italic text-muted-foreground"
+          class="mt-0.5 mb-1 border-l-2 border-border pl-2 text-xs italic text-muted-foreground"
         >
           Replying to a message that is no longer available
         </span>
-        <p class={[
-          "whitespace-pre-wrap break-words text-base text-secondary-foreground",
-          @msg.state == :pending && "opacity-60"
-        ]}>
-          <Linkify.linkify text={@msg.content} />
-        </p>
+        <%!-- pre-wrap renders template whitespace, so the text hugs its tags --%>
+        <p
+          phx-no-format
+          class={[
+            "whitespace-pre-wrap break-words text-sm leading-5 text-secondary-foreground",
+            @msg.state == :pending && "opacity-60"
+          ]}
+        ><Linkify.linkify text={@msg.content} /></p>
         <div
           :if={@can_reply}
           id={"#{@id}-palette"}
-          class="mt-1 hidden flex-wrap gap-1"
+          class="mt-1 hidden flex-wrap gap-0.5"
           phx-click-away={JS.hide(to: "##{@id}-palette")}
           role="group"
           aria-label="Choose a reaction"
@@ -2321,13 +2369,13 @@ defmodule PubkyRoomsWeb.RoomLive do
             phx-click={
               JS.push("react", value: %{id: @id, key: key}) |> JS.hide(to: "##{@id}-palette")
             }
-            class="flex size-8 cursor-pointer items-center justify-center rounded-full text-lg hover:bg-white/10"
+            class="flex size-7 cursor-pointer items-center justify-center rounded-full text-base hover:bg-white/10"
             aria-label={"React with #{key}"}
           >
             {emoji}
           </button>
         </div>
-        <div :if={@msg.reactions != %{}} class="mt-1 flex flex-wrap gap-1.5">
+        <div :if={@msg.reactions != %{}} class="mt-1 flex flex-wrap gap-1">
           <button
             :for={{key, reactors} <- Enum.sort_by(@msg.reactions, &elem(&1, 0))}
             type="button"
@@ -2335,7 +2383,7 @@ defmodule PubkyRoomsWeb.RoomLive do
             disabled={!@can_reply}
             aria-pressed={to_string(@viewer != nil and MapSet.member?(reactors, @viewer))}
             class={[
-              "flex h-7 items-center gap-1 rounded-full border px-2 text-xs transition-colors",
+              "flex h-6 items-center gap-1 rounded-full border px-1.5 text-[11px] transition-colors",
               @can_reply && "cursor-pointer hover:bg-white/10",
               if(@viewer != nil and MapSet.member?(reactors, @viewer),
                 do: "border-brand/60 bg-brand/15 text-foreground",
@@ -2358,25 +2406,6 @@ defmodule PubkyRoomsWeb.RoomLive do
           <.button variant="destructive-soft" size="sm" phx-click="retry" phx-value-id={@id}>Retry</.button>
           <.button variant="ghost" size="sm" phx-click="discard" phx-value-id={@id}>Discard</.button>
         </div>
-      </div>
-      <div :if={@own} class="flex shrink-0 items-start pt-1">
-        <span
-          :if={@msg.state == :pending}
-          class="tooltip text-muted-foreground"
-          data-tip="Sending to your homeserver…"
-        >
-          <.icon name="lucide-clock" class="size-4" />
-        </span>
-        <span
-          :if={@msg.state == :confirmed}
-          class="tooltip text-brand"
-          data-tip="Stored on your homeserver"
-        >
-          <.icon name="lucide-circle-check" class="size-4" />
-        </span>
-        <span :if={@msg.state == :failed} class="text-destructive">
-          <.icon name="lucide-circle-x" class="size-4" />
-        </span>
       </div>
     </article>
     """

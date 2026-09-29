@@ -168,6 +168,8 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     html = wait_for(fn -> render(view) end, &(&1 =~ "Stored on your homeserver"))
     assert html =~ "hello sovereign world"
     refute html =~ "Sending to your homeserver"
+    # pre-wrap text hugs its tags: no template newline rendered as a blank line
+    assert html =~ ~r/<p[^>]*whitespace-pre-wrap[^>]*>hello sovereign world<\/p>/
 
     assert [%Message{content: "hello sovereign world"}] =
              messages_on_homeserver(ctx.alice, ctx.room)
@@ -350,6 +352,18 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     wait_for(fn -> render(view) end, &(&1 =~ "Stored on your homeserver"))
     [%Message{} = stored] = messages_on_homeserver(ctx.alice, ctx.room)
     id = "msg-#{ctx.alice}-#{stored.msg_id}"
+
+    # the actions pill (hover from sm, behind a "More actions" toggle below)
+    # exists for the author and not for a visitor who can do nothing
+    assert has_element?(view, "##{id}-actions")
+
+    assert has_element?(
+             view,
+             "##{id} button[aria-label='More actions'][aria-controls='#{id}-actions']"
+           )
+
+    refute has_element?(anon, "##{id}-actions")
+    refute has_element?(anon, "##{id} button[aria-label='More actions']")
 
     # edit: the composer switches to edit mode with the text, the same file is overwritten
     view |> element("##{id} button[aria-label=Edit]") |> render_click()

@@ -139,8 +139,10 @@ defmodule PubkyRoomsWeb.Dev.StyleguideLive do
                   Every message here is a file on my homeserver. This client only relays it.
                 </p>
                 <div class="flex items-center justify-end gap-2">
-                  <.button variant="outline" size="sm"><.icon name="lucide-smile-plus" class="size-4" />
-                  3</.button>
+                  <.button variant="outline" size="sm"><.icon
+                    name="lucide-face-slightly-smiling-plus"
+                    class="size-4"
+                  /> 3</.button>
                   <.button variant="outline" size="sm"><.icon name="lucide-reply" class="size-4" /></.button>
                   <.button variant="outline" size="icon" aria-label="More"><.icon
                     name="lucide-ellipsis"
