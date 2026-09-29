@@ -1982,13 +1982,12 @@ defmodule PubkyRoomsWeb.RoomLive do
             {@room.topic}
           </p>
         </div>
-        <.badge
+        <span
           :if={@room && @room.visibility == "unlisted" && @status != :closed}
-          variant="muted"
-          class="hidden sm:inline-flex"
+          class="hidden items-center gap-1 px-2 py-0.5 text-xs font-medium sm:inline-flex"
         >
           <.icon name="lucide-link" class="size-3" /> Unlisted
-        </.badge>
+        </span>
         <.badge :if={@status == :closed} id="closed-badge" variant="destructive-soft">
           <.icon name="lucide-door-closed" class="size-3" /> Closed
         </.badge>

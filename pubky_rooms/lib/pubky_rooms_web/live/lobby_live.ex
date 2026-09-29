@@ -637,12 +637,12 @@ defmodule PubkyRoomsWeb.LobbyLive do
             <.badge :if={Room.closed?(@room)} variant="destructive-soft">
               <.icon name="lucide-door-closed" class="size-3" /> Closed
             </.badge>
-            <.badge
+            <span
               :if={@room.visibility == "unlisted" and not Room.closed?(@room)}
-              variant="muted"
+              class="inline-flex shrink-0 items-center gap-1 px-2 py-0.5 text-xs font-medium"
             >
               <.icon name="lucide-link" class="size-3" /> Unlisted
-            </.badge>
+            </span>
           </div>
           <.card_description :if={@room.topic} class="line-clamp-2">{@room.topic}</.card_description>
           <div :if={@tags != []} class="flex flex-wrap items-center gap-1.5 pt-1">

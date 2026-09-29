@@ -1,10 +1,5 @@
 defmodule PubkyRoomsWeb.UI.Badge do
-  @moduledoc """
-  Small rounded labels for counts and statuses.
-
-  `muted` is the quietest one (a light white tint, secondary text, no border) for
-  facts that should not compete with the title next to them, such as Unlisted.
-  """
+  @moduledoc "Small rounded labels for counts and statuses."
   use Phoenix.Component
 
   # Every variant names its own border colour: the base class only sets the
@@ -17,8 +12,7 @@ defmodule PubkyRoomsWeb.UI.Badge do
     "brand-soft" => "bg-brand/16 text-brand border-brand/40",
     "destructive" => "bg-destructive text-white border-transparent",
     "destructive-soft" => "bg-destructive/16 text-destructive border-destructive/40",
-    "outline" => "border-border text-foreground",
-    "muted" => "bg-white/10 text-secondary-foreground border-transparent"
+    "outline" => "border-border text-foreground"
   }
 
   @doc """
