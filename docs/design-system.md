@@ -30,7 +30,7 @@ https://pubky.app. Reference data: `docs/notes/pubky-app-design-system.md`, `doc
 | `<.fab navigate label />` | 80px translucent circle, lime on hover; in the library for Pubky App parity, not used by any page (the lobby dropped it on 2026-09-22: opening a room is not a frequent action and the header, sidebar and tab bar already offer it) |
 | `<.avatar src name pubky size online>` | xs…2xl; generative fallback (signal-color disc + initial), hides broken images; `online` adds the lime presence dot |
 | `<.card variant>` + `card_header/title/description/content/footer` | default (`rounded-xl py-6`), post (`rounded-md py-0`), flat |
-| `<.badge variant>` | default, secondary, brand, brand-soft, destructive, destructive-soft, outline |
+| `<.badge variant>` | default, secondary, brand, brand-soft, destructive, destructive-soft, outline, muted (faint tint, no border: Unlisted) |
 | `<.tag label count selected size static>` | Pubky App tag chip; color from `PubkyRooms.Tags.Color` (exact port of the App's hash); `size="sm"` for cards/headers, `static` renders a span (inside links) |
 | `<Linkify.linkify text>` | message text with `http(s)` URLs linked safely (escaped segments, `noopener noreferrer nofollow ugc`, new tab); adds no whitespace |
 | `<.input field type label hint>` | text/email/…/textarea (`variant="inline"` for composers)/select/checkbox/hidden; `<.label>`, `<.error>` |

@@ -639,7 +639,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
             </.badge>
             <.badge
               :if={@room.visibility == "unlisted" and not Room.closed?(@room)}
-              variant="secondary"
+              variant="muted"
             >
               <.icon name="lucide-link" class="size-3" /> Unlisted
             </.badge>

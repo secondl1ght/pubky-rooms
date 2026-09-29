@@ -95,6 +95,7 @@ defmodule PubkyRoomsWeb.Dev.StyleguideLive do
               <.icon name="lucide-door-closed" class="size-3" /> closed
             </.badge>
             <.badge variant="outline">outline</.badge>
+            <.badge variant="muted">muted</.badge>
           </div>
           <div class="flex flex-wrap items-center gap-3">
             <.avatar name="Satoshi" pubky="ihaqcth" size="xs" />

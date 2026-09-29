@@ -26,7 +26,7 @@ defmodule PubkyRoomsWeb.UI.BadgeTest do
   end
 
   test "filled variants hide their border" do
-    for variant <- ["default", "secondary", "brand", "destructive"] do
+    for variant <- ["default", "secondary", "brand", "destructive", "muted"] do
       assert badge(variant) =~ "border-transparent", variant
     end
   end
