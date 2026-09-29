@@ -868,7 +868,7 @@ defmodule PubkyRoomsWeb.RoomLive do
     {:noreply,
      socket
      |> assign(saving: false, room: room, page_title: room.name)
-     |> put_flash(:success, "Room updated on your homeserver.")
+     |> put_flash(:success, "Room updated.")
      |> push_patch(to: room_path(socket))}
   end
 
@@ -1307,6 +1307,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           :if={@room && (@tags != [] or can_tag?(assigns))}
           tags={@tags}
           viewer={@current_user && @current_user.pubky}
+          creator={@creator}
           writer={can_tag?(assigns)}
           remover={can_write?(assigns)}
           suggestions={@tag_suggestions}
@@ -2097,13 +2098,15 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   attr :tags, :list, required: true, doc: "`Directory.tags_of/1` result"
   attr :viewer, :string, default: nil, doc: "marks the viewer's own tags"
+  attr :creator, :string, default: nil, doc: "the creator keeps the automatic label"
   attr :writer, :boolean, default: false, doc: "whether the viewer may add tags"
   attr :remover, :boolean, default: false, doc: "whether the viewer may remove their own tags"
   attr :suggestions, :list, default: [], doc: "labels offered by the tag input"
 
   # Universal tags on the room: click to add or remove your own; the tag input
   # (same one as the create dialog) adds a new label. Anonymous viewers just
-  # see them; on an unlisted room only removing your own tag is possible.
+  # see them; on an unlisted room only removing your own tag is possible; the
+  # creator's automatic "room" label is fixed (the server refuses too).
   defp tag_row(assigns) do
     ~H"""
     <div id="room-tags" class="flex flex-wrap items-center gap-1.5">
@@ -2113,10 +2116,19 @@ defmodule PubkyRoomsWeb.RoomLive do
         count={t.count}
         size="sm"
         selected={@viewer != nil and @viewer in t.taggers}
-        disabled={not (@writer or (@remover and @viewer != nil and @viewer in t.taggers))}
+        disabled={
+          fixed_tag?(t, @viewer, @creator) or
+            not (@writer or (@remover and @viewer != nil and @viewer in t.taggers))
+        }
         phx-click="toggle_tag"
         phx-value-label={t.label}
-        title={if @viewer in t.taggers, do: "Remove your tag", else: "Tag this room too"}
+        title={
+          cond do
+            fixed_tag?(t, @viewer, @creator) -> "Added automatically"
+            @viewer in t.taggers -> "Remove your tag"
+            true -> "Tag this room too"
+          end
+        }
       />
       <.tag_input
         :if={@writer}
@@ -2128,6 +2140,9 @@ defmodule PubkyRoomsWeb.RoomLive do
     </div>
     """
   end
+
+  defp fixed_tag?(%{label: label, taggers: taggers}, viewer, creator),
+    do: viewer != nil and viewer == creator and label == Tag.auto_label() and viewer in taggers
 
   attr :mode, :any, required: true, doc: ":new | {:reply, msg} | {:edit, msg}"
   attr :profiles, :map, required: true

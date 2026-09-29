@@ -113,14 +113,24 @@ defmodule PubkyRooms.Rooms do
   defp listed?(%Room{visibility: "unlisted"}), do: false
   defp listed?(_room), do: true
 
-  @doc "Removes the user's own tag from a room (already gone counts as done)."
+  @doc """
+  Removes the user's own tag from a room (already gone counts as done). The
+  creator's automatic `room` label stays while the room is listed: it is what
+  makes the room discoverable, and unlisting removes it.
+  """
   @spec untag_room(sid(), String.t(), Paths.room_ref(), String.t()) ::
           :ok | {:error, String.t() | Pubky.reason()}
-  def untag_room(sid, user, ref, label) do
-    with {:ok, label} <- Tag.normalize(label) do
+  def untag_room(sid, user, {creator, _id} = ref, label) do
+    with {:ok, label} <- Tag.normalize(label),
+         true <-
+           not auto_label_of_creator?(user, creator, label, ref) ||
+             {:error, "Listed rooms keep their room tag."} do
       delete_tags(sid, user, ref, [label])
     end
   end
+
+  defp auto_label_of_creator?(user, creator, label, ref),
+    do: user == creator and label == Tag.auto_label() and listed?(Directory.get(ref))
 
   @doc """
   Updates a room's name, topic or visibility: the creator overwrites the room

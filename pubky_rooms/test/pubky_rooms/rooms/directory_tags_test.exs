@@ -112,6 +112,15 @@ defmodule PubkyRooms.Rooms.DirectoryTagsTest do
     refute Map.has_key?(Fake.files(bob), Tag.path(uri, "lightning"))
     refute Directory.tagged_by?(ref, "lightning", bob)
 
+    # the creator cannot drop the automatic label while the room is listed;
+    # bob, who tagged "room" too, can drop his own
+    assert {:error, "Listed rooms keep their room tag."} =
+             Rooms.untag_room(sid, alice, ref, "room")
+
+    assert Directory.own_tags(ref, alice) == ["room"]
+    assert {:ok, "room"} = Rooms.tag_room(bob_sid, bob, ref, "room")
+    assert :ok = Rooms.untag_room(bob_sid, bob, ref, "room")
+
     # unlisting removes the creator's tags; bob's stay (they are his files) but
     # nobody can add new ones; relisting restores "room"
     assert {:ok, "lightning"} = Rooms.tag_room(bob_sid, bob, ref, "lightning")

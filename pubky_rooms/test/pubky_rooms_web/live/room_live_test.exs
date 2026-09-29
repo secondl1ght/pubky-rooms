@@ -839,6 +839,16 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert html =~ ~r/<button[^>]*disabled[^>]*phx-value-label="room"/
     refute has_element?(anon, "#room-tag-input")
 
+    # the creator's own "room" chip is fixed: disabled, explained, and the
+    # server keeps the file even if the event is forced
+    {:ok, alice_view, alice_html} = live(ctx.alice_conn, ctx.path)
+    assert alice_html =~ ~r/<button[^>]*disabled[^>]*phx-value-label="room"/
+    assert alice_html =~ ~s(title="Added automatically")
+    render_click(alice_view, "toggle_tag", %{"label" => "room"})
+    render_async(alice_view)
+    assert Map.has_key?(Fake.files(ctx.alice), Tag.path(uri, "room"))
+    assert render(alice_view) =~ "Listed rooms keep their room tag."
+
     # bob (not even a member) adds a tag and joins alice on "room"
     {:ok, bob_view, _} = live(bob_conn, ctx.path)
     assert has_element?(bob_view, "#room-tag-input")
