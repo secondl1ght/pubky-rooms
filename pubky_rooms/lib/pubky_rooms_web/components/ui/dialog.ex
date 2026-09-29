@@ -123,9 +123,10 @@ defmodule PubkyRoomsWeb.UI.Dialog do
   @spec show_dialog(JS.t(), String.t()) :: JS.t()
   def show_dialog(js \\ %JS{}, id) when is_binary(id) do
     js
-    |> JS.show(to: "##{id}")
+    |> JS.show(to: "##{id}", display: "block")
     |> JS.show(
       to: "##{id}-bg",
+      display: "block",
       time: 200,
       transition: {"transition-opacity ease-out duration-200", "opacity-0", "opacity-100"}
     )

@@ -2240,7 +2240,7 @@ defmodule PubkyRoomsWeb.RoomLive do
             :if={@can_reply}
             type="button"
             phx-click={
-              JS.toggle(to: "##{@id}-palette")
+              JS.toggle(to: "##{@id}-palette", display: "flex")
               |> JS.add_class("max-sm:hidden", to: "##{@id}-actions")
             }
             class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"

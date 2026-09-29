@@ -366,6 +366,8 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
 
     refute has_element?(anon, "##{id}-actions")
     refute has_element?(anon, "##{id} button[aria-label='More actions']")
+    # the reaction palette is a flex row: JS.toggle must reveal it as flex, not block
+    assert has_element?(view, ~s(##{id} button[aria-label=React][phx-click*='"display":"flex"']))
     # toggle and pill share a wrapper whose click-away closes the pill on phones
     assert has_element?(view, "##{id}-menu[phx-click-away*='#{id}-actions']")
 
