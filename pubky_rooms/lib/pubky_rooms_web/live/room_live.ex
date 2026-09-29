@@ -1812,14 +1812,6 @@ defmodule PubkyRoomsWeb.RoomLive do
         >
           <.icon name="lucide-timer" class="size-4" />
         </span>
-        <span
-          :if={@mutes_known and MapSet.member?(@muted, z32)}
-          class="tooltip text-muted-foreground"
-          data-tip={mute_label(@app_muted, z32)}
-          aria-label={mute_label(@app_muted, z32)}
-        >
-          <.icon name="lucide-volume-x" class="size-4" />
-        </span>
         <.member_actions
           :if={@current_user && @current_user.pubky != z32}
           z32={z32}
@@ -1930,9 +1922,6 @@ defmodule PubkyRoomsWeb.RoomLive do
   defp anonymous_label(1), do: "1 anonymous viewer"
   defp anonymous_label(n), do: "#{n} anonymous viewers"
 
-  defp mute_label(app_muted, z32),
-    do: if(MapSet.member?(app_muted, z32), do: "Muted in Pubky App", else: "Muted for you")
-
   attr :z32, :string, required: true
   attr :muted, :boolean, required: true
   attr :app_muted, :boolean, default: false, doc: "muted through Pubky App (read-only here)"
@@ -1940,28 +1929,57 @@ defmodule PubkyRoomsWeb.RoomLive do
   attr :can_ban, :boolean, required: true
   attr :busy, :boolean, default: false
 
-  # Per-member actions, revealed on hover/focus of the row.
+  @hover_only "sm:opacity-0 sm:group-hover/member:opacity-100 sm:group-focus-within/member:opacity-100"
+
+  # Per-member actions, revealed on hover/focus of the row. The mute control is
+  # both the state and the action: a muted member's button stays visible in its
+  # "on" look and unmutes on click; a mute made in Pubky App is shown the same
+  # way but is read-only here.
   defp member_actions(assigns) do
+    assigns = assign(assigns, hover_only: @hover_only)
+
     ~H"""
-    <span class="flex shrink-0 items-center gap-0.5 sm:opacity-0 sm:group-hover/member:opacity-100 sm:group-focus-within/member:opacity-100">
+    <span class="flex shrink-0 items-center gap-0.5">
       <button
         :if={@mutes_known and !@app_muted}
         type="button"
         phx-click={if @muted, do: "unmute", else: "mute"}
         phx-value-z32={@z32}
-        class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
+        class={[
+          "flex size-7 cursor-pointer items-center justify-center rounded-full",
+          if(@muted,
+            do: "bg-white/10 text-foreground hover:bg-white/15",
+            else: [@hover_only, "text-muted-foreground hover:bg-white/10 hover:text-foreground"]
+          )
+        ]}
+        aria-pressed={to_string(@muted)}
         aria-label={if @muted, do: "Unmute", else: "Mute for me"}
-        title={if @muted, do: "Unmute", else: "Mute for me (saved to your homeserver, all devices)"}
+        title={
+          if @muted,
+            do: "Muted for you (click to unmute)",
+            else: "Mute for me (saved to your homeserver, all devices)"
+        }
       >
-        <.icon name={if @muted, do: "lucide-volume-2", else: "lucide-volume-x"} class="size-4" />
+        <.icon name="lucide-volume-x" class="size-4" />
       </button>
+      <span
+        :if={@mutes_known and @app_muted}
+        class="tooltip flex size-7 items-center justify-center rounded-full bg-white/10 text-muted-foreground"
+        data-tip="Muted in Pubky App"
+        aria-label="Muted in Pubky App"
+      >
+        <.icon name="lucide-volume-x" class="size-4" />
+      </span>
       <button
         :if={@can_ban}
         type="button"
         phx-click="start_ban"
         phx-value-z32={@z32}
         disabled={@busy}
-        class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/20 hover:text-destructive"
+        class={[
+          @hover_only,
+          "flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/20 hover:text-destructive"
+        ]}
         aria-label="Remove from room"
         title="Remove from room"
       >
