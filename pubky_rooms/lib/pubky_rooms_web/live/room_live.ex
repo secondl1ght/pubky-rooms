@@ -2291,6 +2291,27 @@ defmodule PubkyRoomsWeb.RoomLive do
             <.icon name="lucide-trash" class="size-4" />
           </button>
         </div>
+        <%!-- the palette pops out under the pill, where the click happened --%>
+        <div
+          :if={@can_reply}
+          id={"#{@id}-palette"}
+          class="absolute top-[22px] right-0 z-20 hidden items-center gap-0.5 rounded-full border border-border bg-card p-1 shadow-md"
+          phx-click-away={JS.hide(to: "##{@id}-palette")}
+          role="group"
+          aria-label="Choose a reaction"
+        >
+          <button
+            :for={{key, emoji} <- Reaction.palette()}
+            type="button"
+            phx-click={
+              JS.push("react", value: %{id: @id, key: key}) |> JS.hide(to: "##{@id}-palette")
+            }
+            class="flex size-7 cursor-pointer items-center justify-center rounded-full text-base hover:bg-white/10"
+            aria-label={"React with #{key}"}
+          >
+            {emoji}
+          </button>
+        </div>
       </div>
       <.avatar
         src={@profile.avatar_url}
@@ -2367,26 +2388,6 @@ defmodule PubkyRoomsWeb.RoomLive do
             @msg.state == :pending && "opacity-60"
           ]}
         ><Linkify.linkify text={@msg.content} /></p>
-        <div
-          :if={@can_reply}
-          id={"#{@id}-palette"}
-          class="mt-1 hidden flex-wrap gap-0.5"
-          phx-click-away={JS.hide(to: "##{@id}-palette")}
-          role="group"
-          aria-label="Choose a reaction"
-        >
-          <button
-            :for={{key, emoji} <- Reaction.palette()}
-            type="button"
-            phx-click={
-              JS.push("react", value: %{id: @id, key: key}) |> JS.hide(to: "##{@id}-palette")
-            }
-            class="flex size-7 cursor-pointer items-center justify-center rounded-full text-base hover:bg-white/10"
-            aria-label={"React with #{key}"}
-          >
-            {emoji}
-          </button>
-        </div>
         <div :if={@msg.reactions != %{}} class="mt-1 flex flex-wrap gap-1">
           <button
             :for={{key, reactors} <- Enum.sort_by(@msg.reactions, &elem(&1, 0))}
