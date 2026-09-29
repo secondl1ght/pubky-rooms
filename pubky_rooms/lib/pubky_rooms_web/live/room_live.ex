@@ -1302,11 +1302,11 @@ defmodule PubkyRoomsWeb.RoomLive do
           <div class="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-card">
             <div
               :if={@unreachable != []}
-              class="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-destructive/16 px-4 py-2 text-sm text-secondary-foreground"
+              class="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-4 py-1.5 text-xs text-muted-foreground"
               role="status"
             >
               <span class="flex items-center gap-2">
-                <.icon name="lucide-cloud-off" class="size-4 text-destructive" />
+                <.icon name="lucide-cloud-off" class="size-3.5 shrink-0 text-destructive" />
                 History from {length(@unreachable)}
                 {if length(@unreachable) == 1, do: "member", else: "members"} could not be loaded from their homeserver.
               </span>
