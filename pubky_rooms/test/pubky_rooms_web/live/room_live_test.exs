@@ -340,6 +340,13 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert html =~ ~r/id="messages-top" class="[^"]*hidden/
   end
 
+  # the rows with these ids appear in this order (by their <article> tags)
+  defp row_order(html, ids) do
+    shown = Regex.scan(~r/<article[^>]*\sid="(msg-[^"]+)"/, html) |> Enum.map(&List.last/1)
+    positions = Enum.map(ids, &Enum.find_index(shown, fn id -> id == &1 end))
+    Enum.all?(positions) and positions == Enum.sort(positions)
+  end
+
   defp ordered?(html, needles) do
     positions = Enum.map(needles, fn n -> :binary.match(html, n) |> elem(0) end)
     positions == Enum.sort(positions)
@@ -457,8 +464,9 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert has_element?(bob_view, "##{bob_id} button[aria-label=Edit]")
     html = wait_for(fn -> render(alice_view) end, &(&1 =~ "from bob"))
     # the backfilled row goes back to its place in time, not to the bottom
-    assert ordered?(html, ["from alice", "from bob", "answering bob"])
-    assert ordered?(render(bob_view), ["from alice", "from bob", "answering bob"])
+    rows = [alice_id, bob_id, answer]
+    assert row_order(html, rows)
+    assert row_order(render(bob_view), rows)
     # …and the quote is back without a reload
     assert wait_for(
              fn ->
@@ -701,10 +709,19 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     refute Fake.files(bob) |> Map.keys() |> Enum.any?(&String.contains?(&1, "/reactions/"))
     refute render(alice_view) =~ "is typing"
 
+    # something newer lands while bob is out; his restored rows must go back
+    # above it, not to the bottom
+    alice_view |> form("#composer", message: %{content: "said during the ban"}) |> render_submit()
+    render_async(alice_view)
+    wait_for(fn -> render(bob_view) end, &(&1 =~ "said during the ban"))
+
     alice_view |> element("#banned-#{bob} button", "Restore") |> render_click()
     render_async(alice_view)
     wait_for(fn -> render(bob_view) end, &has_composer?/1)
-    assert wait_for(fn -> render(alice_view) end, &(&1 =~ "bob speaks"))
+    html = wait_for(fn -> render(alice_view) end, &(&1 =~ "bob speaks"))
+    assert ordered?(html, ["bob speaks", "said during the ban"])
+    html = wait_for(fn -> render(bob_view) end, &(&1 =~ "bob speaks"))
+    assert ordered?(html, ["bob speaks", "said during the ban"])
   end
 
   test "muting hides an author's messages everywhere the viewer is signed in and is saved on their homeserver",
@@ -743,12 +760,19 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     refute render(fresh) =~ "first from bob"
     assert render(fresh) =~ "Muted for you"
 
+    # alice writes while bob is muted; unmuting puts his rows back in time order
+    alice_view |> form("#composer", message: %{content: "while bob was muted"}) |> render_submit()
+    render_async(alice_view)
+    wait_for(fn -> render(alice_view) end, &(&1 =~ "while bob was muted"))
+
     alice_view |> element("#member-#{bob} button[aria-label=Unmute]") |> render_click()
     render_async(alice_view)
     html = wait_for(fn -> render(alice_view) end, &(&1 =~ "second from bob"))
     assert html =~ "first from bob"
+    assert ordered?(html, ["first from bob", "second from bob", "while bob was muted"])
     assert wait_for(fn -> Fake.files(ctx.alice) end, &(not Map.has_key?(&1, Paths.mute(bob))))
-    assert wait_for(fn -> render(other_tab) end, &(&1 =~ "second from bob"))
+    html = wait_for(fn -> render(other_tab) end, &(&1 =~ "second from bob"))
+    assert ordered?(html, ["first from bob", "second from bob", "while bob was muted"])
   end
 
   test "a quote of a message outside the loaded window loads earlier pages and then jumps to it",
