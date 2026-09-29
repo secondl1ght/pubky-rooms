@@ -383,7 +383,15 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   # ── events from the browser ────────────────────────────────────────────────
 
+  # Typing after a rejected send clears the error; otherwise a change is a no-op
+  # (the typing indicator has its own throttled event from the hook).
   @impl true
+  def handle_event("compose", _params, %{assigns: %{composer: %{errors: []}}} = socket),
+    do: {:noreply, socket}
+
+  def handle_event("compose", %{"message" => %{"content" => content}}, socket),
+    do: {:noreply, assign(socket, composer: composer_form(content))}
+
   def handle_event("send", %{"message" => %{"content" => content}}, socket) do
     %{current_user: user, sid: sid, ref: ref} = socket.assigns
 
@@ -1446,7 +1454,14 @@ defmodule PubkyRoomsWeb.RoomLive do
                     </.button>
                   </div>
                 <% true -> %>
-                  <.form for={@composer} id="composer" phx-submit="send" class="flex flex-col gap-2">
+                  <.form
+                    for={@composer}
+                    id="composer"
+                    phx-submit="send"
+                    phx-change="compose"
+                    phx-throttle="500"
+                    class="flex flex-col gap-2"
+                  >
                     <.composer_context mode={@composer_mode} profiles={@profiles} />
                     <div
                       id="composer-box"
@@ -1482,7 +1497,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                         aria-label="Send"
                         disabled={@status != :ready}
                       >
-                        <.icon name="lucide-send" class="size-4" />
+                        <.icon name="lucide-corner-down-left" class="size-4" />
                       </.button>
                     </div>
                     <p class="flex flex-wrap items-center gap-1.5 px-1 text-xs text-muted-foreground">
@@ -1997,7 +2012,8 @@ defmodule PubkyRoomsWeb.RoomLive do
         </div>
         <span
           :if={@room && @room.visibility == "unlisted" && @status != :closed}
-          class="hidden items-center gap-1 px-2 py-0.5 text-xs font-medium sm:inline-flex"
+          id="unlisted-label"
+          class="inline-flex shrink-0 items-center gap-1 px-2 py-0.5 text-xs font-medium"
         >
           <.icon name="lucide-link" class="size-3" /> Unlisted
         </span>

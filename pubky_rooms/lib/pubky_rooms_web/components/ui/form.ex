@@ -147,7 +147,7 @@ defmodule PubkyRoomsWeb.UI.Form do
         {@rest}
       >{HTMLForm.normalize_value("textarea", @value)}</textarea>
       <p :if={@hint} class="text-xs text-muted-foreground">{@hint}</p>
-      <.error :for={msg <- @errors}>{msg}</.error>
+      <.error :for={msg <- @errors} class={@variant == "inline" && "text-xs"}>{msg}</.error>
     </div>
     """
   end
@@ -233,13 +233,14 @@ defmodule PubkyRoomsWeb.UI.Form do
     """
   end
 
-  @doc "Renders a field error message."
+  @doc "Renders a field error message; the icon follows the font size."
+  attr :class, :any, default: nil
   slot :inner_block, required: true
 
   def error(assigns) do
     ~H"""
-    <p class="flex items-center gap-1.5 text-sm text-destructive">
-      <span class="lucide-circle-alert size-4 shrink-0" aria-hidden="true" />
+    <p class={["flex items-center gap-1.5 text-sm text-destructive", @class]}>
+      <span class="lucide-circle-alert size-[1.15em] shrink-0" aria-hidden="true" />
       {render_slot(@inner_block)}
     </p>
     """

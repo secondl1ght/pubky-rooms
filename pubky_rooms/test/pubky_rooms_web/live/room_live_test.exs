@@ -172,9 +172,17 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert [%Message{content: "hello sovereign world"}] =
              messages_on_homeserver(ctx.alice, ctx.room)
 
-    # blank messages are rejected before any write
+    # blank messages are rejected before any write; the error is small and
+    # disappears as soon as the member types again
     view |> form("#composer", message: %{content: "   "}) |> render_submit()
-    assert render(view) =~ "Write a message first."
+    html = render(view)
+    assert html =~ "Write a message first."
+    assert html =~ "text-destructive text-xs"
+    view |> form("#composer", message: %{content: "h"}) |> render_change()
+    refute render(view) =~ "Write a message first."
+    # a change with nothing to clear leaves the form alone
+    view |> form("#composer", message: %{content: "he"}) |> render_change()
+    refute render(view) =~ "Write a message first."
   end
 
   test "a failed write is shown with retry and discard", ctx do
@@ -724,7 +732,8 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert_patch(view, ctx.path)
     html = wait_for(fn -> render(view) end, &(&1 =~ "Renamed"))
     assert html =~ "New topic"
-    assert html =~ "Unlisted"
+    # the label shows at every width (no hidden/sm: classes)
+    assert html =~ ~s(id="unlisted-label" class="inline-flex)
 
     assert {:ok, %Room{name: "Renamed", visibility: "unlisted"}} =
              Directory.fetch_room(Room.ref(ctx.room))
