@@ -69,6 +69,8 @@ Region `fra` (Frankfurt): the whole Pubky staging stack (homeserver, Nexus, HTTP
 
 `--ha=false` keeps one machine (one volume, one DETS file; a second machine would need its own volume and would run a second, independent directory). `--local-only` builds with the local Docker and pushes the image; drop it to use Fly's remote builder. The secret is generated straight into the command and never printed or stored. Later deploys are `fly deploy --ha=false --local-only` from the root; a redeploy replaces the machine in place, the volume stays attached, sessions survive through the cookie.
 
+Fly's init mounts the volume owned by the image's user (`uid 65534`, `nobody`), so no chown step is needed; the log shows `Mounting /dev/vdc at /data w/ uid: 65534`. Expect one health-check failure line in the two seconds before the endpoint listens (inside the grace period) and, from a sandboxed shell, a harmless flyctl DNS-check timeout after the deploy.
+
 After the deploy: `fly status`, `fly checks list`, `fly logs` (no public keys, IPs or content at info), `curl -s https://pubky-rooms-staging.fly.dev/healthz`, then the smoke items of `docs/qa/checklist.md` §13 with the real Ring APK and a staging Pubky App identity. `fly ssh console` and `fly machine restart` are the two operator tools; `/app/bin/pubky_rooms remote` (the `console_command`) opens an IEx shell on the running node.
 
 Production later: a second Fly app (`pubky-rooms`) with its own `fly.production.toml` (`fly deploy --config fly.production.toml`), volume, secret and `PUBKY_NETWORK=mainnet` + `NEXUS_URL`; the custom domain `rooms.pubky.app` via `fly certs add` once DNS is ready.

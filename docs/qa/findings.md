@@ -125,3 +125,17 @@ How it ran: the `code-review`/`security-review` skills were not in the session's
 - Memberships are never recorded for rooms the directory has not read the definition of ("unconfirmed rooms" no longer exist as a state): a marker event whose room is unknown waits in memory (bounded) until the room fetch lands, a marker for a room that does not exist records nothing, `sync_user` records a membership only once the room is known, and rows an older build persisted for unknown rooms are dropped when the tables are rebuilt from DETS. — done (was a follow-up; the user judged it worth the bar)
 
 **`security-review` skill on the review commits (2026-09-30):** one finding, confirmed by its false-positive pass (medium, 8/10): the new mainnet private-host filter was syntactic only, so `127.1`/`0x7f.1` (shortened literals the resolver accepts), a public name with a private A record, and a public host answering `302 Location: http://127.0.0.1:…` (Req follows redirects by default) all reached the node's own network; the plain-HTTP SvcParam let a packet downgrade to cleartext toward any host. Fixed in the same session: `public_host?/1` parses literals non-strictly and requires an alphabetic top-level label, `Resolver` resolves the chosen name and refuses any private address (`resolves_public?/1`, `:private_endpoint` → `:unreachable` in the app), `Pubky.Http` sets `redirect: false`, and `65280` is honoured only for `plain_http_domains` or with `allow_private_hosts`. Left as a follow-up: pinning the connection to the vetted address (DNS rebind between resolve and connect). The skill judged the session-store rewrite, the handoff token, the LiveView hardening and the path encoding sound.
+
+## Staging deploy (2026-09-30)
+
+**Result:** first deploy of `pubky-rooms-staging` (Fly, `fra`, `PUBKY_NETWORK=staging`) green on every check Claude can run alone (see the checklist run row); nothing to fix. Steps and reasoning in `docs/operations.md` "Deploy steps".
+
+**Facts learned:**
+- Fly no longer offers `den`; the Pubky staging stack (homeserver, Nexus, HTTP relay, both PKARR relays) is Google Cloud europe-west6 (Zürich), so the app went to `fra` — every write confirmation and live event is an app ↔ homeserver round trip, browsers pay one websocket hop.
+- Fly's init mounts the volume owned by the image's user (`uid 65534` for `nobody`), so the standard Phoenix Dockerfile writes to `/data` without any chown trick; the image still creates `/data` for local runs.
+- `x-forwarded-for` behind Fly's proxy is exactly `client, <Fly address>` (two IPv4 entries); the sign-in limiter's second-to-last rule is right.
+- LiveView 1.2 turns its console debug log on for `localhost` hosts unless disabled; the staging hostname gets none.
+- The in-app browser pane cannot register service workers ("unknown error fetching the script"); a real or headless Chromium does, so PWA checks use those.
+- Phoenix serves static files before `Plug.Telemetry`, so a probe on `[:phoenix, :endpoint, :start]` never sees `/robots.txt`; use a routed path such as `/healthz`.
+- Cosmetic: Fly logs one health-check failure line in the two seconds before the endpoint listens (inside the 15 s grace period, no routing effect); flyctl's post-deploy DNS check times out in a sandboxed shell (harmless).
+
