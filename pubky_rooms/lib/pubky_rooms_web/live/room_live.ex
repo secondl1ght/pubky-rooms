@@ -2117,7 +2117,9 @@ defmodule PubkyRoomsWeb.RoomLive do
       </div>
     </.panel_section>
     <.panel_section
-      :if={visitors(@online, @members) != [] or Rooms.anonymous_count(@viewers, @online) > 0}
+      :if={
+        visitors(@online, @members, @profiles) != [] or Rooms.anonymous_count(@viewers, @online) > 0
+      }
       id={"#{@id_prefix}also-here"}
       card={@card}
       class="max-h-2/5 shrink-0"
@@ -2138,7 +2140,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           {anonymous_label(Rooms.anonymous_count(@viewers, @online))}
         </span>
       </div>
-      <div :for={z32 <- visitors(@online, @members)} class="flex items-center gap-3">
+      <div :for={z32 <- visitors(@online, @members, @profiles)} class="flex items-center gap-3">
         <.avatar
           src={profile_of(@profiles, z32).avatar_url}
           name={profile_of(@profiles, z32).name}
@@ -2269,8 +2271,12 @@ defmodule PubkyRoomsWeb.RoomLive do
     end)
   end
 
-  defp visitors(online, members),
-    do: online |> Map.keys() |> Enum.reject(&(&1 in members)) |> Enum.sort()
+  defp visitors(online, members, profiles) do
+    online
+    |> Map.keys()
+    |> Enum.reject(&(&1 in members))
+    |> Enum.sort_by(&String.downcase(profile_of(profiles, &1).name))
+  end
 
   defp members_online(members, online), do: Enum.count(members, &Map.has_key?(online, &1))
 
@@ -2444,8 +2450,10 @@ defmodule PubkyRoomsWeb.RoomLive do
   # the row shows the most-used labels; the rest unfold on request
   @tags_shown 12
 
+  attr :expanded, :boolean, default: false, doc: "every label, not just the most-used ones"
+
   defp tag_row(assigns) do
-    assigns = assign(assigns, shown: shown_tags(assigns.tags, assigns.expanded))
+    assigns = assign(assigns, shown: shown_tags(assigns.tags, assigns.expanded, assigns.viewer))
 
     ~H"""
     <div id="room-tags" class="flex flex-wrap items-center gap-1.5">
@@ -2489,8 +2497,14 @@ defmodule PubkyRoomsWeb.RoomLive do
     """
   end
 
-  defp shown_tags(tags, true), do: tags
-  defp shown_tags(tags, false), do: Enum.take(tags, @tags_shown)
+  defp shown_tags(tags, true, _viewer), do: tags
+
+  # the most-used labels plus the viewer's own, so a tag you add or hold is
+  # never hidden behind "+N more"
+  defp shown_tags(tags, false, viewer) do
+    top = tags |> Enum.take(@tags_shown) |> MapSet.new(& &1.label)
+    Enum.filter(tags, fn t -> t.label in top or (viewer != nil and viewer in t.taggers) end)
+  end
 
   # a mute is the viewer's own: it takes the muted people's reactions off every
   # row for them (a ban does it for everyone, in the room server)

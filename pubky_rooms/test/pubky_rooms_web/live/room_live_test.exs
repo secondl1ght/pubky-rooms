@@ -5,6 +5,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
   import Phoenix.LiveViewTest
 
   alias PubkyRooms.{Fixtures, Profiles, Rooms}
+  alias PubkyRooms.Profiles.LocalProfile
   alias PubkyRooms.Pubky.Fake
   alias PubkyRooms.Rooms.{Directory, Message, Paths, Room, RoomServer}
   alias PubkyRooms.Tags.Tag
@@ -23,27 +24,59 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     }
   end
 
-  test "the tag row shows twelve labels and unfolds the rest on request", ctx do
+  test "the tag row shows twelve labels plus your own and unfolds the rest on request", ctx do
     ref = Room.ref(ctx.room)
     uri = Paths.room_uri(ref)
-    for i <- 1..14, do: Directory.add_tag(ref, "label-#{i}", ctx.alice, Tag.id(uri, "label-#{i}"))
+    bob = Fixtures.z32("bob")
+    for i <- 1..14, do: Directory.add_tag(ref, "label-#{i}", bob, Tag.id(uri, "label-#{i}"))
 
     chips = fn view ->
       view
       |> render()
       |> LazyHTML.from_fragment()
       |> LazyHTML.query("#room-tags button[phx-value-label]")
-      |> Enum.count()
+      |> Enum.map(&LazyHTML.attribute(&1, "phx-value-label"))
+      |> List.flatten()
     end
 
+    # twelve most-used plus alice's own automatic "room" label, which sorts last
     {:ok, view, _} = live(ctx.alice_conn, ctx.path)
     render_async(view)
-    assert chips.(view) == 12
-    assert has_element?(view, "#show-all-tags", "+3 more")
+    shown = chips.(view)
+    assert length(shown) == 13
+    assert "room" in shown
+    assert has_element?(view, "#show-all-tags", "+2 more")
+
+    # tagging a label that was folded away brings it into view: your own tags never hide
+    # (it now counts two taggers and moves to the front, pushing another one out)
+    [hidden | _] = for(i <- 1..14, do: "label-#{i}") -- shown
+    render_click(view, "toggle_tag", %{"label" => hidden})
+    assert wait_for(fn -> render_async(view) end, &(&1 =~ ~s(phx-value-label="#{hidden}")))
+    assert hidden in chips.(view)
+    assert length(chips.(view)) == 13
+    assert has_element?(view, "#show-all-tags", "+2 more")
 
     view |> element("#show-all-tags") |> render_click()
-    assert chips.(view) == 15
+    assert length(chips.(view)) == 15
     refute has_element?(view, "#show-all-tags")
+  end
+
+  test "Also here lists visitors by name, like the members", ctx do
+    amy = Fixtures.z32("amy-visitor")
+    zed = Fixtures.z32("zed-visitor")
+    Fake.seed(amy, Paths.profile(), LocalProfile.encode("Amy"))
+    Fake.seed(zed, Paths.profile(), LocalProfile.encode("Zed"))
+    {zed_sid, _} = Fixtures.login("zed-visitor")
+    {amy_sid, _} = Fixtures.login("amy-visitor")
+    {:ok, _zed_view, _} = live(init_test_session(ctx.conn, Fixtures.cookie(zed_sid)), ctx.path)
+    {:ok, _amy_view, _} = live(init_test_session(ctx.conn, Fixtures.cookie(amy_sid)), ctx.path)
+
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    html = wait_for(fn -> render_async(view) end, &(&1 =~ "Zed" and &1 =~ "Amy"), 150)
+    also_here = html |> String.split(~s(id="also-here")) |> Enum.at(1)
+    {amy_at, _} = :binary.match(also_here, "Amy")
+    {zed_at, _} = :binary.match(also_here, "Zed")
+    assert amy_at < zed_at
   end
 
   test "hand-crafted ids and payloads never crash the room view", ctx do
