@@ -155,6 +155,20 @@ describe("TagInput", () => {
     expect(field.hidden).toBe(true)
   })
 
+  it("Escape never reaches the window (a dialog around the field would close on it)", () => {
+    mount()
+    open()
+    const onWindow = vi.fn()
+    window.addEventListener("keydown", onWindow)
+    input(textInput, "abc")
+    keydown(textInput, "Escape")
+    keydown(textInput, "Escape")
+    keydown(textInput, "a")
+    window.removeEventListener("keydown", onWindow)
+    expect(onWindow).toHaveBeenCalledTimes(1)
+    expect(onWindow.mock.calls[0][0].key).toBe("a")
+  })
+
   it("leaving an empty field folds it after a moment; leaving typed text keeps it open", () => {
     mount()
     open()

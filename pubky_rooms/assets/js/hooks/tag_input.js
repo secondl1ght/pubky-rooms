@@ -123,6 +123,9 @@ const TagInput = {
       }
       case "Escape": {
         e.preventDefault()
+        // the field owns Escape: a dialog around it (Open a room) listens on
+        // the window and would close on the same press
+        e.stopPropagation()
         if (this.input.value) {
           this.input.value = ""
           this.query("")
