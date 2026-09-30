@@ -888,6 +888,8 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     render_async(alice_view)
     wait_for(fn -> render(bob_view) end, &has_composer?/1)
     assert render(bob_view) =~ "You were restored by the owner; your messages are back."
+    # the removal error toast (which never auto-dismisses) is cleared by the restore
+    refute render(bob_view) =~ "You have been removed from this room."
     html = wait_for(fn -> render(alice_view) end, &(&1 =~ "bob speaks"))
     assert ordered?(html, ["bob speaks", "said during the ban"])
     assert html =~ "Members · 2"

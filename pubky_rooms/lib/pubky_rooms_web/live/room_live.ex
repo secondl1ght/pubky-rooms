@@ -1240,6 +1240,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           s
           |> assign(banned?: false)
           |> refresh_rows()
+          |> clear_flash(:error)
           |> put_flash(:info, "You were restored by the owner; your messages are back.")
 
         s.assigns.is_creator ->
