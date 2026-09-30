@@ -115,6 +115,29 @@ defmodule Pubky.Events.StreamTest do
     assert_receive {:EXIT, ^pid, {:shutdown, {:http, 403, _}}}, 2_000
   end
 
+  test "a 429 at connect is retried after Retry-After instead of stopping the stream" do
+    {hs, config, [alice, _]} = setup_hs(reject_streams: {429, "slow down"})
+
+    {:ok, pid} =
+      Stream.start_link(
+        homeserver: hs.z32,
+        name: make_ref(),
+        subscriber: self(),
+        config: config,
+        users: [{alice.user, nil}],
+        paths: ["/pub/app/"]
+      )
+
+    assert_receive {:pubky_stream, _, {:disconnected, {:rate_limited, 1_000}}}, 2_000
+    assert Process.alive?(pid)
+
+    FakeHomeserver.set_reject_streams(hs, nil)
+    assert_receive {:pubky_stream, _, :connected}, 5_000
+    :ok = Storage.put(alice, "/pub/app/a", "x", [], config)
+    assert_receive {:pubky_event, %Event{path: "/pub/app/a"}}, 2_000
+    Stream.stop(pid)
+  end
+
   test "a stream started without users waits for add_users instead of asking the homeserver" do
     {hs, config, [alice, _]} = setup_hs([])
 

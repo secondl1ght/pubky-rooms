@@ -29,7 +29,8 @@ defmodule Pubky.Test.FakeHomeserver do
   @doc """
   Starts a fake homeserver. Options: `path_addressed: false` to emulate legacy
   servers, `token_ttl:` seconds, `drop_after: n` to close every event stream
-  after n events, `reject_streams: {status, body}` to refuse every event stream.
+  after n events, `reject_streams: {status, body}` to refuse every event stream
+  (a 429 carries `Retry-After: 1`; `set_reject_streams/2` changes it later).
   """
   def start(opts \\ []) do
     {:ok, agent} =
@@ -96,6 +97,10 @@ defmodule Pubky.Test.FakeHomeserver do
   def files(%__MODULE__{agent: agent}), do: Agent.get(agent, & &1.files)
   def packets(%__MODULE__{agent: agent}), do: Agent.get(agent, & &1.packets)
   def events(%__MODULE__{agent: agent}), do: Agent.get(agent, & &1.events)
+
+  @doc "Changes `reject_streams` on a running fake (`nil` accepts streams again)."
+  def set_reject_streams(%__MODULE__{agent: agent}, value),
+    do: Agent.update(agent, fn s -> %{s | hs: %{s.hs | reject_streams: value}} end)
 
   def requests(%__MODULE__{agent: agent}),
     do: Agent.get(agent, &Map.get(&1, :stream_requests, []))
@@ -421,6 +426,7 @@ defmodule Pubky.Test.FakeHomeserver do
     cond do
       match?({_, _}, hs.reject_streams) ->
         {status, body} = hs.reject_streams
+        conn = if status == 429, do: put_resp_header(conn, "retry-after", "1"), else: conn
         resp(conn, status, body)
 
       map_size(users) == 0 or map_size(users) > 50 ->

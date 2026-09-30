@@ -17,7 +17,9 @@ defmodule Pubky.Events.Stream do
 
   Messages: `{:pubky_event, event}` and `{:pubky_stream, {homeserver, name},
   :connected | {:disconnected, reason} | {:error, reason}}`. The stream stops
-  with `{:error, reason}` when the homeserver rejects the subscription (4xx).
+  with `{:error, reason}` when the homeserver rejects the subscription (4xx,
+  except 429: a throttled connect is `{:disconnected, {:rate_limited, ms}}` and
+  retried after its `Retry-After`, or the backoff when there is none).
   Cursors are exclusive: after reconnecting, only newer events are delivered,
   and `cursors/1` exposes the latest ones so callers can persist them. A
   stream that follows nobody (started without users, or its last user was
@@ -200,6 +202,10 @@ defmodule Pubky.Events.Stream do
 
         exit({:shutdown, {:http, status, body}})
 
+      {:error, {:rate_limited, retry_after} = reason} ->
+        notify(state, {:pubky_stream, {state.homeserver, state.name}, {:disconnected, reason}})
+        backoff_reconnect(state, retry_after || 0)
+
       {:error, reason} ->
         notify(state, {:pubky_stream, {state.homeserver, state.name}, {:disconnected, reason}})
         backoff_reconnect(state)
@@ -234,6 +240,12 @@ defmodule Pubky.Events.Stream do
     case Req.request(request) do
       {:ok, %Req.Response{status: 200} = resp} ->
         {:ok, resp}
+
+      # throttled (per client address): not a rejection, retry after the delay
+      {:ok, %Req.Response{status: 429} = resp} ->
+        retry_after = Pubky.Http.retry_after_ms(resp)
+        drain(resp)
+        {:error, {:rate_limited, retry_after}}
 
       {:ok, %Req.Response{status: status} = resp} ->
         body = drain(resp)
@@ -337,11 +349,11 @@ defmodule Pubky.Events.Stream do
   # connection that stayed up longer than the longest delay resets it, so a
   # homeserver that accepts and immediately closes cannot make us hammer it,
   # and a healthy stream that drops after hours comes back promptly.
-  defp backoff_reconnect(state) do
+  defp backoff_reconnect(state, at_least \\ 0) do
     state = cancel_reconnect(state)
     backoff = if state.last_uptime >= @max_backoff, do: @min_backoff, else: state.backoff
     jitter = :rand.uniform(div(backoff, 5) + 1)
-    timer = Process.send_after(self(), :reconnect, backoff + jitter)
+    timer = Process.send_after(self(), :reconnect, max(backoff + jitter, at_least))
     %{state | reconnect_timer: timer, backoff: min(backoff * 2, @max_backoff), last_uptime: 0}
   end
 
