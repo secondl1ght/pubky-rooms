@@ -23,6 +23,45 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     }
   end
 
+  test "hand-crafted ids and payloads never crash the room view", ctx do
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    wait_for(fn -> render(view) end, &(&1 =~ "Say hello"))
+
+    for id <- [
+          "msg-" <> String.duplicate("a", 66),
+          "msg-" <> String.duplicate("a", 54),
+          "msg-#{ctx.alice}-0000000000001x",
+          "msg-#{String.duplicate("y", 51)}b-0000000000001",
+          ""
+        ] do
+      render_click(view, "jump", %{"id" => id})
+      render_click(view, "reply", %{"id" => id})
+      render_click(view, "edit", %{"id" => id})
+      render_click(view, "react", %{"id" => id, "key" => "thumbsup"})
+    end
+
+    render_click(view, "start_ban", %{"z32" => ["not", "a", "key"]})
+    render_click(view, "unban", %{"z32" => %{"x" => 1}})
+    render_click(view, "mute", %{"z32" => 1})
+    render_click(view, "unmute", %{"z32" => nil})
+    render_hook(view, "tag_query", %{"q" => ["r"]})
+    render_hook(view, "no_such_event", %{})
+    assert render(view) =~ "Say hello"
+
+    # a signed-in non-member replaying a real row id gets nothing, not a crash
+    view |> form("#composer", message: %{content: "first"}) |> render_submit()
+    wait_for(fn -> render_async(view) end, &(&1 =~ "Stored on your homeserver"))
+    [%Message{} = stored] = messages_on_homeserver(ctx.alice, ctx.room)
+    id = "msg-#{ctx.alice}-#{stored.msg_id}"
+    {bob_sid, _bob} = Fixtures.login("bob")
+    {:ok, bob_view, _} = live(init_test_session(ctx.conn, Fixtures.cookie(bob_sid)), ctx.path)
+    wait_for(fn -> render(bob_view) end, &(&1 =~ "first"))
+    render_click(bob_view, "reply", %{"id" => id})
+    render_click(bob_view, "react", %{"id" => id, "key" => "thumbsup"})
+    render_click(bob_view, "edit", %{"id" => id})
+    assert render(bob_view) =~ "Join the room to chat."
+  end
+
   test "invalid room links go back to the lobby", %{conn: conn, alice: alice} do
     assert {:error, {:redirect, %{to: "/"}}} = live(conn, "/r/#{alice}/not-an-id")
     assert {:error, {:redirect, %{to: "/"}}} = live(conn, "/r/nope/0000000000001")

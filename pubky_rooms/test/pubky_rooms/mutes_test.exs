@@ -107,5 +107,13 @@ defmodule PubkyRooms.MutesTest do
     end
 
     assert {:error, {:rate_limited, _}} = Mutes.mute(sid, alice, Fixtures.z32("target-21"))
+    # unmuting spends the same budget
+    assert {:error, {:rate_limited, _}} = Mutes.unmute(sid, alice, Fixtures.z32("target-1"))
+  end
+
+  test "unmute refuses targets that are not public keys" do
+    {sid, alice} = Fixtures.login("alice")
+    assert {:error, :invalid_target} = Mutes.unmute(sid, alice, "../../rooms/x")
+    assert {:error, :invalid_target} = Mutes.unmute(sid, alice, "")
   end
 end

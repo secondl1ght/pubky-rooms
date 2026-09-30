@@ -32,7 +32,9 @@ defmodule PubkyRooms.NexusTest do
         "details" => %{"uri" => @uri},
         "tags" => [
           %{"label" => "room", "taggers" => ["a", "b"], "taggers_count" => 5},
-          %{"label" => "music", "taggers_count" => 1},
+          %{"label" => "  Music ", "taggers_count" => 1},
+          %{"label" => String.duplicate("x", 40), "taggers_count" => 9},
+          %{"label" => "two words", "taggers_count" => 9},
           %{"nope" => true}
         ],
         "taggers_count" => 6

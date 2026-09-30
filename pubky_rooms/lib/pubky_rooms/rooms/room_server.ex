@@ -275,7 +275,8 @@ defmodule PubkyRooms.Rooms.RoomServer do
   end
 
   defp fail(state, status) do
-    Logger.info("room #{inspect(state.ref)} unavailable: #{inspect(status)}")
+    Logger.info("room unavailable: #{inspect(status)}")
+    Logger.debug("unavailable room: #{inspect(state.ref)}")
     state = %{state | status: status}
     broadcast(state, {:unavailable, status})
     Process.send_after(self(), :stop, @stop_after_error)

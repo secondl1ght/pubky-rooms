@@ -368,7 +368,9 @@ defmodule PubkyRooms.Rooms.Directory do
 
     if Nexus.enabled?() and (is_nil(last) or now - last > @nexus_refresh_ms) do
       Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn -> do_refresh_nexus_tags(ref) end)
-      {:noreply, put_in(state.nexus_refreshed[ref], now)}
+
+      {:noreply,
+       %{state | nexus_refreshed: remember(state.nexus_refreshed, ref, now, @nexus_refresh_ms)}}
     else
       {:noreply, state}
     end
@@ -387,7 +389,7 @@ defmodule PubkyRooms.Rooms.Directory do
 
     if opts[:force] || is_nil(last) || now - last > @sync_throttle_ms do
       Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn -> do_sync_user(z32) end)
-      {:noreply, put_in(state.synced[z32], now)}
+      {:noreply, %{state | synced: remember(state.synced, z32, now, @sync_throttle_ms)}}
     else
       {:noreply, state}
     end
@@ -441,8 +443,13 @@ defmodule PubkyRooms.Rooms.Directory do
   defp apply_event(state, {:member, creator, id}, :del, user),
     do: do_remove_member(state, {creator, id}, user)
 
-  defp apply_event(state, {:message, creator, id, _msg_id}, :put, _user),
-    do: do_touch(state, {creator, id}, System.os_time(:millisecond))
+  # Only a member's message counts as activity: anyone can write a file whose
+  # path names somebody else's room.
+  defp apply_event(state, {:message, creator, id, _msg_id}, :put, user) do
+    if member?({creator, id}, user),
+      do: do_touch(state, {creator, id}, System.os_time(:millisecond)),
+      else: state
+  end
 
   defp apply_event(state, {:tag, id}, :put, user) do
     fetch_tag_async(user, id)
@@ -555,6 +562,16 @@ defmodule PubkyRooms.Rooms.Directory do
     remember_removal(state, {tagger, id})
   end
 
+  # Throttle maps forget entries whose window has passed once they grow, so
+  # they stay proportional to recent traffic rather than to everything seen.
+  defp remember(map, key, now, window_ms) do
+    map = Map.put(map, key, now)
+
+    if map_size(map) > 1_000,
+      do: :maps.filter(fn _k, at -> now - at < window_ms end, map),
+      else: map
+  end
+
   defp remember_removal(state, key) do
     now = System.monotonic_time()
     memory = System.convert_time_unit(:timer.minutes(5), :millisecond, :native)
@@ -581,7 +598,15 @@ defmodule PubkyRooms.Rooms.Directory do
     state
   end
 
+  # Activity orders the lobby and decides when archives are swept, and the
+  # timestamps it is fed come from message bodies other people wrote: a stamp
+  # from the future is clamped to now (plus clock skew) so nobody can pin a
+  # room to the top of the lobby.
+  @max_clock_skew_ms :timer.minutes(5)
+
   defp do_touch(state, ref, at) do
+    at = min(at, System.os_time(:millisecond) + @max_clock_skew_ms)
+
     case :ets.lookup(@rooms, ref) do
       [{^ref, room, activity}] when at > activity ->
         insert_room(ref, room, at)

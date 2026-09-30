@@ -303,6 +303,27 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
              live(conn, ~p"/rooms/new")
   end
 
+  test "a revoked grant sends the creator to sign in again", %{conn: conn} do
+    {sid, _alice} = Fixtures.login("alice")
+    conn = init_test_session(conn, Fixtures.cookie(sid))
+    {:ok, view, _html} = live(conn, ~p"/rooms/new")
+    Fake.fail_next_under("/pub/pubky-rooms/rooms/", :unauthorized)
+
+    view
+    |> form("#new-room-form", room: %{name: "Gone", visibility: "public"})
+    |> render_submit()
+
+    {path, flash} = assert_redirect(view)
+    assert path == ~p"/login"
+    assert flash["error"] =~ "session has expired"
+
+    # hand-crafted event payloads are ignored rather than crashing the view
+    {:ok, view, _html} = live(conn, ~p"/rooms/new")
+    render_hook(view, "tag_query", %{"q" => %{"nested" => true}})
+    render_hook(view, "no_such_event", %{})
+    assert has_element?(view, "#new-room-form")
+  end
+
   test "a signed-in user creates a room and lands in it", %{conn: conn} do
     {sid, alice} = Fixtures.login("alice")
     conn = init_test_session(conn, Fixtures.cookie(sid))

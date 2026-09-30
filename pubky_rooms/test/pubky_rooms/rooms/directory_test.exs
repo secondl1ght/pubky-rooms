@@ -29,6 +29,26 @@ defmodule PubkyRooms.Rooms.DirectoryTest do
     assert %{joined: [^room]} = Directory.rooms_of(bob)
   end
 
+  test "activity never runs ahead of the clock, and only members' messages count" do
+    {sid, alice} = Fixtures.login("alice")
+    {:ok, room} = Rooms.create_room(sid, alice, %{"name" => "Clock", "visibility" => "public"})
+    ref = Room.ref(room)
+    assert_receive {:directory, {:room_updated, %Room{name: "Clock"}}}
+
+    # a message body may claim any created_at; the lobby order cannot be pinned with it
+    Directory.touch(ref, 9_999_999_999_999)
+    assert_receive {:directory, {:room_updated, %Room{name: "Clock"}}}
+    assert Directory.last_activity(ref) <= System.os_time(:millisecond) + :timer.minutes(5)
+
+    # a stranger writing a message file that names this room does not bump it
+    Process.sleep(50)
+    before = Directory.last_activity(ref)
+    mallory = Fixtures.z32("mallory")
+    Fake.write_as(mallory, Paths.message(ref, "0035S410XTQ99"), "{}")
+    Process.sleep(100)
+    assert Directory.last_activity(ref) == before
+  end
+
   test "sync_user discovers rooms and memberships from the homeserver" do
     alice = Fixtures.z32("alice")
     carol = Fixtures.z32("carol")

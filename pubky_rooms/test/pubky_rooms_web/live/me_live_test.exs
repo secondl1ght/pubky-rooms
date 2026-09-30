@@ -19,6 +19,13 @@ defmodule PubkyRoomsWeb.MeLiveTest do
     assert {:error, {:redirect, %{to: "/login"}}} = live(build_conn(), ~p"/me")
   end
 
+  test "hand-crafted event payloads are ignored", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/me")
+    render_hook(view, "save_nickname", %{"nickname" => %{"name" => ["not", "a", "string"]}})
+    render_hook(view, "no_such_event", %{})
+    assert render(view) =~ "Sign out"
+  end
+
   test "the public key can be copied", %{conn: conn, user: user} do
     {:ok, view, _html} = live(conn, ~p"/me")
     assert has_element?(view, "#copy-pubky[data-copy='#{user}'][phx-hook='Clipboard']")

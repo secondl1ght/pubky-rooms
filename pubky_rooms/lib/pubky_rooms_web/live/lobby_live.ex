@@ -92,7 +92,8 @@ defmodule PubkyRoomsWeb.LobbyLive do
     {:noreply, assign(socket, tag_labels: List.delete(labels, label))}
   end
 
-  def handle_event("tag_query", %{"q" => q}, %{assigns: %{tag_labels: labels}} = socket) do
+  def handle_event("tag_query", %{"q" => q}, %{assigns: %{tag_labels: labels}} = socket)
+      when is_binary(q) do
     known = socket.assigns.popular_tags |> Enum.map(fn {label, _rooms} -> label end)
     {:noreply, assign(socket, tag_suggestions: Tag.suggest(known, q, labels))}
   end
@@ -120,6 +121,10 @@ defmodule PubkyRoomsWeb.LobbyLive do
     {:noreply, redirect(socket, to: ~p"/login?return_to=/rooms/new")}
   end
 
+  # Malformed payloads (a hand-crafted event) are ignored rather than crashing
+  # the view, whose crash report would log its assigns.
+  def handle_event(_event, _params, socket), do: {:noreply, socket}
+
   @impl true
   def handle_async(:create, {:ok, {:ok, %Room{} = room}}, socket) do
     {:noreply,
@@ -134,11 +139,13 @@ defmodule PubkyRoomsWeb.LobbyLive do
      assign(socket, creating: false, form: form_for(socket.assigns.form.params, errors))}
   end
 
+  # The grant is gone: the next full request notices and drops the cookie
+  # (see `PubkyRoomsWeb.UserAuth`), so the sign-in page is the right place.
   def handle_async(:create, {:ok, {:error, :unauthorized}}, socket) do
     {:noreply,
      socket
      |> put_flash(:error, Rooms.explain(:unauthorized))
-     |> redirect(to: ~p"/logout")}
+     |> redirect(to: ~p"/login")}
   end
 
   def handle_async(:create, {:ok, {:error, reason}}, socket) do

@@ -16,6 +16,16 @@ defmodule PubkyRooms.Rooms.RoomTest do
     assert decoded == room
   end
 
+  test "fields of the wrong JSON type count as absent instead of raising" do
+    assert {:error, errors} = Room.validate(%{"name" => %{"x" => 1}, "visibility" => [1.5]})
+    assert Keyword.has_key?(errors, :name)
+
+    assert {:ok, %{topic: nil}} =
+             Room.validate(%{"name" => "ok", "topic" => 42, "visibility" => "public"})
+
+    assert Room.blank_to_nil(%{}) == nil
+  end
+
   test "validation errors are form-friendly" do
     assert {:error, errors} = Room.validate(%{"name" => "", "visibility" => "secret"})
     assert Keyword.has_key?(errors, :name)

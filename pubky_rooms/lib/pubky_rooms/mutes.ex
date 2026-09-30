@@ -114,12 +114,18 @@ defmodule PubkyRooms.Mutes do
 
   def mute(_sid, _user, _target), do: {:error, :invalid_target}
 
-  @doc "Lifts a Rooms mute by deleting the marker (already gone counts as done)."
+  @doc """
+  Lifts a Rooms mute by deleting the marker (already gone counts as done).
+  Shares the mute budget (20 per hour).
+  """
   @spec unmute(Pubky.sid(), String.t(), String.t()) :: :ok | {:error, term()}
   def unmute(sid, user, target) do
-    case Pubky.delete(sid, Paths.mute(target)) do
-      ok when ok in [:ok, {:error, :not_found}] -> apply_change(user, target, :del)
-      error -> error
+    with true <- Ids.valid_z32?(target) || {:error, :invalid_target},
+         :ok <- RateLimit.check({:mutes, sid}, 20, :timer.hours(1)) do
+      case Pubky.delete(sid, Paths.mute(target)) do
+        ok when ok in [:ok, {:error, :not_found}] -> apply_change(user, target, :del)
+        error -> error
+      end
     end
   end
 

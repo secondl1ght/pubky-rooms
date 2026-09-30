@@ -10,9 +10,13 @@ defmodule PubkyRooms.Pubky.Live do
   alias PubkyRooms.Auth.SessionStore
   alias PubkyRooms.Pubky, as: Facade
 
+  # Every file Rooms reads is validated at 16 KiB by its reader; the transport
+  # cap sits a little above so the reader still gets to say "too large".
+  @max_file_bytes 65_536
+
   @impl true
   def get(user, path) do
-    case Storage.get(user, path) do
+    case Storage.get(user, path, max_body: @max_file_bytes) do
       {:ok, %{body: body}} -> {:ok, body}
       other -> Facade.normalize(other)
     end

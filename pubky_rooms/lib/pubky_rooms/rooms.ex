@@ -10,7 +10,7 @@ defmodule PubkyRooms.Rooms do
 
   require Logger
 
-  alias PubkyRooms.{Events, Pubky, RateLimit}
+  alias PubkyRooms.{Events, Ids, Pubky, RateLimit}
   alias PubkyRooms.Events.Subscriptions
   alias PubkyRooms.Profiles.LocalProfile
   alias PubkyRooms.Rooms.{Ban, Directory, Membership, Message, Paths, Reaction, Room, RoomServer}
@@ -352,7 +352,8 @@ defmodule PubkyRooms.Rooms do
   @spec ban(sid(), String.t(), Paths.room_ref(), String.t(), String.t() | nil) ::
           :ok | {:error, term()}
   def ban(sid, creator, {creator, id}, banned, reason) when banned != creator do
-    with {:ok, reason} <- Ban.validate_reason(reason),
+    with true <- Ids.valid_z32?(banned) || {:error, :invalid_target},
+         {:ok, reason} <- Ban.validate_reason(reason),
          :ok <- limit({:bans, sid}, 20, :timer.hours(1)) do
       Pubky.put(sid, Paths.ban(id, banned), Ban.encode(reason))
     end
@@ -360,13 +361,19 @@ defmodule PubkyRooms.Rooms do
 
   def ban(_sid, _user, _ref, _banned, _reason), do: {:error, :forbidden}
 
-  @doc "Lifts a ban by deleting the marker (already gone counts as done)."
+  @doc """
+  Lifts a ban by deleting the marker (already gone counts as done). Shares the
+  ban budget (20 per hour).
+  """
   @spec unban(sid(), String.t(), Paths.room_ref(), String.t()) :: :ok | {:error, term()}
   def unban(sid, creator, {creator, id}, banned) do
-    case Pubky.delete(sid, Paths.ban(id, banned)) do
-      :ok -> :ok
-      {:error, :not_found} -> :ok
-      error -> error
+    with true <- Ids.valid_z32?(banned) || {:error, :invalid_target},
+         :ok <- limit({:bans, sid}, 20, :timer.hours(1)) do
+      case Pubky.delete(sid, Paths.ban(id, banned)) do
+        :ok -> :ok
+        {:error, :not_found} -> :ok
+        error -> error
+      end
     end
   end
 

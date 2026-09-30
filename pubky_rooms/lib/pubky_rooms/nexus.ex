@@ -11,6 +11,8 @@ defmodule PubkyRooms.Nexus do
 
   require Logger
 
+  alias PubkyRooms.Tags.Tag
+
   @type tag :: %{label: String.t(), count: non_neg_integer(), taggers: [String.t()]}
   @type resource :: %{uri: String.t(), tags: [tag()], taggers_count: non_neg_integer()}
 
@@ -101,9 +103,24 @@ defmodule PubkyRooms.Nexus do
 
   defp parse_resource(_), do: []
 
+  # Indexer labels get the same normalisation as tag files read from
+  # homeservers; anything Rooms would refuse to write is dropped here too.
   defp parse_tag(%{"label" => label} = tag) when is_binary(label) do
-    taggers = tag |> Map.get("taggers", []) |> List.wrap() |> Enum.filter(&is_binary/1)
-    [%{label: label, count: max(int(tag["taggers_count"]), length(taggers)), taggers: taggers}]
+    case Tag.normalize(label) do
+      {:ok, label} ->
+        taggers = tag |> Map.get("taggers", []) |> List.wrap() |> Enum.filter(&is_binary/1)
+
+        [
+          %{
+            label: label,
+            count: max(int(tag["taggers_count"]), length(taggers)),
+            taggers: taggers
+          }
+        ]
+
+      {:error, _} ->
+        []
+    end
   end
 
   defp parse_tag(_), do: []

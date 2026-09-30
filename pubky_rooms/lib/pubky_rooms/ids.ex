@@ -84,8 +84,14 @@ defmodule PubkyRooms.Ids do
   def valid_id?(id) when is_binary(id), do: Regex.match?(@id_re, id)
   def valid_id?(_), do: false
 
-  @doc "Whether the string is a well-formed z-base32 public key (52 chars)."
+  @doc """
+  Whether the string is a well-formed z-base32 public key: 52 alphabet
+  characters in the one canonical spelling (`Pubky.PublicKey.parse/1` rejects
+  non-zero padding bits, so no key can be named two ways).
+  """
   @spec valid_z32?(term()) :: boolean()
-  def valid_z32?(z32) when is_binary(z32), do: Regex.match?(@z32_re, z32)
+  def valid_z32?(z32) when is_binary(z32),
+    do: Regex.match?(@z32_re, z32) and match?({:ok, ^z32}, Pubky.PublicKey.parse(z32))
+
   def valid_z32?(_), do: false
 end

@@ -11,13 +11,21 @@ defmodule PubkyRooms.Fixtures do
   def z32(label) do
     alphabet = ~c"ybndrfg8ejkmcpqxot1uwisza345h769"
 
-    :sha256
-    |> :crypto.hash(label)
-    |> :binary.bin_to_list()
-    |> Stream.cycle()
-    |> Enum.take(52)
-    |> Enum.map(&Enum.at(alphabet, rem(&1, 32)))
-    |> List.to_string()
+    chars =
+      :sha256
+      |> :crypto.hash(label)
+      |> :binary.bin_to_list()
+      |> Stream.cycle()
+      |> Enum.take(52)
+      |> Enum.map(&Enum.at(alphabet, rem(&1, 32)))
+
+    # the last character carries one data bit and four zero padding bits
+    # ('y' = 00000, 'o' = 10000), as every real key does
+    {head, [last]} = Enum.split(chars, 51)
+
+    List.to_string(
+      head ++ [if(last in ~c"o0123456789abcdefghijklmnpqrstuvwxz", do: ?o, else: ?y)]
+    )
   end
 
   @doc "A `%Pubky.Session{}` for `user` that never needs a refresh (no network)."

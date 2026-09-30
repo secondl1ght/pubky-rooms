@@ -86,6 +86,7 @@ defmodule PubkyRooms.Pubky do
   def normalize({:error, :no_session}), do: {:error, :unauthorized}
   def normalize({:error, {:http, 507, _}}), do: {:error, :quota}
   def normalize({:error, {:http, 413, _}}), do: {:error, :too_large}
+  def normalize({:error, {:body_too_large, _}}), do: {:error, :too_large}
   def normalize({:error, {:http, 429, _}}), do: {:error, {:rate_limited, 5_000}}
   def normalize({:error, {:rate_limited, ms}}), do: {:error, {:rate_limited, ms || 5_000}}
   def normalize({:error, {:http, status, _}}), do: {:error, {:http, status}}

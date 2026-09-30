@@ -56,9 +56,9 @@ defmodule PubkyRooms.Rooms.Room do
   """
   @spec validate(map()) :: {:ok, map()} | {:error, keyword()}
   def validate(attrs) when is_map(attrs) do
-    name = attrs |> field("name") |> to_string() |> String.trim()
+    name = attrs |> field("name") |> string_or_empty() |> String.trim()
     topic = attrs |> field("topic") |> blank_to_nil()
-    visibility = attrs |> field("visibility") |> to_string()
+    visibility = attrs |> field("visibility") |> string_or_empty()
 
     errors =
       []
@@ -155,15 +155,18 @@ defmodule PubkyRooms.Rooms.Room do
   @doc false
   def field(attrs, key), do: Map.get(attrs, key) || Map.get(attrs, String.to_atom(key))
 
+  # Values come from JSON on other people's homeservers as well as from forms:
+  # anything that is not a string counts as absent rather than raising.
   @doc false
-  def blank_to_nil(nil), do: nil
-
   def blank_to_nil(value) do
-    case value |> to_string() |> String.trim() do
+    case value |> string_or_empty() |> String.trim() do
       "" -> nil
       trimmed -> trimmed
     end
   end
+
+  defp string_or_empty(value) when is_binary(value), do: value
+  defp string_or_empty(_value), do: ""
 
   @doc false
   def printable?(string), do: String.printable?(string) and not String.contains?(string, <<0>>)

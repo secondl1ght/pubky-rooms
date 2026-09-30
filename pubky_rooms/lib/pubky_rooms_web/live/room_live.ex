@@ -412,9 +412,8 @@ defmodule PubkyRoomsWeb.RoomLive do
   defp on_screen?(%{assigns: %{oldest_key: oldest}} = socket, key),
     do: oldest != nil and key >= oldest and stored_message(socket, key) != nil
 
-  defp parse_dom_id("msg-" <> rest) when byte_size(rest) == 66 do
-    <<author::binary-size(52), "-", msg_id::binary-size(13)>> = rest
-
+  # Ids arrive from the client; anything but `msg-<z32>-<id>` is refused.
+  defp parse_dom_id("msg-" <> <<author::binary-size(52), "-", msg_id::binary-size(13)>>) do
     if Ids.valid_z32?(author) and Ids.valid_id?(msg_id),
       do: {:ok, {msg_id, author}},
       else: :error
@@ -532,7 +531,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   # the composer, delete removes the file from the author's homeserver (shown
   # optimistically; the DEL event confirms, a failure restores the row).
   def handle_event("reply", %{"id" => id}, socket) do
-    case can_post?(socket) and lookup_message(socket, id) do
+    case postable_message(socket, id) do
       %Message{} = msg ->
         {:noreply,
          socket
@@ -545,7 +544,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   def handle_event("edit", %{"id" => id}, %{assigns: %{current_user: %{pubky: me}}} = socket) do
-    case can_post?(socket) and lookup_message(socket, id) do
+    case postable_message(socket, id) do
       %Message{author: ^me} = msg ->
         {:noreply,
          socket
@@ -589,7 +588,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         %{assigns: %{current_user: %{pubky: me}, sid: sid, is_member: true, banned?: false}} =
           socket
       ) do
-    case can_post?(socket) and lookup_message(socket, id) do
+    case postable_message(socket, id) do
       %Message{reactions: reactions} = msg ->
         mine? = reactions |> Map.get(key, MapSet.new()) |> MapSet.member?(me)
 
@@ -705,7 +704,8 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   # Moderation: the creator removes (bans) and restores members; anyone
   # signed in mutes an author for themselves (a marker on their homeserver).
-  def handle_event("start_ban", %{"z32" => z32}, %{assigns: %{is_creator: true}} = socket) do
+  def handle_event("start_ban", %{"z32" => z32}, %{assigns: %{is_creator: true}} = socket)
+      when is_binary(z32) do
     {:noreply, assign(socket, banning: z32, ban_form: to_form(%{"reason" => ""}, as: :ban))}
   end
 
@@ -737,7 +737,8 @@ defmodule PubkyRoomsWeb.RoomLive do
         "unban",
         %{"z32" => z32},
         %{assigns: %{is_creator: true, sid: sid, ref: ref, creator: creator}} = socket
-      ) do
+      )
+      when is_binary(z32) do
     {:noreply,
      socket
      |> assign(joining: true)
@@ -751,7 +752,7 @@ defmodule PubkyRoomsWeb.RoomLive do
         %{"z32" => z32},
         %{assigns: %{current_user: %{pubky: user}, sid: sid}} = socket
       )
-      when z32 != user do
+      when is_binary(z32) and z32 != user do
     {:noreply,
      socket
      |> set_muted(MapSet.put(socket.assigns.muted, z32))
@@ -762,7 +763,8 @@ defmodule PubkyRoomsWeb.RoomLive do
         "unmute",
         %{"z32" => z32},
         %{assigns: %{current_user: %{pubky: user}, sid: sid, app_muted: app_muted}} = socket
-      ) do
+      )
+      when is_binary(z32) do
     if MapSet.member?(app_muted, z32) do
       {:noreply, put_flash(socket, :info, "You muted them in Pubky App; unmute them there.")}
     else
@@ -817,7 +819,7 @@ defmodule PubkyRoomsWeb.RoomLive do
     end
   end
 
-  def handle_event("tag_query", %{"q" => q}, socket) do
+  def handle_event("tag_query", %{"q" => q}, socket) when is_binary(q) do
     if can_write?(socket) do
       known = Directory.popular_tags() |> Enum.map(fn {label, _rooms} -> label end)
       taken = Enum.map(socket.assigns.tags, & &1.label)
@@ -882,11 +884,10 @@ defmodule PubkyRoomsWeb.RoomLive do
      |> start_async(:close_room, fn -> Rooms.close_room(sid, creator, room) end)}
   end
 
-  # signed-out, non-member or non-creator viewers cannot use these actions
-  def handle_event(event, _params, socket)
-      when event in ~w(edit delete react start_ban ban unban mute unmute validate_settings save_settings close_room toggle_tag add_tag) do
-    {:noreply, socket}
-  end
+  # Signed-out, non-member or non-creator viewers cannot use these actions,
+  # and malformed payloads (a hand-crafted event) are ignored rather than
+  # crashing the view, whose crash report would log its assigns.
+  def handle_event(_event, _params, socket), do: {:noreply, socket}
 
   # Which write the composer performs in its current mode.
   defp prepare(:new, sid, author, ref, content),
@@ -1392,13 +1393,18 @@ defmodule PubkyRoomsWeb.RoomLive do
     end
   end
 
-  # DOM id → stored message (`msg-<author z32>-<msg_id>`).
-  defp lookup_message(socket, "msg-" <> rest) when byte_size(rest) > 53 do
-    <<author::binary-size(52), "-", msg_id::binary>> = rest
-    stored_message(socket, {msg_id, author})
-  end
+  # The message behind a row id, only for a viewer who may act on it; nil
+  # otherwise (a crafted event from a non-member finds nothing).
+  defp postable_message(socket, id),
+    do: if(can_post?(socket), do: lookup_message(socket, id))
 
-  defp lookup_message(_socket, _id), do: nil
+  # DOM id → stored message (`msg-<author z32>-<msg_id>`).
+  defp lookup_message(socket, id) do
+    case parse_dom_id(id) do
+      {:ok, key} -> stored_message(socket, key)
+      :error -> nil
+    end
+  end
 
   # What a reply quotes: the original's author and text, if we hold it.
   defp quote_of(_socket, %Message{reply_to: nil}), do: nil

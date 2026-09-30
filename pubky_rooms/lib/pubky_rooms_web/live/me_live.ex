@@ -23,7 +23,8 @@ defmodule PubkyRoomsWeb.MeLive do
   end
 
   @impl true
-  def handle_event("save_nickname", %{"nickname" => %{"name" => name}}, socket) do
+  def handle_event("save_nickname", %{"nickname" => %{"name" => name}}, socket)
+      when is_binary(name) do
     sid = socket.assigns.sid
 
     {:noreply,
@@ -38,6 +39,10 @@ defmodule PubkyRoomsWeb.MeLive do
     {:noreply,
      socket |> assign(saving: true) |> start_async(:clear, fn -> Rooms.clear_nickname(sid) end)}
   end
+
+  # Malformed payloads (a hand-crafted event) are ignored rather than crashing
+  # the view, whose crash report would log its assigns.
+  def handle_event(_event, _params, socket), do: {:noreply, socket}
 
   @impl true
   def handle_async(:save, {:ok, :ok}, socket) do

@@ -33,6 +33,9 @@ defmodule PubkyRooms.IdsTest do
     assert Ids.valid_z32?(String.duplicate("y", 52))
     refute Ids.valid_z32?(String.duplicate("y", 51))
     refute Ids.valid_z32?(String.duplicate("l", 52))
+    # the last character carries four padding bits that must be zero
+    refute Ids.valid_z32?(String.duplicate("y", 51) <> "b")
+    assert Ids.valid_z32?(String.duplicate("y", 51) <> "o")
     assert Ids.decode("bad") == :error
   end
 end
