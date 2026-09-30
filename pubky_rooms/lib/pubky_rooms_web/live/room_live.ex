@@ -1792,7 +1792,10 @@ defmodule PubkyRoomsWeb.RoomLive do
             </div>
           </div>
 
-          <aside :if={@status != :not_found} class="hidden w-64 shrink-0 flex-col gap-4 xl:flex">
+          <aside
+            :if={@status != :not_found}
+            class="hidden min-h-0 w-64 shrink-0 flex-col gap-4 overflow-y-auto xl:flex"
+          >
             <.members_panel
               id_prefix=""
               members={@members}

@@ -16,6 +16,7 @@ defmodule PubkyRoomsWeb.E2E.SmokeTest do
   alias PubkyRooms.E2E.Console
   alias PubkyRooms.Fixtures
   alias PubkyRooms.Pubky.Fake
+  alias PubkyRooms.Rooms
   alias PubkyRooms.Rooms.Paths
 
   @moduletag :e2e
@@ -154,6 +155,34 @@ defmodule PubkyRoomsWeb.E2E.SmokeTest do
     # no console errors or warnings anywhere on the way (a CSP violation would be one)
     assert Console.problems() == []
     _ = bob_conn
+  end
+
+  test "a room with many members: the sidebar scrolls, the page does not grow", %{conn: conn} do
+    {sid, alice} = Fixtures.login("e2e-crowd-owner")
+    {:ok, room} = Rooms.create_room(sid, alice, %{"name" => "Crowd", "visibility" => "public"})
+
+    for i <- 1..60 do
+      {member_sid, member} = Fixtures.login("e2e-crowd-#{i}")
+      :ok = Rooms.join(member_sid, member, {alice, room.id})
+    end
+
+    conn = conn |> visit(~p"/login") |> assert_has("body", text: "Waiting for approval")
+    FakeGrantLogin.resolve({:ok, Fixtures.session(alice)})
+
+    conn
+    |> assert_has("header a[href='/me']")
+    |> visit(~p"/r/#{alice}/#{room.id}")
+    |> assert_has("aside", text: "Members · 61")
+    |> evaluate(
+      "[document.documentElement.scrollHeight - window.innerHeight, " <>
+        "(a => a.scrollHeight - a.clientHeight)(document.querySelector('aside'))]",
+      fn [page_overflow, aside_overflow] ->
+        assert page_overflow <= 0, "the page scrolls by #{page_overflow}px"
+        assert aside_overflow > 0, "the sidebar does not scroll"
+      end
+    )
+
+    assert Console.problems() == []
   end
 
   @tag browser_context_opts: [
