@@ -124,6 +124,7 @@ Legend: **smoke** = minimum pre-deploy set · **A+B** = needs both identities ·
 - [ ] Key that does not resolve (dead PKARR record): the page must not pretend the profile is empty — open item in `findings.md`.
 
 ## 11. PWA and offline
+The service worker is **never registered in development** (`app.js`: asset names are not content-hashed there); the caching and offline items can only be checked on a production build, so they are run on staging (section 13). The manifest and head tags can be checked anywhere.
 
 - [ ] `/manifest.webmanifest` valid (name, icons incl. maskable, `display: standalone`, `#05050A` colours); install prompt available in Chrome; the installed app opens on the lobby.
 - [ ] Service worker: static assets served from cache on reload; HTML is never cached (edit a page, reload, see the change); with the network offline, navigating shows `/offline.html`; the websocket is untouched.

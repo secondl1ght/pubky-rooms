@@ -43,7 +43,10 @@ defmodule PubkyRoomsWeb.Endpoint do
     cookie_key: "request_logger"
 
   plug Plug.RequestId
-  plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
+  # Request lines go to `debug`: room paths carry public keys, which must not
+  # appear in logs at `info` and above (ADR 0006). Durations are still measured
+  # through the telemetry events; the platform keeps its own access log.
+  plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint], log: :debug
 
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
