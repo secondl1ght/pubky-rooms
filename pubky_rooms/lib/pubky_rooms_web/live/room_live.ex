@@ -1777,6 +1777,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                     </div>
                     <p class="flex flex-wrap items-center gap-1.5 px-1 text-xs text-muted-foreground">
                       <span class="hidden sm:inline">Enter to send, Shift+Enter for a new line.</span>
+                      <span class="sm:hidden">Tap ↵ to send.</span>
                       <button
                         type="button"
                         id="composer-storage-tip"
