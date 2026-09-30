@@ -179,6 +179,7 @@ defmodule PubkyRooms.Events.Subscriptions do
   # A stream's connection state applies to every user riding on it.
   def handle_info({:pubky_stream, {hs, name} = key, status}, state) do
     Logger.debug("stream #{inspect(name)} on #{String.slice(hs, 0, 8)}…: #{inspect(status)}")
+    log_throttled(hs, name, status)
     unless status == {:disconnected, :resubscribe}, do: PubkyRooms.Telemetry.stream_status(status)
     Phoenix.PubSub.broadcast(PubkyRooms.PubSub, "streams", {:stream_status, hs, name, status})
     {:noreply, apply_stream_status(state, key, user_status(status))}
@@ -194,6 +195,17 @@ defmodule PubkyRooms.Events.Subscriptions do
 
   def handle_info({ref, _task_result}, state) when is_reference(ref), do: {:noreply, state}
   def handle_info(_msg, state), do: {:noreply, state}
+
+  # a homeserver throttling stream connects is worth an operator's attention
+  # (the anonymous read budget is per client address); the stream retries
+  defp log_throttled(hs, name, {:disconnected, {:rate_limited, retry_after}}) do
+    Logger.warning(
+      "event stream #{inspect(name)} on #{String.slice(hs, 0, 8)}… throttled by the homeserver (429), " <>
+        "retrying in #{if retry_after, do: "#{retry_after} ms", else: "the backoff delay"}"
+    )
+  end
+
+  defp log_throttled(_hs, _name, _status), do: :ok
 
   defp user_status(:connected), do: :attached
   # a planned reconnect (users added or removed): nobody's status changes
@@ -429,7 +441,10 @@ defmodule PubkyRooms.Events.Subscriptions do
 
   defp stream_down(state, key, reason) do
     {stream, streams} = Map.pop(state.streams, key)
-    Logger.warning("event stream #{inspect(key)} stopped: #{inspect(reason)}")
+
+    Logger.warning(
+      "event stream #{inspect(elem(key, 1))} on #{String.slice(elem(key, 0), 0, 8)}… stopped: #{inspect(reason)}"
+    )
 
     users =
       Enum.reduce(stream.users, state.users, fn user, users ->
