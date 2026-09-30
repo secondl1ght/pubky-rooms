@@ -31,7 +31,7 @@ Everything here is one node (no clustering in v1). Costs scale **per room and pe
 
 | | Staging | Production |
 |---|---|---|
-| Fly app / host | `pubky-rooms-staging` → `pubky-rooms-staging.fly.dev` (placeholder) | `pubky-rooms` → `rooms.pubky.app` (custom domain, later) |
+| Fly app / host / region | `pubky-rooms-staging` → `pubky-rooms-staging.fly.dev` (placeholder), `fra` (next to the staging stack in Zürich) | `pubky-rooms` → `rooms.pubky.app` (custom domain, later), region next to the mainnet homeserver |
 | `PUBKY_NETWORK` | `staging` (public PKARR relays + `httprelay.staging.pubky.app` + `nexus.staging.pubky.app` + the sign-in page's Pubky App link → `https://staging.pubky.app`, password-protected; identities from Pubky App staging live on `homeserver.staging.pubky.app`) | `mainnet` (+ `NEXUS_URL=https://nexus.pubky.app`) |
 | `PHX_HOST` | the Fly hostname | `rooms.pubky.app` |
 | `PUBKY_DATA_DIR` | `/data` (a Fly volume; the room directory DETS) | same, its own volume |
@@ -60,10 +60,12 @@ First deploy of the staging app (each command creates or changes something on Fl
 
 ```bash
 fly apps create pubky-rooms-staging --org personal
-fly volumes create pubky_rooms_data --app pubky-rooms-staging --region dfw --size 1 --yes
+fly volumes create pubky_rooms_data --app pubky-rooms-staging --region fra --size 1 --yes
 fly secrets set SECRET_KEY_BASE="$(cd pubky_rooms && mix phx.gen.secret)" --app pubky-rooms-staging
 fly deploy --app pubky-rooms-staging --ha=false --local-only
 ```
+
+Region `fra` (Frankfurt): the whole Pubky staging stack (homeserver, Nexus, HTTP relay, both PKARR relays) runs on Google Cloud in Zürich (`34.65.0.0/16`, europe-west6), and every write confirmation and every live event goes app ↔ homeserver, so the app sits next to it (about 10 ms) while browsers anywhere pay one websocket hop; from the US west that is about 140 ms, which LiveView absorbs (typing is local, sends confirm on the next round trip). VM `shared-cpu-2x` with 1 GB: the second vCPU covers a bootstrap burst (concurrent fetches, JSON, rendering for every viewer of the room) and the memory is headroom for many warm rooms; under $10 a month, changed with `[[vm]]` in `fly.toml` and a redeploy. What actually bounds speed is the homeserver round trip and its anonymous read throttle, not the VM.
 
 `--ha=false` keeps one machine (one volume, one DETS file; a second machine would need its own volume and would run a second, independent directory). `--local-only` builds with the local Docker and pushes the image; drop it to use Fly's remote builder. The secret is generated straight into the command and never printed or stored. Later deploys are `fly deploy --ha=false --local-only` from the root; a redeploy replaces the machine in place, the volume stays attached, sessions survive through the cookie.
 

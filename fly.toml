@@ -6,7 +6,7 @@
 # Secrets (never in this file): SECRET_KEY_BASE, set with `fly secrets set`.
 
 app = "pubky-rooms-staging"
-primary_region = "dfw"
+primary_region = "fra"
 kill_signal = "SIGTERM"
 kill_timeout = "5s"
 console_command = "/app/bin/pubky_rooms remote"
@@ -52,5 +52,5 @@ console_command = "/app/bin/pubky_rooms remote"
     path = "/healthz"
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "512mb"
+  size = "shared-cpu-2x"
+  memory = "1gb"
