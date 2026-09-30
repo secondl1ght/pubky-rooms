@@ -35,8 +35,30 @@ defmodule PubkyRooms.Auth.SessionStoreTest do
     assert SessionStore.ensure(cookie) == sid
     assert SessionStore.user_of(sid) == user
     # cold entry: no bearer until first use
-    assert [{^sid, %{session: nil}}] = :ets.lookup(:pubky_sessions, sid)
+    assert [{^sid, ^user, _export, nil, _used}] = :ets.lookup(:pubky_sessions, sid)
     SessionStore.delete(sid)
+  end
+
+  test "a revoked grant leaves a marker: no user, no network, no cookie handoff" do
+    user = Fixtures.z32("revoked")
+    sid = SessionStore.put(Fixtures.session(user))
+    cookie = SessionStore.cookie_session(sid)
+    # what hydrate/2 records when the homeserver answers 401 or the grant expired
+    :ets.update_element(:pubky_sessions, sid, {4, :revoked})
+
+    assert SessionStore.revoked?(sid)
+    assert SessionStore.user_of(sid) == nil
+    assert SessionStore.lookup(sid) == :error
+    assert {:error, :no_session} = SessionStore.call(sid, fn _ -> :ok end)
+    assert SessionStore.cookie_session(sid) == nil
+    # the cookie still names the sid; the plug sees the marker and drops it
+    assert SessionStore.ensure(cookie) == sid
+    assert SessionStore.user_of(sid) == nil
+    # a refreshed token arriving late never revives it
+    assert :ok = SessionStore.touch(sid)
+    assert SessionStore.revoked?(sid)
+    SessionStore.delete(sid)
+    refute SessionStore.revoked?(sid)
   end
 
   test "sessions are dropped shortly after the last attached process leaves" do
@@ -47,8 +69,7 @@ defmodule PubkyRooms.Auth.SessionStoreTest do
     SessionStore.attach(sid, pid)
     Process.sleep(20)
     # the sweep never removes an attached session, however old
-    [{^sid, entry}] = :ets.lookup(:pubky_sessions, sid)
-    :ets.insert(:pubky_sessions, {sid, %{entry | last_used: -1_000_000_000_000}})
+    :ets.update_element(:pubky_sessions, sid, {5, -1_000_000_000_000})
     send(SessionStore, :sweep)
     Process.sleep(20)
     assert SessionStore.user_of(sid) == user

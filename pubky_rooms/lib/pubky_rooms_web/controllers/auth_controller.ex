@@ -26,7 +26,7 @@ defmodule PubkyRoomsWeb.AuthController do
 
     with {:ok, sid} <-
            Phoenix.Token.verify(PubkyRoomsWeb.Endpoint, @salt, token, max_age: @max_age),
-         :ok <- RateLimit.check({:handoff, token}, 1, @max_age * 1000),
+         :ok <- RateLimit.once({:handoff, token}, @max_age * 1000),
          %{} = values <- SessionStore.cookie_session(sid) do
       conn
       |> configure_session(renew: true)

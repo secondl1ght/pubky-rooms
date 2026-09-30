@@ -27,6 +27,21 @@ defmodule PubkyRooms.RateLimit do
     if count <= limit, do: :ok, else: {:error, {:rate_limited, max(expires_at - now, 1)}}
   end
 
+  @doc """
+  Accepts `key` exactly once within `ttl_ms`: `:ok` the first time, then
+  `{:error, :used}` until the key is swept. Unlike `check/3` this is not a
+  window that resets on the clock, so a single-use token cannot be replayed
+  across a bucket boundary.
+  """
+  @spec once(term(), pos_integer()) :: :ok | {:error, :used}
+  def once(key, ttl_ms) do
+    expires_at = System.os_time(:millisecond) + ttl_ms
+
+    if :ets.insert_new(@table, {{key, :once}, 1, expires_at}),
+      do: :ok,
+      else: {:error, :used}
+  end
+
   @doc "Clears every counter (tests)."
   def reset, do: :ets.delete_all_objects(@table)
 

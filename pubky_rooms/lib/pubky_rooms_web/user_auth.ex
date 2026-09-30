@@ -11,7 +11,9 @@ defmodule PubkyRoomsWeb.UserAuth do
     * `:sid` — the session id, used for homeserver writes
 
   Resolving a user never touches the network: the credential is only exercised
-  on the first write, which reports `:unauthorized` if the grant is gone.
+  on the first write, which reports `:unauthorized` if the grant is gone. Once
+  a grant is known to be revoked or expired, the plug drops the cookie on the
+  next request, so the browser is signed out instead of looking signed in.
   The credential itself is never assigned to a socket or conn.
   """
   use PubkyRoomsWeb, :verified_routes
@@ -22,13 +24,23 @@ defmodule PubkyRoomsWeb.UserAuth do
   alias PubkyRooms.Auth.SessionStore
   alias PubkyRooms.Profiles
 
-  @doc "Plug: assigns `current_user` and `sid` from the session cookie."
+  @doc """
+  Plug: assigns `current_user` and `sid` from the session cookie. A cookie
+  whose grant turned out revoked is dropped here (LiveViews cannot set cookies).
+  """
   def fetch_current_user(conn, _opts) do
-    {sid, user} = resolve(get_session(conn))
+    case resolve(get_session(conn)) do
+      {:revoked, _sid} ->
+        conn
+        |> configure_session(drop: true)
+        |> assign(:current_user, nil)
+        |> assign(:sid, nil)
 
-    conn
-    |> assign(:current_user, user)
-    |> assign(:sid, sid)
+      {sid, user} ->
+        conn
+        |> assign(:current_user, user)
+        |> assign(:sid, sid)
+    end
   end
 
   @doc """
@@ -69,7 +81,11 @@ defmodule PubkyRoomsWeb.UserAuth do
   defp mount_current_user(%{assigns: %{sid: _}} = socket, _session), do: socket
 
   defp mount_current_user(socket, session) do
-    {sid, user} = resolve(session)
+    {sid, user} =
+      case resolve(session) do
+        {:revoked, _sid} -> {nil, nil}
+        resolved -> resolved
+      end
 
     socket =
       socket
@@ -99,13 +115,19 @@ defmodule PubkyRoomsWeb.UserAuth do
 
   defp own_profile_hook(_msg, socket), do: {:cont, socket}
 
-  # Re-seeds the session cache from cookie values and returns `{sid, user}`.
+  # Re-seeds the session cache from cookie values and returns `{sid, user}`,
+  # `{nil, nil}` for no or malformed cookie, `{:revoked, sid}` when the grant
+  # behind the cookie is known to be gone.
   defp resolve(session) when is_map(session) do
-    with sid when is_binary(sid) <- SessionStore.ensure(session),
-         pubky when is_binary(pubky) <- SessionStore.user_of(sid) do
-      {sid, Profiles.get(pubky)}
-    else
-      _ -> {nil, nil}
+    case SessionStore.ensure(session) do
+      nil ->
+        {nil, nil}
+
+      sid ->
+        case SessionStore.user_of(sid) do
+          nil -> {:revoked, sid}
+          pubky -> {sid, Profiles.get(pubky)}
+        end
     end
   end
 

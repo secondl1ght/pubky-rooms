@@ -62,7 +62,7 @@ If this server disappears tomorrow, nothing is lost and nothing is locked in:
 - **What you would lose** is the live layer (presence, typing, instant fan-out) and this node's *index*: who joined which room. Memberships are files on each member's homeserver, so a new frontend relearns them as members sign in or as their event streams report joins. Discovery of a room's full member list without an index is the one open protocol gap and is tracked for a post-launch decision (`docs/PROGRESS.md`, "member-list discovery").
 - **Closing a room** deletes only the owner's definition file. Members' messages stay where they are and the room remains readable as an archive; writing the definition again reopens it.
 - **Leaving a room takes your messages with you.** A room shows what its current members hold, nothing else. Your files stay on your homeserver, and joining again brings them back.
-- **Signing out or revoking in Pubky Ring** ends this server's ability to write as you at once; the grant never leaves your browser cookie.
+- **Signing out or revoking in Pubky Ring** ends this server's ability to write as you at once; the grant never leaves your browser cookie, and once Rooms notices a revoked grant it signs that browser out rather than keeping a dead session around.
 
 ## Restart semantics
 
@@ -142,7 +142,7 @@ Capacity limits, what happens when each is hit, the runbook and the telemetry co
 
 ## Deploy
 
-Target: a single Fly.io machine with a volume for the DETS directory. The release is standard Phoenix (`mix phx.gen.release --docker`); `GET /healthz` is the health check and is excluded from the HTTPS redirect; behind Fly's proxy the sign-in rate limit keys on the `fly-client-ip` header. The exact steps, secrets and the first mainnet sign-in with a real Pubky Ring are the next milestone in [`docs/PLAN.md`](docs/PLAN.md) and will be recorded in `docs/operations.md`.
+Target: a single Fly.io machine with a volume for the DETS directory. The release is standard Phoenix (`mix phx.gen.release --docker`); `GET /healthz` is the health check and is excluded from the HTTPS redirect; behind Fly's proxy the sign-in rate limit keys on the client entry of `x-forwarded-for` (the one before Fly's own, appended last). The exact steps, secrets and the first mainnet sign-in with a real Pubky Ring are the next milestone in [`docs/PLAN.md`](docs/PLAN.md) and will be recorded in `docs/operations.md`.
 
 ## Decisions
 

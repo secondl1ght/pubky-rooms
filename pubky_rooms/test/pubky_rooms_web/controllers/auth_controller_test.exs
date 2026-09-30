@@ -38,6 +38,21 @@ defmodule PubkyRoomsWeb.AuthControllerTest do
     assert redirected_to(conn) == "/"
   end
 
+  test "a cookie whose grant was revoked is dropped and the browser is signed out", %{conn: conn} do
+    {sid, _} = Fixtures.login("revoked")
+    cookie = Fixtures.cookie(sid)
+    :ets.update_element(:pubky_sessions, sid, {4, :revoked})
+
+    conn = conn |> init_test_session(cookie) |> get(~p"/")
+    html = html_response(conn, 200)
+    refute html =~ "Sign out"
+    assert html =~ "Sign in"
+    assert conn.assigns.current_user == nil
+
+    # the next request from that browser carries no session any more
+    assert get_session(get(conn, ~p"/"), "sid") == nil
+  end
+
   test "logout forgets the session", %{conn: conn} do
     {sid, _} = Fixtures.login("bye")
     conn = conn |> init_test_session(Fixtures.cookie(sid)) |> delete(~p"/logout")

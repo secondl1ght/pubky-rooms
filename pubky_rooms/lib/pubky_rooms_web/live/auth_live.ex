@@ -93,26 +93,41 @@ defmodule PubkyRoomsWeb.AuthLive do
     end
   end
 
-  # Behind a proxy (Fly) the peer is the proxy: prefer the client header it
-  # sets, then fall back to the peer address. Hashed with the app secret so the
-  # address itself never sits in the rate-limit table.
+  # Behind a proxy (Fly) the peer is the proxy, so the client comes from
+  # `x-forwarded-for` (Phoenix only exposes `x-` headers to LiveViews, so
+  # `fly-client-ip` is out of reach). Fly appends its own address last, so the
+  # client is the entry before it; anything earlier was supplied by the client
+  # and is ignored. Hashed with the app secret so the address itself never
+  # sits in the rate-limit table.
   defp client_key(socket) do
     headers = get_connect_info(socket, :x_headers) || []
 
     address =
-      case List.keyfind(headers, "fly-client-ip", 0) do
-        {_, ip} when is_binary(ip) and ip != "" ->
-          ip
+      case List.keyfind(headers, "x-forwarded-for", 0) do
+        {_, value} when is_binary(value) ->
+          forwarded_client(value) || peer_address(socket)
 
         _ ->
-          case get_connect_info(socket, :peer_data) do
-            %{address: address} -> :inet.ntoa(address) |> to_string()
-            _ -> "unknown"
-          end
+          peer_address(socket)
       end
 
     secret = PubkyRoomsWeb.Endpoint.config(:secret_key_base)
     :crypto.mac(:hmac, :sha256, secret, address) |> binary_part(0, 16)
+  end
+
+  defp forwarded_client(value) do
+    case value |> String.split(",") |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == "")) do
+      [] -> nil
+      [only] -> only
+      entries -> Enum.at(entries, -2)
+    end
+  end
+
+  defp peer_address(socket) do
+    case get_connect_info(socket, :peer_data) do
+      %{address: address} -> :inet.ntoa(address) |> to_string()
+      _ -> "unknown"
+    end
   end
 
   # `<.link>` only accepts known schemes as strings; custom ones are passed as a tuple.

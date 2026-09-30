@@ -14,6 +14,17 @@ defmodule PubkyRooms.Auth.SessionStore do
     * `lookup/1` hydrates a bearer token from the credential on first use;
       `call/2` runs authenticated requests and keeps refreshed tokens
 
+  Hydration (a round trip to the user's own homeserver) runs in the calling
+  process, never inside this server, so one slow homeserver delays only its
+  own user. Two writes racing on a cold entry may both mint a bearer; the
+  second one wins and the first simply expires unused on the homeserver.
+
+  A grant the user revoked in Ring (or that expired) leaves a **revoked**
+  marker in place of the session: reads report no user, writes fail at once
+  without a network call, and `PubkyRoomsWeb.UserAuth` drops the cookie on
+  the next request, so the browser is signed out rather than left looking
+  signed in with every action failing.
+
   Connected LiveViews `attach/1` to their session; the entry is dropped 60 s
   after the last one disconnects (the grace covers reloads and navigation).
   Entries that never had a LiveView expire after `session_memory_ttl_ms`. The
@@ -32,8 +43,11 @@ defmodule PubkyRooms.Auth.SessionStore do
 
   @table :pubky_sessions
   @sweep_every :timer.minutes(5)
-  @hydrate_timeout 20_000
   @disconnect_grace 60_000
+
+  # row layout: {sid, user, export, session | nil | :revoked, last_used}
+  @session_pos 4
+  @last_used_pos 5
 
   @type sid :: String.t()
   @type cookie_session :: %{String.t() => String.t()}
@@ -44,7 +58,7 @@ defmodule PubkyRooms.Auth.SessionStore do
   @spec put(Session.t()) :: sid()
   def put(%Session{} = session) do
     sid = :crypto.strong_rand_bytes(24) |> Base.url_encode64(padding: false)
-    insert(sid, session.user, Session.export(session), session)
+    :ets.insert(@table, {sid, session.user, Session.export(session), session, now()})
     sid
   end
 
@@ -52,10 +66,10 @@ defmodule PubkyRooms.Auth.SessionStore do
   @spec cookie_session(sid()) :: cookie_session() | nil
   def cookie_session(sid) do
     case :ets.lookup(@table, sid) do
-      [{^sid, %{user: user, export: export}}] ->
+      [{^sid, user, export, session, _}] when session != :revoked ->
         %{"sid" => sid, "pubky" => user, "cred" => export}
 
-      [] ->
+      _ ->
         nil
     end
   end
@@ -85,28 +99,35 @@ defmodule PubkyRooms.Auth.SessionStore do
   @spec lookup(term()) :: {:ok, Session.t()} | :error
   def lookup(sid) when is_binary(sid) do
     case :ets.lookup(@table, sid) do
-      [{^sid, %{session: %Session{} = session}}] -> {:ok, session}
-      [{^sid, %{session: nil}}] -> GenServer.call(__MODULE__, {:hydrate, sid}, @hydrate_timeout)
-      [] -> :error
+      [{^sid, _, _, %Session{} = session, _}] -> {:ok, session}
+      [{^sid, _, export, nil, _}] -> hydrate(sid, export)
+      _ -> :error
     end
   end
 
   def lookup(_), do: :error
 
-  @doc "The user (z32) behind a sid, without hydrating. Cheap."
+  @doc "The user (z32) behind a sid, without hydrating; nil for unknown or revoked sessions. Cheap."
   @spec user_of(term()) :: String.t() | nil
   def user_of(sid) when is_binary(sid) do
     case :ets.lookup(@table, sid) do
-      [{^sid, %{user: user}}] -> user
-      [] -> nil
+      [{^sid, user, _, session, _}] when session != :revoked -> user
+      _ -> nil
     end
   end
 
   def user_of(_), do: nil
 
+  @doc "True when the sid is known but its grant was found revoked or expired."
+  @spec revoked?(term()) :: boolean()
+  def revoked?(sid) when is_binary(sid),
+    do: match?([{_, _, _, :revoked, _}], :ets.lookup(@table, sid))
+
+  def revoked?(_), do: false
+
   @doc """
   Runs `fun.(session)` with a fresh session (see `Pubky.Session.call/3`),
-  keeps the refreshed session, and drops the sid when the grant was revoked.
+  keeps the refreshed session, and marks the sid revoked when the grant is gone.
   """
   @spec call(sid(), (Session.t() -> term())) :: {:ok, term()} | {:error, term()}
   def call(sid, fun) when is_function(fun, 1) do
@@ -120,7 +141,7 @@ defmodule PubkyRooms.Auth.SessionStore do
             {:ok, result}
 
           {:error, :grant_revoked, _} ->
-            delete(sid)
+            revoke(sid, :grant_revoked)
             {:error, :grant_revoked}
 
           {:error, reason, fresh} ->
@@ -136,11 +157,7 @@ defmodule PubkyRooms.Auth.SessionStore do
   @doc "Marks the session as recently used."
   @spec touch(sid()) :: :ok
   def touch(sid) when is_binary(sid) do
-    case :ets.lookup(@table, sid) do
-      [{^sid, entry}] -> :ets.insert(@table, {sid, %{entry | last_used: now()}})
-      [] -> :ok
-    end
-
+    :ets.update_element(@table, sid, {@last_used_pos, now()})
     :ok
   end
 
@@ -150,7 +167,7 @@ defmodule PubkyRooms.Auth.SessionStore do
   @spec delete(sid()) :: :ok
   def delete(sid) when is_binary(sid) do
     case :ets.lookup(@table, sid) do
-      [{^sid, %{session: session}}] ->
+      [{^sid, _, _, session, _}] ->
         :ets.delete(@table, sid)
         signout_async(session)
 
@@ -167,14 +184,49 @@ defmodule PubkyRooms.Auth.SessionStore do
   def count, do: :ets.info(@table, :size)
 
   defp keep(_sid, %Session{token: t}, %Session{token: t}), do: :ok
-  defp keep(sid, _old, fresh), do: GenServer.cast(__MODULE__, {:update, sid, fresh})
 
-  defp insert(sid, user, export, session) do
-    :ets.insert(@table, {sid, %{user: user, export: export, session: session, last_used: now()}})
+  defp keep(sid, _old, fresh) do
+    # never overwrite a revocation that landed meanwhile
+    case :ets.lookup(@table, sid) do
+      [{^sid, _, _, :revoked, _}] -> :ok
+      _ -> :ets.update_element(@table, sid, {@session_pos, fresh})
+    end
+
+    :ok
   end
 
-  defp insert_new(sid, user, export) do
-    :ets.insert_new(@table, {sid, %{user: user, export: export, session: nil, last_used: now()}})
+  defp insert_new(sid, user, export),
+    do: :ets.insert_new(@table, {sid, user, export, nil, now()})
+
+  # Mints the bearer in the caller. Revocation leaves a marker so the browser
+  # gets signed out; a transport failure leaves the entry cold for a retry.
+  defp hydrate(sid, export) do
+    with {:ok, credential} <- Credential.import(export),
+         {:ok, session} <- Credential.restore(credential) do
+      keep(sid, nil, session)
+      touch(sid)
+      {:ok, session}
+    else
+      {:error, reason} when reason in [:grant_revoked, :expired, :cnf_mismatch] ->
+        revoke(sid, reason)
+        :error
+
+      {:error, {:http, status, _}} when status in [401, 403] ->
+        revoke(sid, {:http, status})
+        :error
+
+      other ->
+        Logger.warning(
+          "session #{String.slice(sid, 0, 6)}… could not be restored: #{inspect(other)}"
+        )
+
+        :error
+    end
+  end
+
+  defp revoke(sid, reason) do
+    Logger.info("session #{String.slice(sid, 0, 6)}… revoked: #{inspect(reason)}")
+    :ets.update_element(@table, sid, [{@session_pos, :revoked}, {@last_used_pos, now()}])
   end
 
   defp now, do: System.monotonic_time(:millisecond)
@@ -186,15 +238,6 @@ defmodule PubkyRooms.Auth.SessionStore do
     :ets.new(@table, [:named_table, :public, :set, read_concurrency: true])
     Process.send_after(self(), :sweep, @sweep_every)
     {:ok, %{pids: %{}, sids: %{}, timers: %{}}}
-  end
-
-  @impl true
-  def handle_call({:hydrate, sid}, _from, state) do
-    case :ets.lookup(@table, sid) do
-      [{^sid, %{session: %Session{} = session}}] -> {:reply, {:ok, session}, state}
-      [{^sid, %{session: nil} = entry}] -> {:reply, hydrate(sid, entry), state}
-      [] -> {:reply, :error, state}
-    end
   end
 
   @impl true
@@ -210,21 +253,12 @@ defmodule PubkyRooms.Auth.SessionStore do
     end
   end
 
-  def handle_cast({:update, sid, %Session{} = session}, state) do
-    case :ets.lookup(@table, sid) do
-      [{^sid, entry}] -> :ets.insert(@table, {sid, %{entry | session: session}})
-      [] -> :ok
-    end
-
-    {:noreply, state}
-  end
-
   @impl true
   def handle_info(:sweep, state) do
     ttl = Application.get_env(:pubky_rooms, :session_memory_ttl_ms, 900_000)
     cutoff = now() - ttl
 
-    for {sid, %{last_used: used}} <- :ets.tab2list(@table),
+    for {sid, _, _, _, used} <- :ets.tab2list(@table),
         used < cutoff,
         not Map.has_key?(state.sids, sid) do
       :ets.delete(@table, sid)
@@ -269,30 +303,6 @@ defmodule PubkyRooms.Auth.SessionStore do
       {timer, timers} ->
         Process.cancel_timer(timer)
         %{state | timers: timers}
-    end
-  end
-
-  defp hydrate(sid, %{export: export} = entry) do
-    with {:ok, credential} <- Credential.import(export),
-         {:ok, session} <- Credential.restore(credential) do
-      :ets.insert(@table, {sid, %{entry | session: session, last_used: now()}})
-      {:ok, session}
-    else
-      {:error, reason} when reason in [:grant_revoked, :expired, :cnf_mismatch] ->
-        Logger.info("session #{String.slice(sid, 0, 6)}… dropped: #{inspect(reason)}")
-        :ets.delete(@table, sid)
-        :error
-
-      {:error, {:http, status, _}} when status in [401, 403] ->
-        :ets.delete(@table, sid)
-        :error
-
-      other ->
-        Logger.warning(
-          "session #{String.slice(sid, 0, 6)}… could not be restored: #{inspect(other)}"
-        )
-
-        :error
     end
   end
 

@@ -103,6 +103,34 @@ defmodule PubkyRoomsWeb.AuthLiveTest do
     assert render(view) =~ "Too many sign-in attempts"
   end
 
+  test "behind a proxy the limiter keys on the client named by x-forwarded-for", %{conn: conn} do
+    # Fly appends its own address last; the client is the entry before it
+    forwarded = fn ip ->
+      Plug.Conn.put_private(conn, :live_view_connect_info, %{
+        x_headers: [{"x-forwarded-for", "10.0.0.9, #{ip}, 66.241.124.1"}],
+        peer_data: %{address: {127, 0, 0, 1}, port: 1, ssl_cert: nil}
+      })
+    end
+
+    conn_a = forwarded.("203.0.113.5")
+    conn_b = forwarded.("198.51.100.7")
+
+    {:ok, view, _html} = live(conn_a, ~p"/login")
+
+    for _ <- 1..20 do
+      FakeGrantLogin.resolve({:error, :expired})
+      wait_for(fn -> render(view) end, &(&1 =~ "This code expired"))
+      view |> element("button", "New code") |> render_click()
+    end
+
+    assert render(view) =~ "Too many sign-in attempts"
+
+    # another client behind the same proxy is not affected
+    {:ok, other, _html} = live(conn_b, ~p"/login")
+    assert render(other) =~ "Waiting for approval"
+    refute render(other) =~ "Too many sign-in attempts"
+  end
+
   defp wait_for(fun, pred, tries \\ 100) do
     value = fun.()
 
