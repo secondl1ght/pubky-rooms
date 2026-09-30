@@ -100,7 +100,7 @@ Seeded on 2026-09-21 from Claude's browser pass over the finish-phase work; the 
 - Re-verification after review fixes: the three automated suites, the checklist's smoke subset, and the flow each change touched, in the browser; the full checklist runs again on staging. — decided
 - Follow-ups live in these docs until the plan is complete, then move to GitHub issues in one pass. — decided
 - Before sharing the staging link: delete the test rooms and seed a few real rooms so the directory is not empty. — todo (staging)
-- Open Graph: dynamic title and description per page (room name and topic on room pages, from the dead render) plus one static brand image at launch; a per-room image with the room name needs server-side PNG rendering (libvips via `Image`, or a headless browser) and is a post-launch follow-up. — planned (pre-launch)
+- Open Graph: dynamic title and description per page (room name and topic on room pages, from the dead render) plus one static brand image at launch; a per-room image with the room name needs server-side PNG rendering (libvips via `Image`, or a headless browser) and is a post-launch follow-up. — done 2026-09-30 (`PubkyRoomsWeb.Meta`, head tags in the root layout, `priv/static/images/og.png` rendered from `assets/og/index.html` by `scripts/render_og.js`; the user chose the static image)
 - M8 (Pubky App integration) is deferred entirely; only its OG-tags item moves to pre-launch. — decided
 - The user's own polish list follows the e2e smoke suite and precedes the production deploy; after it, the full regime runs again (CI suites, e2e, full manual checklist on staging). — decided
 

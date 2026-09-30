@@ -25,6 +25,8 @@ defmodule PubkyRoomsWeb.AuthLive do
     socket =
       assign(socket,
         page_title: "Sign in",
+        page_description:
+          "Sign in with Pubky Ring to open and join live rooms. Rooms asks for one folder on your homeserver and nothing else.",
         return_to: UserAuth.safe_return_to(params["return_to"]),
         state: :starting,
         auth_url: nil,

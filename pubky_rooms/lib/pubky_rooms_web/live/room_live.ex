@@ -461,7 +461,12 @@ defmodule PubkyRoomsWeb.RoomLive do
     bans = Map.get(snapshot, :bans, %{})
 
     socket
-    |> assign(status: status, room: room, page_title: (room && room.name) || "Room")
+    |> assign(
+      status: status,
+      room: room,
+      page_title: (room && room.name) || "Room",
+      page_description: room_description(room)
+    )
     |> assign_members(members)
     |> assign(
       is_member: user != nil and user.pubky in members,
@@ -476,6 +481,10 @@ defmodule PubkyRoomsWeb.RoomLive do
       viewers: Map.get(snapshot, :viewers, 0)
     )
   end
+
+  # Link previews: the topic when the room has one, else a sentence about rooms.
+  defp room_description(%Room{topic: topic}) when is_binary(topic) and topic != "", do: topic
+  defp room_description(_room), do: PubkyRoomsWeb.Meta.room_description()
 
   defp assign_members(socket, members) do
     profiles = Map.new(members, &{&1, Profiles.get(&1)})
@@ -999,7 +1008,12 @@ defmodule PubkyRoomsWeb.RoomLive do
   def handle_async(:save_settings, {:ok, {:ok, %Room{} = room}}, socket) do
     {:noreply,
      socket
-     |> assign(saving: false, room: room, page_title: room.name)
+     |> assign(
+       saving: false,
+       room: room,
+       page_title: room.name,
+       page_description: room_description(room)
+     )
      |> put_flash(:success, "Room updated.")
      |> push_patch(to: room_path(socket))}
   end
@@ -1336,7 +1350,8 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   defp apply_room_event(socket, {:room_updated, room}),
-    do: assign(socket, room: room, page_title: room.name)
+    do:
+      assign(socket, room: room, page_title: room.name, page_description: room_description(room))
 
   defp apply_room_event(socket, :room_closed) do
     socket

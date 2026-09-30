@@ -1,0 +1,106 @@
+<!doctype html>
+<!--
+  Source of the share image (Open Graph / Twitter card) at priv/static/images/og.png.
+  Render it with `scripts/render_og.js` (see the header there); never edit the PNG by hand.
+  Same tokens as assets/css/app.css: background #05050A, brand #C8FF00, muted #89898F, Inter Tight.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @font-face {
+        font-family: "Inter Tight";
+        font-style: normal;
+        font-weight: 100 900;
+        src: url("../../priv/static/fonts/inter-tight-latin-wght-normal.woff2") format("woff2-variations");
+      }
+      html, body { margin: 0; padding: 0; }
+      body {
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        background: #05050a;
+        color: #ffffff;
+        font-family: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .card {
+        box-sizing: border-box;
+        width: 1200px;
+        height: 630px;
+        padding: 84px 96px 80px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .lockup {
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+        user-select: none;
+      }
+      .lockup img { height: 52px; width: auto; display: block; }
+      .lockup span {
+        color: #c8ff00;
+        font-size: 38px;
+        line-height: 48px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      h1 {
+        margin: 0;
+        font-size: 118px;
+        line-height: 0.96;
+        font-weight: 700;
+        letter-spacing: -0.035em;
+        max-width: 1000px;
+      }
+      h1 em { font-style: normal; color: #c8ff00; }
+      .foot {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 48px;
+      }
+      .foot p {
+        margin: 0;
+        max-width: 760px;
+        color: #89898f;
+        font-size: 30px;
+        line-height: 1.3;
+        font-weight: 500;
+        letter-spacing: -0.01em;
+      }
+      .foot .host {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: #89898f;
+        font-size: 26px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        white-space: nowrap;
+      }
+      .dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        background: #c8ff00;
+        box-shadow: 0 0 0 6px rgba(200, 255, 0, 0.16);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="lockup">
+        <img src="../../priv/static/images/pubky-logo.svg" alt="Pubky" />
+        <span>Rooms</span>
+      </div>
+      <h1>Live rooms.<br />Your <em>homeserver.</em></h1>
+      <div class="foot">
+        <p>Group chat where every message is yours to keep.</p>
+        <div class="host"><span class="dot"></span>rooms.pubky.app</div>
+      </div>
+    </div>
+  </body>
+</html>

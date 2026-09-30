@@ -53,3 +53,6 @@ https://pubky.app. Reference data: `docs/notes/pubky-app-design-system.md`, `doc
   screenshots (`/dev/ui` vs pubky.app) and computed styles.
 - Prefer components over ad-hoc classes in LiveViews; extend the library when a pattern repeats.
 - Every component has `@doc` with an example and declared `attr`/`slot`s.
+
+## Share image and link previews
+Link previews (Open Graph, Twitter cards) come from `PubkyRoomsWeb.Meta`: the title is the page title with the site name (the lobby uses the tagline), the description is the page's `page_description` assign or the default sentence, and the room page uses the room's topic. Every LiveView sets both in `mount/3`, because crawlers only read the dead render. The image is one static 1200×630 card, `priv/static/images/og.png`, rendered from `assets/og/index.html` (same tokens and Inter Tight, the hero's headline) with `scripts/render_og.js` — edit the HTML, re-render, commit the PNG. A per-room image is a post-launch follow-up.

@@ -18,7 +18,13 @@ defmodule PubkyRoomsWeb.MeLive do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(page_title: "You", capabilities: GrantLogin.capabilities(), saving: false)
+     |> assign(
+       page_title: "You",
+       page_description:
+         "Your Pubky Rooms account: the key you signed in with and what Rooms may write.",
+       capabilities: GrantLogin.capabilities(),
+       saving: false
+     )
      |> assign(nickname: nickname_form(socket.assigns.current_user))}
   end
 

@@ -15,6 +15,24 @@
     <link rel="apple-touch-icon" href={~p"/images/icons/apple-touch-icon.png"} />
     <link rel="manifest" href="/manifest.webmanifest" />
     <.live_title default="Pubky Rooms" suffix=" · Pubky Rooms" phx-no-format>{assigns[:page_title]}</.live_title>
+    <meta name="description" content={PubkyRoomsWeb.Meta.description(assigns)} />
+    <meta property="og:site_name" content={PubkyRoomsWeb.Meta.site()} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={PubkyRoomsWeb.Meta.title(assigns)} />
+    <meta property="og:description" content={PubkyRoomsWeb.Meta.description(assigns)} />
+    <meta
+      :if={assigns[:conn]}
+      property="og:url"
+      content={Phoenix.Controller.current_url(@conn, %{})}
+    />
+    <meta property="og:image" content={url(~p"/images/og.png")} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Pubky Rooms — Live rooms. Your homeserver." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={PubkyRoomsWeb.Meta.title(assigns)} />
+    <meta name="twitter:description" content={PubkyRoomsWeb.Meta.description(assigns)} />
+    <meta name="twitter:image" content={url(~p"/images/og.png")} />
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
     <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
     </script>
