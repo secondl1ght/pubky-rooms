@@ -139,3 +139,26 @@ How it ran: the `code-review`/`security-review` skills were not in the session's
 - Phoenix serves static files before `Plug.Telemetry`, so a probe on `[:phoenix, :endpoint, :start]` never sees `/robots.txt`; use a routed path such as `/healthz`.
 - Cosmetic: Fly logs one health-check failure line in the two seconds before the endpoint listens (inside the 15 s grace period, no routing effect); flyctl's post-deploy DNS check times out in a sandboxed shell (harmless).
 
+
+## §13 on staging, overnight (2026-09-30, Claude alone with the harness)
+
+**Result:** the dependency unknowns are answered; everything Claude can drive alone is green after four fixes (each with tests, redeployed). Rows in the checklist; the run row has the numbers.
+
+**Fixed (library):**
+- `Events.Stream` reconnected with an *empty* subscription when its last user was removed (the homeserver answers 400 "user parameter is required"), so `Subscriptions` logged "event stream … stopped" a minute after every sign-out or last tab close. A stream with nobody to follow now closes its connection and waits for `add_users`.
+- A **429 on the stream connect** was treated like any 4xx: the stream exited and live updates for its members stopped until `Subscriptions` retried them (30 s and growing; a send confirmed only through the verify fallback, 18 s). The staging homeserver throttles the `/events-stream` connect made during a cold bootstrap burst from Fly's address, `Retry-After: 1`. The stream now reports `{:disconnected, {:rate_limited, ms}}` and reconnects after `Retry-After` (or its backoff); `Subscriptions` logs it at warning with the delay.
+
+**Fixed (app):**
+- `Nexus.tags_by_uri/1` read **zero tags for every room**: `/v0/resource/by-uri` wraps the fields as `"resource"` (the stream endpoint uses `"details"`), a shape the parser did not know. Verified on the node before and after; the real responses are vendored in `docs/fixtures/nexus` and pinned by tests. Nexus staging indexes a new room and its tags within two seconds.
+- The tag input pushed a `tag_query` after its LiveView was torn down (the field blurs when the dialog leaves with the navigation to the new room): a console error on every room creation, found by the e2e suite's console check. Guarded with a `gone` flag; hook test.
+- `Mutes` had its two private loaders between `handle_call` clauses: a compile warning that had made **CI red since the review commits** (`--warnings-as-errors`).
+
+**Verified on staging (numbers in the run row):** room creation with topic and tags; a message confirms in ~0.4 s and reaches a second identity and an anonymous viewer live in ~0.8 s; the room, membership, message and tag files exist on `homeserver.staging.pubky.app` under `/storage/<user>/pub/pubky-rooms/…` (path addressing); 200 messages from two identities under the 5 / 5 s send limit with no failures; a cold bootstrap shows the newest 100 and "Load earlier messages" pages 50 at a time to the beginning, ordered, no duplicates; a redeploy and a `fly machine restart` with two tabs open: both reconnect on their own in 5–15 s without a reload and messaging resumes at normal latency; DETS survived a dozen restarts and three redeploys (the room stays listed with its tags); no read throttling during cold bootstraps of the 200-message room (only the stream connect gets the 429, see above); keep-alives arrive, so no idle reconnects in 20 minutes of uptime; `x-forwarded-for` as recorded earlier; nothing identifying at info.
+
+**Gotchas learned:**
+- **Fly trial accounts stop a machine after 5 minutes of running, whatever it is doing** ("Trial machine stopping"); the next request starts it again (~3 s). Live tabs reconnect (a good accidental test), but nothing longer than five minutes can be verified and rooms never stay warm. The user added a card at 08:2x UTC; gone since.
+- **Never raise a live node to `:debug`**: `Phoenix.LiveView.Logger` prints the whole session at mount, the encrypted-cookie credential included (`Phoenix.Logger`'s parameter filter does not apply to the session). Reset with `Logger.configure(level: :info)` at once if it ever happens; use telemetry or a one-off probe instead.
+- A paging round can report "no more pages" while its last fetches are still landing: a count read the moment `has_more` turns off was 191 of 200, complete a second later. Not a loss; scripts must settle before counting.
+- The `#messages > [id^=msg-]` rows have `-actions` and `-palette` children with the same prefix: count direct children only.
+- The 429 on the stream connect appears on *every* cold start from Fly's address, not from a residential address (180 parallel reads and a stream from home: all 200). Whether it is a per-address connection cap or the burst (a hundred fetches plus listings in the same second) is unknown; the retry makes it invisible.
+- One unexplained failure in five runs of the app suite locally (the failing test's output was not captured; four clean runs after); not reproduced. Capture it if it recurs.

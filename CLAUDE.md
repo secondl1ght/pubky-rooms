@@ -14,7 +14,7 @@ Sovereign live chat rooms on the Pubky protocol, built with Phoenix/Elixir. Part
 - `docs/qa/` — `README.md` (how findings are recorded), `findings.md` (open items, decisions, gotcha-bugs), `checklist.md` (the manual pass: every flow with expected results; **smoke** subset before each deploy).
 - `docs/design-system.md` — our clean-room component library (`PubkyRoomsWeb.UI.*`), tokens, and rules; gallery at `/dev/ui` in dev.
 - `docs/adr/` — architecture decision records.
-- `docs/fixtures/` — captured protocol payloads used by tests.
+- `docs/fixtures/` — captured protocol payloads used by tests (`pkarr/` packets, `pubky-app-specs/` vectors, `nexus/` real staging Nexus responses).
 
 ## Repo layout
 ```
