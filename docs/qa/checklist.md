@@ -146,6 +146,7 @@ Never exercised on the testnet; each one is verified on the staging deploy befor
 - [ ] Behind Fly's proxy: `fly-client-ip` arrives on the websocket connect (sign-in limiter), `check_origin` and the URL host match the Fly hostname, `/healthz` answers over the platform check, websockets stay up through a deploy.
 - [ ] Nexus (`NEXUS_URL=https://nexus.pubky.app`) contributes tag counts; with Nexus unreachable the app still works.
 - [ ] DETS volume survives a restart and a redeploy (rooms and tags still listed).
+- [ ] PWA on the production build (the worker never registers in dev): Chrome offers Install and the installed app opens on the lobby; static assets come from the worker cache on reload while HTML never does (deploy a copy change, reload, see it); offline navigation shows `/offline.html`; the websocket is untouched; iOS shows the touch icon and theme colour. Can also be run earlier on a local production build on another port with its own `PUBKY_DATA_DIR` (~20 min) if staging is far off.
 - [ ] Before sharing the link: test rooms deleted, a few real rooms seeded, the directory reads well.
 
 ## Runs
