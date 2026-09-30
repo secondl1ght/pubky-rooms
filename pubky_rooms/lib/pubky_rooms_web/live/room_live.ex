@@ -660,8 +660,9 @@ defmodule PubkyRoomsWeb.RoomLive do
     end
   end
 
-  # Anyone may ask (the notice shows for every viewer), a few times a minute.
-  def handle_event("retry_history", _params, socket) do
+  # Signed-in viewers may ask, a few times a minute: a retry re-lists every
+  # unreachable member's folder, which is not for anonymous traffic to trigger.
+  def handle_event("retry_history", _params, %{assigns: %{current_user: %{}}} = socket) do
     if RateLimit.check({:retry_history, socket.id}, 3, 10_000) == :ok,
       do: RoomServer.retry_history(socket.assigns.ref)
 
@@ -932,15 +933,16 @@ defmodule PubkyRoomsWeb.RoomLive do
   # ── async results ──────────────────────────────────────────────────────────
 
   @impl true
+  # The grant is gone (revoked in Ring or expired): nothing else on this page
+  # can succeed, so the sign-in page explains; the full page load also lets
+  # `UserAuth` drop the cookie.
+  def handle_async(_name, {:ok, {:error, :unauthorized}}, socket) do
+    {:noreply,
+     socket |> put_flash(:error, Rooms.explain(:unauthorized)) |> redirect(to: ~p"/login")}
+  end
+
   def handle_async({:publish, _key}, {:ok, :ok}, socket), do: {:noreply, socket}
   def handle_async({:publish, _key}, {:ok, {:ok, _msg}}, socket), do: {:noreply, socket}
-
-  def handle_async({:publish, key}, {:ok, {:error, :unauthorized}}, socket) do
-    {:noreply,
-     socket
-     |> fail_message(key, :unauthorized)
-     |> put_flash(:error, Rooms.explain(:unauthorized))}
-  end
 
   def handle_async({:publish, key}, {:ok, {:error, reason}}, socket) do
     {:noreply, fail_message(socket, key, reason)}
@@ -1549,7 +1551,7 @@ defmodule PubkyRoomsWeb.RoomLive do
                 History from {length(@unreachable)}
                 {if length(@unreachable) == 1, do: "member", else: "members"} could not be loaded from their homeserver.
               </span>
-              <.button variant="ghost" size="sm" phx-click="retry_history">
+              <.button :if={@current_user} variant="ghost" size="sm" phx-click="retry_history">
                 <.icon name="lucide-refresh-cw" class="size-4" /> Retry
               </.button>
             </div>

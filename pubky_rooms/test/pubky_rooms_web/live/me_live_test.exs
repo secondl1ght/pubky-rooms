@@ -19,6 +19,15 @@ defmodule PubkyRoomsWeb.MeLiveTest do
     assert {:error, {:redirect, %{to: "/login"}}} = live(build_conn(), ~p"/me")
   end
 
+  test "a revoked grant sends the user to sign in again", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/me")
+    Fake.fail_next_under("/pub/pubky-rooms/", :unauthorized)
+    view |> form("#nickname-form", nickname: %{name: "Gone"}) |> render_submit()
+    {path, flash} = assert_redirect(view, 2_000)
+    assert path == ~p"/login"
+    assert flash["error"] =~ "session has expired"
+  end
+
   test "hand-crafted event payloads are ignored", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/me")
     render_hook(view, "save_nickname", %{"nickname" => %{"name" => ["not", "a", "string"]}})

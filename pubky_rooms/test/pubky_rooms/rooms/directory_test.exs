@@ -49,6 +49,36 @@ defmodule PubkyRooms.Rooms.DirectoryTest do
     assert Directory.last_activity(ref) == before
   end
 
+  test "a membership is recorded once its room is known; markers for rooms that do not exist record nothing" do
+    alice = Fixtures.z32("alice")
+    bob = Fixtures.z32("bob")
+    {:ok, room} = Room.new(alice, %{"name" => "Early", "visibility" => "public"})
+    ref = Room.ref(room)
+    # the room exists on alice's homeserver but this node has not seen it yet
+    Fake.seed(alice, Paths.room(room.id), Room.encode(room))
+
+    # bob's marker event arrives first: the room is fetched, then bob is added
+    Fake.write_as(bob, Paths.member(ref), Membership.encode(ref))
+    assert_receive {:directory, {:room_updated, %Room{name: "Early"}}}, 2_000
+    assert_receive {:directory, {:member_joined, ^ref, ^bob}}, 2_000
+    assert Directory.member?(ref, bob)
+
+    # a marker for a room nobody ever wrote leaves nothing behind
+    ghost = {alice, "0035S410XTQ77"}
+    mallory = Fixtures.z32("mallory")
+    Fake.write_as(mallory, Paths.member(ghost), Membership.encode(ghost))
+    refute_receive {:directory, {:member_joined, ^ghost, ^mallory}}, 300
+    refute Directory.member?(ghost, mallory)
+    assert Directory.get(ghost) == nil
+
+    # rows an older build persisted for unknown rooms are dropped when the tables are rebuilt
+    :ok = :dets.insert(:rooms_directory_dets, {{:member, ghost, mallory}, 1})
+    :ok = GenServer.call(Directory, :reload)
+    refute Directory.member?(ghost, mallory)
+    assert Directory.member?(ref, bob)
+    assert :dets.lookup(:rooms_directory_dets, {:member, ghost, mallory}) == []
+  end
+
   test "sync_user discovers rooms and memberships from the homeserver" do
     alice = Fixtures.z32("alice")
     carol = Fixtures.z32("carol")

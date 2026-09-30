@@ -291,30 +291,43 @@ defmodule PubkyRooms.Rooms.Directory do
     Events.subscribe_all()
     if Nexus.enabled?(), do: schedule_nexus_sync(1_000)
     Process.send_after(self(), :sweep_closed, @sweep_every_ms)
-    {:ok, %{dets: dets, synced: %{}, nexus_refreshed: %{}, removed_tags: %{}}}
+
+    {:ok,
+     %{dets: dets, synced: %{}, nexus_refreshed: %{}, removed_tags: %{}, pending_members: %{}}}
   end
 
+  # Rooms first, then memberships and tags; a membership whose room was never
+  # confirmed (see `apply_event/4` for member markers) is dropped for good.
   defp load(dets) do
-    :dets.foldl(
-      fn
-        {{:room, ref}, room, activity}, acc ->
-          insert_room(ref, normalize(room), activity)
-          acc
+    {members, tags} =
+      :dets.foldl(
+        fn
+          {{:room, ref}, room, activity}, acc ->
+            insert_room(ref, normalize(room), activity)
+            acc
 
-        {{:member, ref, z32}, _joined_at}, acc ->
-          insert_member(ref, z32)
-          acc
+          {{:member, ref, z32}, _joined_at}, {members, tags} ->
+            {[{ref, z32} | members], tags}
 
-        {{:tag, tagger, id}, ref, label}, acc ->
-          insert_tag(ref, label, tagger, id)
-          acc
+          {{:tag, tagger, id}, ref, label}, {members, tags} ->
+            {members, [{ref, label, tagger, id} | tags]}
 
-        _other, acc ->
-          acc
-      end,
-      :ok,
-      dets
-    )
+          _other, acc ->
+            acc
+        end,
+        {[], []},
+        dets
+      )
+
+    {known, junk} = Enum.split_with(members, fn {ref, _} -> :ets.member(@rooms, ref) end)
+    for {ref, z32} <- known, do: insert_member(ref, z32)
+    for {ref, z32} <- junk, do: :ok = :dets.delete(dets, {:member, ref, z32})
+
+    if junk != [],
+      do: Logger.info("directory dropped #{length(junk)} memberships of unknown rooms")
+
+    for {ref, label, tagger, id} <- tags, do: insert_tag(ref, label, tagger, id)
+    :ok
   end
 
   defp schedule_nexus_sync(delay), do: Process.send_after(self(), :sync_nexus, delay)
@@ -356,7 +369,16 @@ defmodule PubkyRooms.Rooms.Directory do
         do: :ets.delete_all_objects(t)
 
     :ok = :dets.delete_all_objects(state.dets)
-    {:reply, :ok, %{state | synced: %{}, nexus_refreshed: %{}, removed_tags: %{}}}
+
+    {:reply, :ok,
+     %{state | synced: %{}, nexus_refreshed: %{}, removed_tags: %{}, pending_members: %{}}}
+  end
+
+  # Tests: rebuild the in-memory tables from DETS as a restart would.
+  def handle_call(:reload, _from, state) do
+    for t <- [@rooms, @members, @user_rooms, @tags, @tag_ids], do: :ets.delete_all_objects(t)
+    load(state.dets)
+    {:reply, :ok, %{state | pending_members: %{}}}
   end
 
   @impl true
@@ -435,13 +457,24 @@ defmodule PubkyRooms.Rooms.Directory do
 
   defp apply_event(state, {:room, id}, :del, user), do: do_close_room(state, {user, id})
 
+  # A marker names a room; the membership is recorded once that room's
+  # definition has been read from its owner (a marker for a room that does not
+  # exist records nothing). Until then it waits in memory.
   defp apply_event(state, {:member, creator, id}, :put, user) do
-    unless get({creator, id}), do: fetch_room_async({creator, id})
-    do_add_member(state, {creator, id}, user)
+    ref = {creator, id}
+
+    if get(ref) do
+      do_add_member(state, ref, user)
+    else
+      fetch_room_async(ref)
+      remember_pending_member(state, ref, user)
+    end
   end
 
-  defp apply_event(state, {:member, creator, id}, :del, user),
-    do: do_remove_member(state, {creator, id}, user)
+  defp apply_event(state, {:member, creator, id}, :del, user) do
+    ref = {creator, id}
+    state |> forget_pending_member(ref, user) |> do_remove_member(ref, user)
+  end
 
   # Only a member's message counts as activity: anyone can write a file whose
   # path names somebody else's room.
@@ -461,6 +494,7 @@ defmodule PubkyRooms.Rooms.Directory do
 
   defp do_put_room(state, room) do
     ref = Room.ref(room)
+    {waiting, state} = pop_pending_members(state, ref)
     activity = last_activity(ref) || room.created_at
     insert_room(ref, room, activity)
     insert_member(ref, room.creator)
@@ -472,7 +506,8 @@ defmodule PubkyRooms.Rooms.Directory do
       ])
 
     broadcast({:room_updated, room})
-    state
+    # members whose markers arrived before the room did
+    Enum.reduce(waiting, state, &do_add_member(&2, ref, &1))
   end
 
   defp do_remove_room(state, ref) do
@@ -493,6 +528,8 @@ defmodule PubkyRooms.Rooms.Directory do
   # Closing keeps the row and the members; Nexus counts go (the room left
   # discovery). Already-closed rooms keep their original `closed_at`.
   defp do_close_room(state, ref) do
+    state = drop_pending_members(state, ref)
+
     case :ets.lookup(@rooms, ref) do
       [{^ref, %Room{closed_at: nil} = room, activity}] ->
         closed = %{room | closed_at: System.os_time(:millisecond)}
@@ -690,10 +727,11 @@ defmodule PubkyRooms.Rooms.Directory do
     end
   end
 
+  # A membership is recorded only for a room whose definition was read.
   defp sync_membership(z32, ref, path) do
     with {:ok, bytes} <- Pubky.get(z32, path),
-         {:ok, _} <- Membership.decode(bytes, ref) do
-      unless get(ref), do: learn_room(ref)
+         {:ok, _} <- Membership.decode(bytes, ref),
+         true <- get(ref) != nil or learn_room(ref) == :ok do
       add_member(ref, z32)
     end
   end
@@ -702,9 +740,45 @@ defmodule PubkyRooms.Rooms.Directory do
   defp learn_room(ref) do
     case fetch_room(ref) do
       {:ok, room} -> put_room(room)
-      _ -> :ok
+      _ -> :error
     end
   end
+
+  # Memberships seen before their room, kept in memory (bounded: past 1 000
+  # rooms the entries older than five minutes are forgotten).
+  defp remember_pending_member(state, ref, z32) do
+    now = System.monotonic_time(:millisecond)
+    {users, _} = Map.get(state.pending_members, ref, {MapSet.new(), now})
+    pending = Map.put(state.pending_members, ref, {MapSet.put(users, z32), now})
+
+    pending =
+      if map_size(pending) > 1_000,
+        do: :maps.filter(fn _ref, {_, at} -> now - at < :timer.minutes(5) end, pending),
+        else: pending
+
+    %{state | pending_members: pending}
+  end
+
+  defp forget_pending_member(state, ref, z32) do
+    case state.pending_members do
+      %{^ref => {users, at}} ->
+        %{
+          state
+          | pending_members: Map.put(state.pending_members, ref, {MapSet.delete(users, z32), at})
+        }
+
+      _ ->
+        state
+    end
+  end
+
+  defp pop_pending_members(state, ref) do
+    {entry, pending} = Map.pop(state.pending_members, ref)
+    {if(entry, do: elem(entry, 0), else: MapSet.new()), %{state | pending_members: pending}}
+  end
+
+  defp drop_pending_members(state, ref),
+    do: %{state | pending_members: Map.delete(state.pending_members, ref)}
 
   defp discoverable?(%Room{visibility: "public", closed_at: nil}), do: true
   defp discoverable?(_room), do: false

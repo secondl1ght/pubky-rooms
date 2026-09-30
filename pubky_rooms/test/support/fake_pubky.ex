@@ -59,6 +59,10 @@ defmodule PubkyRooms.Pubky.Fake do
   def fail_list(user, reason),
     do: Agent.update(__MODULE__, &put_in(&1, [:failures, {:list, user}], reason))
 
+  @doc "Makes every directory listing for `user` fail with `reason` until `reset/0` (a homeserver that stays down)."
+  def fail_list_always(user, reason),
+    do: Agent.update(__MODULE__, &put_in(&1, [:failures, {:list, user}], {:sticky, reason}))
+
   @doc "Makes the next write under `prefix` fail with `reason` (when the exact path is not known)."
   def fail_next_under(prefix, reason),
     do: Agent.update(__MODULE__, &put_in(&1, [:failures, {:prefix, prefix}], reason))
@@ -236,8 +240,14 @@ defmodule PubkyRooms.Pubky.Fake do
           _ -> false
         end)
 
-      {reason, failures} = Map.pop(s.failures, key)
-      {reason, %{s | failures: failures}}
+      case Map.fetch(s.failures, key) do
+        {:ok, {:sticky, reason}} ->
+          {reason, s}
+
+        _ ->
+          {reason, failures} = Map.pop(s.failures, key)
+          {reason, %{s | failures: failures}}
+      end
     end)
     |> case do
       nil -> :ok

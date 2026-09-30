@@ -65,6 +65,13 @@ defmodule PubkyRoomsWeb.MeLive do
      |> put_flash(:info, "Nickname removed.")}
   end
 
+  # The grant is gone: the sign-in page explains, and the full page load lets
+  # `UserAuth` drop the cookie.
+  def handle_async(_name, {:ok, {:error, :unauthorized}}, socket) do
+    {:noreply,
+     socket |> put_flash(:error, Rooms.explain(:unauthorized)) |> redirect(to: ~p"/login")}
+  end
+
   def handle_async(_name, {:ok, {:error, reason}}, socket) do
     {:noreply, socket |> assign(saving: false) |> put_flash(:error, Rooms.explain(reason))}
   end

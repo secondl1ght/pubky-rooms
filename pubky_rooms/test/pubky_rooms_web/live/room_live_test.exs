@@ -87,13 +87,37 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert wait_for(fn -> render(view) end, &(&1 =~ "No messages yet"))
   end
 
-  test "asking to retry unreachable members is limited per viewer", ctx do
+  test "retrying unreachable members is for signed-in viewers, a few times a minute", ctx do
+    bob = Fixtures.z32("bob")
+    Directory.add_member(Room.ref(ctx.room), bob)
+    # bob's homeserver stays down (a one-off failure is cleared by the next successful listing)
+    Fake.fail_list_always(bob, :unreachable)
+
+    # an anonymous viewer sees the notice but gets no button, and the event is ignored
+    {:ok, anon, _} = live(ctx.conn, ctx.path)
+    wait_for(fn -> render(anon) end, &(&1 =~ "could not be loaded from their homeserver"))
+    refute has_element?(anon, "button[phx-click=retry_history]")
+    render_click(anon, "retry_history", %{})
+    assert :ok = PubkyRooms.RateLimit.check({:retry_history, anon.id}, 3, 10_000)
+
+    # a signed-in viewer has the button; clicks spend the budget
     {:ok, view, _} = live(ctx.alice_conn, ctx.path)
-    wait_for(fn -> render(view) end, &(&1 =~ "Say hello"))
+    wait_for(fn -> render(view) end, &(&1 =~ "could not be loaded from their homeserver"))
+    assert has_element?(view, "button[phx-click=retry_history]")
     for _ <- 1..3, do: render_click(view, "retry_history", %{})
 
     assert {:error, {:rate_limited, _}} =
              PubkyRooms.RateLimit.check({:retry_history, view.id}, 3, 10_000)
+  end
+
+  test "a revoked grant sends the writer to sign in again", ctx do
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    wait_for(fn -> render(view) end, &(&1 =~ "Say hello"))
+    Fake.fail_next_under("/pub/pubky-rooms/messages/", :unauthorized)
+    view |> form("#composer", message: %{content: "gone"}) |> render_submit()
+    {path, flash} = assert_redirect(view, 2_000)
+    assert path == ~p"/login"
+    assert flash["error"] =~ "session has expired"
   end
 
   test "a page request while one is in flight is declined with an empty older:loaded", ctx do
