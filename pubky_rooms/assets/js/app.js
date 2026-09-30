@@ -25,6 +25,7 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/pubky_rooms"
 import topbar from "../vendor/topbar"
 import hooks from "./hooks"
+import {installOfflineNavigation} from "./offline_nav"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
@@ -39,6 +40,11 @@ window.addEventListener("phx:page-loading-start", _info => topbar.show(300))
 window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 
 // connect if there are any LiveViews on the page
+// before connect(), so this listener runs ahead of LiveView's own
+installOfflineNavigation()
+// the offline page retried once on its own; the app loaded, so it may again
+try { sessionStorage.removeItem("offline-retried") } catch (_e) { /* storage may be unavailable */ }
+
 liveSocket.connect()
 
 // Installable app shell: the worker caches digested assets and shows a static

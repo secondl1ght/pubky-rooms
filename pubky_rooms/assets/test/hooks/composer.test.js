@@ -32,6 +32,22 @@ describe("Composer", () => {
     expect(form.requestSubmit).toHaveBeenCalledTimes(1)
   })
 
+  it("on a touch keyboard Enter inserts a newline (the button sends) and the key hint says so", () => {
+    mounted.unmount()
+    window.matchMedia = vi.fn(() => ({matches: true}))
+    mounted = mountHook(Composer, html, {select: "textarea"})
+    el = mounted.el
+    form = el.form
+    form.requestSubmit = vi.fn()
+    expect(el.getAttribute("enterkeyhint")).toBe("enter")
+
+    input(el, "hello")
+    const enter = keydown(el, "Enter")
+    expect(enter.defaultPrevented).toBe(false)
+    expect(form.requestSubmit).not.toHaveBeenCalled()
+    delete window.matchMedia
+  })
+
   it("Enter on a blank message sends nothing but still swallows the newline", () => {
     input(el, "   ")
     const enter = keydown(el, "Enter")

@@ -182,7 +182,7 @@ defmodule PubkyRoomsWeb.Layouts do
     <div
       id={@id}
       aria-live="polite"
-      class="pointer-events-none fixed inset-x-4 bottom-24 z-60 flex flex-col items-stretch gap-2 sm:inset-x-auto sm:right-4 sm:items-end lg:bottom-4"
+      class="pointer-events-none fixed inset-x-4 top-[max(1rem,env(safe-area-inset-top))] z-60 flex flex-col items-stretch gap-2 sm:top-auto sm:bottom-24 sm:inset-x-auto sm:right-4 sm:items-end lg:bottom-4"
     >
       <.flash kind={:success} flash={@flash} />
       <.flash kind={:info} flash={@flash} />

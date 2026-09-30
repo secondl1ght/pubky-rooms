@@ -163,3 +163,13 @@ How it ran: the `code-review`/`security-review` skills were not in the session's
 - The `#messages > [id^=msg-]` rows have `-actions` and `-palette` children with the same prefix: count direct children only.
 - The 429 on the stream connect appears on *every* cold start from Fly's address, not from a residential address (180 parallel reads and a stream from home: all 200). Whether it is a per-address connection cap or the burst (a hundred fetches plus listings in the same second) is unknown; the retry makes it invisible.
 - One unexplained failure in five runs of the app suite locally (the failing test's output was not captured; four clean runs after); not reproduced. Capture it if it recurs.
+
+## The user's phone pass on staging (2026-09-30, Android, Chrome and Brave)
+
+Everything on the list worked: the deep link into Ring, the PWA install and sign-in inside the installed app, link previews, the offline page. Found and handled:
+- **Enter on the phone keyboard sent the message.** Phones expect Enter to insert a newline and the button to send (Signal, WhatsApp, Telegram, Slack); Enter-sends is the desktop rule. Fixed in the `Composer` hook: with a coarse pointer Enter is a newline, `enterkeyhint="enter"`, the "Enter to send" hint is hidden below `sm`; hook test plus an e2e case with touch emulation at 375 px.
+- **The "You joined the room." toast sat right above the composer.** Worse than annoying: at 375 px it covered the Send button (Playwright's click on Send was intercepted by the toast). Toasts now sit at the top of the screen on phones (bottom-right from `sm`, as before); e2e and screenshots.
+- **Airplane mode felt stuck**: LiveView navigates over its socket, so a link click and the back button did nothing and the offline page never appeared (it only answers full page loads). `offline_nav.js`: when the browser reports no connection, a live link click becomes a full navigation and a history move reloads, so the worker's offline page shows; vitest; verified headless with the network switched off.
+- **The installed app once opened on the offline page right after install** (the first request failed while the OS was still connecting; "Try again" worked, never again after). The offline page now reloads by itself when the browser reports the connection back and once two seconds after loading (a once-flag the app clears, so a real outage never loops). A fluke on the phone, but the page handling it is better than a button.
+- Reacting while disconnected shows nothing beyond the disconnected toast: expected, LiveView's own behaviour.
+- The session carried over from the Brave tab into the installed app: expected on Android (installed apps share the browser profile's cookies); iOS home-screen apps have their own jar.

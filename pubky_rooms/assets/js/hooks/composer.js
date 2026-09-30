@@ -1,14 +1,21 @@
-// Chat composer: Enter sends (Shift+Enter inserts a newline), the textarea
-// grows with its content, the server can clear it after a send, and typing
-// is reported (throttled here and again on the server; never stored).
+// Chat composer: on a keyboard Enter sends and Shift+Enter inserts a newline;
+// on a touch keyboard (phones: a coarse pointer) Enter inserts a newline and
+// the button sends, as Signal, WhatsApp and Telegram do. The textarea grows
+// with its content, the server can clear it after a send, and typing is
+// reported (throttled here and again on the server; never stored).
 const MAX_ROWS = 8
 const TYPING_EVERY_MS = 2000
+
+function touchKeyboard() {
+  return typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches
+}
 
 const Composer = {
   mounted() {
     this.lastTyping = 0
+    if (touchKeyboard()) this.el.setAttribute("enterkeyhint", "enter")
     this.el.addEventListener("keydown", e => {
-      if ((e.key === "Enter" || e.keyCode === 13) && !e.shiftKey && !e.isComposing) {
+      if ((e.key === "Enter" || e.keyCode === 13) && !e.shiftKey && !e.isComposing && !touchKeyboard()) {
         e.preventDefault()
         if (this.el.value.trim() !== "") this.el.form.requestSubmit()
       }

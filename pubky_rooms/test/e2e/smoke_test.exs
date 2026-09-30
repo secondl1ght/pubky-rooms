@@ -155,4 +155,43 @@ defmodule PubkyRoomsWeb.E2E.SmokeTest do
     assert Console.problems() == []
     _ = bob_conn
   end
+
+  @tag browser_context_opts: [
+         has_touch: true,
+         is_mobile: true,
+         viewport: %{width: 375, height: 812}
+       ]
+  test "on a phone Enter inserts a newline and the button sends", %{conn: conn} do
+    alice = Fixtures.z32("e2e-phone")
+
+    conn =
+      conn
+      |> visit(~p"/login")
+      |> assert_has("body", text: "Waiting for approval")
+
+    FakeGrantLogin.resolve({:ok, Fixtures.session(alice)})
+
+    conn =
+      conn
+      |> assert_path(~p"/")
+      |> assert_has("a[href='/me']")
+      |> visit(~p"/rooms/new")
+      |> fill_in("Name", with: "Phone room")
+      |> click_button("Open room")
+      |> assert_has("#composer")
+      |> type("#composer-input", "line one")
+      |> press("#composer-input", "Enter")
+      |> type("#composer-input", "line two")
+
+    evaluate(conn, "document.querySelector('#composer-input').value", fn value ->
+      assert value == "line one\nline two"
+    end)
+
+    conn
+    |> refute_has("#messages > [id^='msg-']")
+    |> click_button("Send")
+    |> assert_has("#messages > [id^='msg-']", text: "line two")
+
+    assert Console.problems() == []
+  end
 end

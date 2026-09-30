@@ -41,5 +41,14 @@
       </p>
       <button type="button" onclick="location.reload()">Try again</button>
     </main>
+    <script>
+      addEventListener("online", function () { location.reload() })
+      try {
+        if (navigator.onLine && !sessionStorage.getItem("offline-retried")) {
+          sessionStorage.setItem("offline-retried", "1")
+          setTimeout(function () { location.reload() }, 2000)
+        }
+      } catch (_e) {}
+    </script>
   </body>
 </html>
