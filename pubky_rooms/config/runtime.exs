@@ -21,15 +21,30 @@ if System.get_env("PHX_SERVER") do
 end
 
 # ── Pubky network ────────────────────────────────────────────────────────────
-# PUBKY_NETWORK=mainnet|testnet selects the relay/homeserver preset; the other
-# variables override individual preset values (see Pubky.Config).
-network =
+# PUBKY_NETWORK selects the preset (see Pubky.Config); the other variables
+# override individual values.
+#   mainnet  public PKARR relays, production HTTP relay, Nexus only if NEXUS_URL is set
+#   staging  the same public PKARR relays (there is one PKARR network) with Pubky's
+#            staging HTTP relay and staging Nexus — identities on the staging
+#            homeserver (homeserver.staging.pubky.app) resolve like any other
+#   testnet  the local pubky-docker stack
+{network, stack} =
   case System.get_env("PUBKY_NETWORK") do
-    nil -> if config_env() == :prod, do: :mainnet, else: :testnet
-    "mainnet" -> :mainnet
-    "testnet" -> :testnet
-    other -> raise "PUBKY_NETWORK must be mainnet or testnet, got: #{other}"
+    nil -> if config_env() == :prod, do: {:mainnet, :mainnet}, else: {:testnet, :testnet}
+    "mainnet" -> {:mainnet, :mainnet}
+    "staging" -> {:mainnet, :staging}
+    "testnet" -> {:testnet, :testnet}
+    other -> raise "PUBKY_NETWORK must be mainnet, staging or testnet, got: #{other}"
   end
+
+staging_defaults =
+  if stack == :staging,
+    do: %{
+      http_relay: "https://httprelay.staging.pubky.app/inbox/",
+      nexus_url: "https://nexus.staging.pubky.app",
+      nexus_cdn_url: "https://nexus.staging.pubky.app/static"
+    },
+    else: %{}
 
 pubky_overrides =
   [
@@ -38,7 +53,7 @@ pubky_overrides =
     pkarr_relays:
       System.get_env("PUBKY_PKARR_RELAYS") &&
         String.split(System.get_env("PUBKY_PKARR_RELAYS"), ","),
-    http_relay: System.get_env("PUBKY_HTTP_RELAY"),
+    http_relay: System.get_env("PUBKY_HTTP_RELAY") || staging_defaults[:http_relay],
     homeserver_overrides:
       System.get_env("PUBKY_TESTNET_HOMESERVER_URL") &&
         %{Pubky.Config.testnet_homeserver() => System.get_env("PUBKY_TESTNET_HOMESERVER_URL")}
@@ -57,8 +72,8 @@ config :pubky,
 
 config :pubky_rooms,
   data_dir: System.get_env("PUBKY_DATA_DIR") || Application.get_env(:pubky_rooms, :data_dir),
-  nexus_url: System.get_env("NEXUS_URL"),
-  nexus_cdn_url: System.get_env("NEXUS_CDN_URL"),
+  nexus_url: System.get_env("NEXUS_URL") || staging_defaults[:nexus_url],
+  nexus_cdn_url: System.get_env("NEXUS_CDN_URL") || staging_defaults[:nexus_cdn_url],
   simulator_url:
     System.get_env("PUBKY_SIMULATOR_URL") || Application.get_env(:pubky_rooms, :simulator_url),
   pubky_app_url:

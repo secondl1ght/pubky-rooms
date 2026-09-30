@@ -27,6 +27,19 @@ Everything here is one node (no clustering in v1). Costs scale **per room and pe
 | Homeserver anonymous read throttle | operator-set, e.g. 1 MB/s per IP | homeserver `[default_quotas] unauthenticated_ip_rate_read` | our reads slow down (delay, not error) | slow bootstraps only | ask the operator to whitelist our IP for count limits; `PUBKY_SERVICE_CREDENTIAL` for authenticated reads with an unlimited quota (deferred to after launch) |
 | Homeserver request-count limits | operator-set per path (`429` + `Retry-After`) | homeserver `[[drive.rate_limits]]` | we back off and retry once; history of the affected member shows as unreachable with Retry | room banner | operator whitelist |
 
+## Deploy targets
+
+| | Staging | Production |
+|---|---|---|
+| Fly app / host | `pubky-rooms-staging` → `pubky-rooms-staging.fly.dev` (placeholder) | `pubky-rooms` → `rooms.pubky.app` (custom domain, later) |
+| `PUBKY_NETWORK` | `staging` (public PKARR relays + `httprelay.staging.pubky.app` + `nexus.staging.pubky.app`; identities from Pubky App staging live on `homeserver.staging.pubky.app`) | `mainnet` (+ `NEXUS_URL=https://nexus.pubky.app`) |
+| `PHX_HOST` | the Fly hostname | `rooms.pubky.app` |
+| `PUBKY_DATA_DIR` | `/data` (a Fly volume; the room directory DETS) | same, its own volume |
+| Secrets | `SECRET_KEY_BASE` only (`mix phx.gen.secret`) | same, its own value |
+| Optional | `PUBKY_APP_URL` (the "New to Pubky?" link; default `https://pubky.app`), `PUBKY_CLIENT_ID` (defaults to `PHX_HOST`, what Ring shows) | same |
+
+Staging and production are separate Fly apps: no shared volume, secrets or sessions. Every `PUBKY_*`/`NEXUS_*` variable overrides its preset value individually.
+
 ## Runbook
 
 Before every deploy: green CI (both projects + hook tests) and the **smoke** items of `docs/qa/checklist.md` on the testnet.
