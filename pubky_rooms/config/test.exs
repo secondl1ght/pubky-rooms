@@ -19,6 +19,8 @@ config :phoenix_test,
     browser_launch_timeout: 20_000,
     js_logger: PubkyRooms.E2E.Console,
     screenshot_dir: "tmp/e2e-screenshots",
+    # baselines for test/vrt (assert_screenshot); diffs go to <dir>/__diff__ (gitignored)
+    snapshot_dir: "test/vrt/snapshots",
     trace_dir: "tmp/e2e-traces"
   ]
 

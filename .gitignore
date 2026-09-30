@@ -5,6 +5,8 @@ deps/
 erl_crash.dump
 .elixir_ls/
 .lexical/
+# VRT diff images (test/vrt/snapshots/__diff__)
+**/__diff__/
 # Phoenix assets
 pubky_rooms/priv/static/assets/
 pubky_rooms/assets/node_modules/
