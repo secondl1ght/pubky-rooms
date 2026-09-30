@@ -196,6 +196,24 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     refute render(view) =~ "Write a message first."
   end
 
+  test "rejected messages do not use up the send budget; the sixth valid one in 5 s does", ctx do
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+
+    for _ <- 1..5 do
+      view |> form("#composer", message: %{content: "   "}) |> render_submit()
+    end
+
+    for i <- 1..5 do
+      view |> form("#composer", message: %{content: "valid #{i}"}) |> render_submit()
+      render_async(view)
+    end
+
+    refute render(view) =~ "Slow down"
+    view |> form("#composer", message: %{content: "one too many"}) |> render_submit()
+    assert render(view) =~ "Slow down"
+    refute render(view) =~ "one too many</p>"
+  end
+
   test "a failed write is shown with retry and discard", ctx do
     {:ok, view, _html} = live(ctx.alice_conn, ctx.path)
     Fake.fail_next_under(Paths.messages_dir(Room.ref(ctx.room)), :quota)

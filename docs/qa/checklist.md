@@ -52,7 +52,7 @@ Legend: **smoke** = minimum pre-deploy set · **A+B** = needs both identities ·
 - [ ] Sign out from `/me`: back on the lobby signed out; the homeserver session is gone (a second sign-out or a write in another tab fails cleanly).
 - [ ] Revoke the grant in the Simulator (or sign out there) then act in Rooms → a "signed out on the homeserver" style error, not a crash; signing in again works.
 - [ ] Sign-in start limit: 21 `/login` loads within a minute → "Slow down" message, recovers after the window.
-- [ ] Two tabs, same identity: presence shows one person, typing from one shows in the other's room, sign-out in one signs out the other on its next action.
+- [ ] Two tabs, same identity: presence shows one person; typing in one is **not** shown in the other (you never see yourself typing); sign-out in one signs out the other on its next action (same browser: the cookie is shared; a second sign-in in another browser is a separate homeserver session and stays valid).
 
 ## 4. Lobby, signed in
 

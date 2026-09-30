@@ -273,8 +273,9 @@ defmodule PubkyRooms.Rooms do
   @spec prepare_message(sid(), String.t(), Paths.room_ref(), String.t(), keyword()) ::
           {:ok, Message.t()} | {:error, String.t() | {:rate_limited, pos_integer()}}
   def prepare_message(sid, author, ref, content, opts \\ []) do
-    with :ok <- limit({:messages, sid}, 5, 5_000),
-         {:ok, msg} <- Message.new(author, ref, content, opts) do
+    # validate first: a rejected message must not use up the sender's budget
+    with {:ok, msg} <- Message.new(author, ref, content, opts),
+         :ok <- limit({:messages, sid}, 5, 5_000) do
       :ok = RoomServer.register_pending(ref, msg, RoomServer.content_hash(Message.encode(msg)))
       {:ok, msg}
     end
@@ -288,8 +289,8 @@ defmodule PubkyRooms.Rooms do
   @spec prepare_edit(sid(), Message.t(), String.t()) ::
           {:ok, Message.t()} | {:error, String.t() | {:rate_limited, pos_integer()}}
   def prepare_edit(sid, %Message{} = msg, content) do
-    with :ok <- limit({:messages, sid}, 5, 5_000),
-         {:ok, content} <- Message.validate_content(content) do
+    with {:ok, content} <- Message.validate_content(content),
+         :ok <- limit({:messages, sid}, 5, 5_000) do
       edited = %{
         msg
         | content: content,
