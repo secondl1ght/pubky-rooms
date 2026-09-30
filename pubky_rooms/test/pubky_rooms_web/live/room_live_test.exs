@@ -1334,8 +1334,8 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     render_async(bob_view)
     [bobs] = messages_on_homeserver(bob, ctx.room)
     bob_id = "msg-#{bob}-#{bobs.msg_id}"
-    wait_for(fn -> render(bob_view) end, &(&1 =~ "bob before close"))
-    assert has_element?(bob_view, "##{bob_id} button[aria-label=Edit]")
+    # the actions pill appears once the row is confirmed, not when it is pending
+    assert wait_for(fn -> has_element?(bob_view, "##{bob_id} button[aria-label=Edit]") end, & &1)
 
     # closing deletes the definition; viewers learn the room is closed
     view |> element("a[aria-label='Room settings']") |> render_click()
