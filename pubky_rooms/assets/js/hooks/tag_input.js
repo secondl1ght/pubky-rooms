@@ -40,6 +40,9 @@ const TagInput = {
     this.input.addEventListener("input", () => this.onInput())
     this.input.addEventListener("keydown", (e) => this.onKey(e))
     this.input.addEventListener("blur", () => {
+      // the field blurs when its LiveView is torn down (navigating to the new
+      // room): nothing to fold or query any more
+      if (this.gone) return
       this.blurTimer = setTimeout(() => this.onBlur(), BLUR_DELAY_MS)
     })
     this.apply()
@@ -54,6 +57,7 @@ const TagInput = {
   },
 
   destroyed() {
+    this.gone = true
     clearTimeout(this.queryTimer)
     clearTimeout(this.blurTimer)
   },
@@ -162,6 +166,7 @@ const TagInput = {
   },
 
   query(q) {
+    if (this.gone) return
     this.pushEvent(this.el.dataset.onQuery, {q})
   },
 

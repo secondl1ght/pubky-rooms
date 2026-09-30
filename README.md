@@ -119,6 +119,7 @@ Tests:
 cd pubky_ex && mix test                                  # library (fixtures, vectors, Bypass homeserver)
 cd pubky_rooms && mix test                               # app (in-memory homeserver and Ring doubles)
 cd pubky_rooms/assets && npm ci && npm test              # LiveView hooks (vitest + jsdom)
+cd pubky_rooms && mix assets.build && mix test --include e2e test/e2e   # browser smoke suite (headless Chromium)
 cd pubky_rooms && mix test --include testnet test/integration   # the whole app against the running testnet
 mix test --cover; mix credo --strict; MIX_ENV=dev mix dialyzer   # what CI runs on every push
 ```

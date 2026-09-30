@@ -68,6 +68,17 @@ describe("TagInput", () => {
     expect(mounted.pushes[0].payload).toEqual({q: ""})
   })
 
+  it("pushes nothing after the view is destroyed (the field blurs when the dialog is torn down)", () => {
+    mount()
+    open()
+    input(textInput, "bitcoin")
+    mounted.hook.destroyed()
+    // LiveView removes the DOM after destroyed(): the focused field blurs
+    textInput.dispatchEvent(new Event("blur"))
+    vi.advanceTimersByTime(1000)
+    expect(events()).toEqual([])
+  })
+
   it("lowercases, strips commas, colons and whitespace, cuts at 20 characters, and queries after a pause", () => {
     mount()
     open()

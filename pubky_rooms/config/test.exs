@@ -1,11 +1,26 @@
 import Config
 
-# We don't run a server during test. If one is required,
-# you can enable the server option below.
+# The endpoint listens on 4002 for the browser (e2e) tests in test/e2e, which
+# drive real Chromium through PhoenixTest's Playwright driver against the same
+# fakes as every other test (`Pubky.Fake`, `FakeGrantLogin`). They are tagged
+# :e2e and excluded by default: `mix test --include e2e` (see test_helper.exs).
 config :pubky_rooms, PubkyRoomsWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
   secret_key_base: "wCpdJlFdsb0j9HVjK/ysvlx0M54S/YUKbh+RdYxz9rutbffuCeB5tVK8P8sUTqHV",
-  server: false
+  server: true
+
+config :phoenix_test,
+  otp_app: :pubky_rooms,
+  playwright: [
+    # the playwright package lives in assets/ (installed by `npm ci`)
+    assets_dir: "./assets",
+    headless: true,
+    timeout: 5_000,
+    browser_launch_timeout: 20_000,
+    js_logger: PubkyRooms.E2E.Console,
+    screenshot_dir: "tmp/e2e-screenshots",
+    trace_dir: "tmp/e2e-traces"
+  ]
 
 # Print only warnings and errors during test
 config :logger, level: :warning

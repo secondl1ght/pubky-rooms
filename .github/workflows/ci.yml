@@ -56,6 +56,40 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  e2e:
+    name: pubky_rooms · browser smoke (Playwright)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pubky_rooms
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: pubky_rooms/assets/package-lock.json
+      - uses: actions/cache@v4
+        with:
+          path: |
+            pubky_rooms/deps
+            pubky_rooms/_build
+          key: ${{ runner.os }}-pubky_rooms-test-${{ hashFiles('pubky_rooms/mix.lock') }}
+          restore-keys: ${{ runner.os }}-pubky_rooms-test-
+      - run: npm ci
+        working-directory: pubky_rooms/assets
+      - run: npx playwright install --with-deps chromium
+        working-directory: pubky_rooms/assets
+      - run: mix deps.get
+      - run: mix assets.setup
+      - run: mix assets.build
+      # test/e2e: the checklist's smoke items in headless Chromium against the fakes
+      - run: mix test --only e2e
+
   dialyzer:
     name: ${{ matrix.project }} · dialyzer
     runs-on: ubuntu-latest

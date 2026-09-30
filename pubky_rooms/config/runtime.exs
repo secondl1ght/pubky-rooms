@@ -83,8 +83,12 @@ config :pubky_rooms,
   pubky_ring_url:
     System.get_env("PUBKY_RING_URL") || Application.get_env(:pubky_rooms, :pubky_ring_url)
 
-config :pubky_rooms, PubkyRoomsWeb.Endpoint,
-  http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+# the test endpoint keeps its own port (config/test.exs): the browser tests
+# listen there while a dev server may be running on 4000
+if config_env() != :test do
+  config :pubky_rooms, PubkyRoomsWeb.Endpoint,
+    http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+end
 
 if config_env() == :dev do
   # Reload browser tabs when matching files change.
