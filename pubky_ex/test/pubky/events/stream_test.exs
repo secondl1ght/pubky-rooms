@@ -115,6 +115,31 @@ defmodule Pubky.Events.StreamTest do
     assert_receive {:EXIT, ^pid, {:shutdown, {:http, 400, _}}}, 2_000
   end
 
+  test "temporary streams are not restarted and stop_all_streams stops every stream" do
+    {hs, config, [alice, _]} = setup_hs([])
+    name = make_ref()
+    opts = [homeserver: hs.z32, name: name, users: [{alice.user, nil}], subscriber: self()]
+
+    {:ok, pid} = Events.start_stream(opts ++ [config: config, restart: :temporary])
+    assert_receive {:pubky_stream, _, :connected}, 2_000
+    Process.exit(pid, :kill)
+    assert eventually(fn -> Events.whereis(hs.z32, name) == nil end), "the stream was restarted"
+
+    {:ok, pid} = Events.start_stream(opts ++ [config: config])
+    assert_receive {:pubky_stream, _, :connected}, 2_000
+    assert :ok = Events.stop_all_streams()
+    refute Process.alive?(pid)
+    assert Events.whereis(hs.z32, name) == nil
+  end
+
+  defp eventually(fun, tries \\ 50) do
+    cond do
+      fun.() -> true
+      tries == 0 -> false
+      true -> Process.sleep(20) && eventually(fun, tries - 1)
+    end
+  end
+
   test "supervised streams are registered and latest_cursor reports the newest event" do
     {hs, config, [alice, _]} = setup_hs([])
     assert Events.latest_cursor(hs.z32, alice.user, "/pub/app/", config) == {:ok, nil}

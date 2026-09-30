@@ -47,7 +47,7 @@ defmodule PubkyRooms.Pubky.Fake do
   def fail_next(path, reason),
     do: Agent.update(__MODULE__, &put_in(&1, [:failures, path], reason))
 
-  @doc "Makes the next file read for `user` fail with `reason`."
+  @doc "Makes the next file read for `user` fail with `reason` (`{:raise, msg}` crashes the reader, `{:delay, ms}` slows it)."
   def fail_get(user, reason),
     do: Agent.update(__MODULE__, &put_in(&1, [:failures, {:get, user}], reason))
 
@@ -193,6 +193,17 @@ defmodule PubkyRooms.Pubky.Fake do
   @impl true
   def stop_stream(pid), do: Agent.stop(pid)
 
+  @impl true
+  def stop_all_streams do
+    # the app boots before this fake exists (test_helper starts it)
+    if Process.whereis(__MODULE__) do
+      for pid <- live_streams(), do: Agent.stop(pid)
+      Agent.update(__MODULE__, &%{&1 | streams: []})
+    end
+
+    :ok
+  end
+
   @doc "Users currently attached to fake streams."
   def stream_users do
     live_streams()
@@ -230,6 +241,10 @@ defmodule PubkyRooms.Pubky.Fake do
     end)
     |> case do
       nil -> :ok
+      # `{:raise, msg}` crashes the caller, `{:delay, ms}` slows it: for the
+      # tasks and timeouts around reads
+      {:raise, msg} -> raise msg
+      {:delay, ms} -> Process.sleep(ms) && :ok
       reason -> {:error, reason}
     end
   end

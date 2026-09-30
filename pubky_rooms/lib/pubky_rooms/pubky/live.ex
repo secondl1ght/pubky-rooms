@@ -71,4 +71,7 @@ defmodule PubkyRooms.Pubky.Live do
 
   @impl true
   def stop_stream(pid), do: Stream.stop(pid)
+
+  @impl true
+  def stop_all_streams, do: Events.stop_all_streams()
 end

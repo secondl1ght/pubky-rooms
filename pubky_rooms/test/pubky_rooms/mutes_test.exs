@@ -60,6 +60,18 @@ defmodule PubkyRooms.MutesTest do
     end
   end
 
+  test "a crashed load answers with empty lists, caches nothing and loads again next time" do
+    alice = Fixtures.z32("crash-alice")
+    bob = Fixtures.z32("bob")
+    Fake.seed(alice, Paths.mute(bob), ~s({"v":1,"created_at":1}))
+    Fake.fail_list(alice, {:raise, "boom"})
+
+    assert Mutes.of(alice) == %{own: MapSet.new(), app: MapSet.new()}
+    assert Mutes.cached(alice) == nil
+    assert %{own: own} = Mutes.of(alice)
+    assert own == MapSet.new([bob])
+  end
+
   test "mute writes a marker, unmute deletes it, both update the cache and announce" do
     {sid, alice} = Fixtures.login("alice")
     bob = Fixtures.z32("bob")

@@ -10,7 +10,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   """
   use PubkyRoomsWeb, :live_view
 
-  alias PubkyRooms.{Ids, Mutes, Profiles, Rooms}
+  alias PubkyRooms.{Ids, Mutes, Profiles, RateLimit, Rooms}
   alias PubkyRooms.Rooms.{Ban, Directory, Message, Paths, Reaction, Room, RoomServer}
   alias PubkyRooms.Tags.Tag
   alias PubkyRoomsWeb.{Format, Linkify, Presence}
@@ -124,15 +124,26 @@ defmodule PubkyRoomsWeb.RoomLive do
   defp attach(%{assigns: %{ref: ref}} = socket) do
     case RoomServer.ensure(ref) do
       {:ok, pid} ->
-        {:ok, snapshot} = RoomServer.attach(ref)
+        socket = monitor_room(socket, pid)
 
-        socket
-        |> monitor_room(pid)
-        |> apply_snapshot(snapshot)
+        case attach_or_wait(ref) do
+          {:ok, snapshot} -> apply_snapshot(socket, snapshot)
+          :busy -> socket |> assign(status: :loading) |> preview_from_directory()
+        end
 
       {:error, reason} ->
         assign(socket, status: {:error, reason})
     end
+  end
+
+  # A cold room bootstraps inside its server and answers nobody until it is
+  # done (one slow member's homeserver can take a while). Rather than crash
+  # the mount on the call timeout, the page keeps its loading state; the
+  # `:ready` broadcast (this process is already subscribed) attaches it then.
+  defp attach_or_wait(ref) do
+    RoomServer.attach(ref, self(), Application.get_env(:pubky_rooms, :attach_timeout_ms, 5_000))
+  catch
+    :exit, {:timeout, _} -> :busy
   end
 
   # The disconnected first render (a hard refresh, a shared link) must not
@@ -342,18 +353,26 @@ defmodule PubkyRoomsWeb.RoomLive do
   defp unmuted(%{assigns: %{muted: muted}}, msgs),
     do: Enum.reject(msgs, &MapSet.member?(muted, &1.author))
 
-  # Asks the room for the page before the oldest loaded message (one at a time).
+  # Asks the room for the page before the oldest loaded message (one at a
+  # time). A request that arrives while a page is in flight is declined with
+  # an empty `older:loaded`, so the scroll hook does not wait for a reply
+  # that never comes (a quote jump pages without answering the hook).
   defp load_older_page(socket) do
     %{ref: ref, oldest_key: before, has_more: more?, loading_older: loading?} = socket.assigns
 
-    if more? and not loading? and before do
-      limit = Application.get_env(:pubky_rooms, :page_size, 50)
+    cond do
+      more? and not loading? and before ->
+        limit = Application.get_env(:pubky_rooms, :page_size, 50)
 
-      socket
-      |> assign(loading_older: true)
-      |> start_async(:older, fn -> RoomServer.older(ref, before, limit) end)
-    else
-      socket
+        socket
+        |> assign(loading_older: true)
+        |> start_async(:older, fn -> RoomServer.older(ref, before, limit) end)
+
+      loading? ->
+        push_event(socket, "older:loaded", %{count: 0})
+
+      true ->
+        socket
     end
   end
 
@@ -391,7 +410,10 @@ defmodule PubkyRoomsWeb.RoomLive do
 
     cond do
       on_screen?(socket, key) ->
-        socket |> assign(jump_target: nil) |> push_event("scroll_to", %{id: dom_id(key)})
+        socket
+        |> assign(jump_target: nil)
+        |> push_event("older:loaded", %{count: 0})
+        |> push_event("scroll_to", %{id: dom_id(key)})
 
       more? and msgs != [] and rounds < @max_jump_rounds ->
         socket |> assign(jump_rounds: rounds) |> load_older_page()
@@ -399,11 +421,13 @@ defmodule PubkyRoomsWeb.RoomLive do
       more? ->
         socket
         |> assign(jump_target: nil)
+        |> push_event("older:loaded", %{count: 0})
         |> put_flash(:error, "Earlier messages could not be loaded right now.")
 
       true ->
         socket
         |> assign(jump_target: nil)
+        |> push_event("older:loaded", %{count: 0})
         |> put_flash(:info, "That message is no longer available.")
     end
   end
@@ -636,8 +660,11 @@ defmodule PubkyRoomsWeb.RoomLive do
     end
   end
 
+  # Anyone may ask (the notice shows for every viewer), a few times a minute.
   def handle_event("retry_history", _params, socket) do
-    RoomServer.retry_history(socket.assigns.ref)
+    if RateLimit.check({:retry_history, socket.id}, 3, 10_000) == :ok,
+      do: RoomServer.retry_history(socket.assigns.ref)
+
     {:noreply, socket}
   end
 
@@ -1091,6 +1118,17 @@ defmodule PubkyRoomsWeb.RoomLive do
     do: {:noreply, load_tags(socket)}
 
   def handle_info({:directory, _event}, socket), do: {:noreply, socket}
+
+  # A room that does not exist stops its server after a while; restarting it
+  # from every open tab would only ask the owner's homeserver again and again.
+  # Rooms that failed for other reasons (unreachable) do restart: that is the
+  # self-healing path.
+  def handle_info(
+        {:DOWN, ref, :process, _pid, _reason},
+        %{assigns: %{room_monitor: ref, status: :not_found}} = socket
+      ) do
+    {:noreply, assign(socket, room_pid: nil, room_monitor: nil)}
+  end
 
   def handle_info(
         {:DOWN, ref, :process, _pid, _reason},

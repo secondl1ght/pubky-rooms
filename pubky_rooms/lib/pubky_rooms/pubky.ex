@@ -39,6 +39,7 @@ defmodule PubkyRooms.Pubky do
   @callback add_users(pid(), [{user(), non_neg_integer() | nil}]) :: :ok
   @callback remove_users(pid(), [user()]) :: :ok
   @callback stop_stream(pid()) :: :ok
+  @callback stop_all_streams() :: :ok
 
   @doc "The configured backend module."
   @spec backend() :: module()
@@ -71,6 +72,9 @@ defmodule PubkyRooms.Pubky do
   def add_users(pid, users), do: backend().add_users(pid, users)
   def remove_users(pid, users), do: backend().remove_users(pid, users)
   def stop_stream(pid), do: backend().stop_stream(pid)
+
+  @doc "Stops every event stream (a restarted subscriptions process starts afresh)."
+  def stop_all_streams, do: backend().stop_all_streams()
 
   @doc "Maps library errors to the app's error vocabulary."
   @spec normalize(term()) :: :ok | {:ok, term()} | {:error, reason()}

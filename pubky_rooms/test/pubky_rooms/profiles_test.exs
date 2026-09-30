@@ -113,6 +113,17 @@ defmodule PubkyRooms.ProfilesTest do
     assert {:error, _} = PubkyRooms.Rooms.set_nickname(sid, String.duplicate("x", 33))
   end
 
+  test "a crashed fetch falls back and does not block the next fetch" do
+    z32 = Fixtures.z32("crashy-profile")
+    Fake.fail_get(z32, {:raise, "boom"})
+    assert %{source: :fallback} = Profiles.get(z32)
+    Process.sleep(50)
+    # the crash cleared the in-flight marker: a forced refresh runs again
+    Fake.seed(z32, Paths.profile(), ~s({"v":1,"name":"Back"}))
+    Profiles.refresh(z32)
+    assert_receive {:profile_updated, ^z32, %{name: "Back"}}, 1_000
+  end
+
   test "garbage profiles fall back safely" do
     z32 = Fixtures.z32("garbage")
     Fake.seed(z32, Profiles.pubky_app_profile_path(), "{not json")

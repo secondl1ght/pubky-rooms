@@ -2,8 +2,9 @@ defmodule PubkyRooms.Events.SubscriptionsTest do
   use PubkyRooms.RoomsCase, async: false
 
   alias PubkyRooms.Events.{Cursors, Subscriptions}
-  alias PubkyRooms.Fixtures
+  alias PubkyRooms.{Fixtures, Rooms}
   alias PubkyRooms.Pubky.Fake
+  alias PubkyRooms.Rooms.{Room, RoomServer}
 
   # test config: detach grace and retry delay are 100 ms
 
@@ -118,6 +119,61 @@ defmodule PubkyRooms.Events.SubscriptionsTest do
     assert is_pid(new_stream)
     assert new_stream != stream
     Subscriptions.release([user], self())
+  end
+
+  test "a stream reconnecting to apply a changed user list is not an outage" do
+    user = Fixtures.z32("resub")
+    Subscriptions.acquire([user], self())
+    assert_receive {:subscription_status, ^user, :attached}, 2_000
+    %{users: %{^user => %{stream: key}}} = Subscriptions.info()
+
+    send(Subscriptions, {:pubky_stream, key, {:disconnected, :resubscribe}})
+    refute_receive {:subscription_status, ^user, _}, 200
+    assert Subscriptions.status(user) == :attached
+
+    send(Subscriptions, {:pubky_stream, key, {:disconnected, :closed}})
+    assert_receive {:subscription_status, ^user, {:error, {:disconnected, :closed}}}, 1_000
+    Subscriptions.release([user], self())
+  end
+
+  test "a call into a stream that just died does not take the process down" do
+    user = Fixtures.z32("dying-a")
+    other = Fixtures.z32("dying-b")
+    Subscriptions.acquire([user], self())
+    assert_receive {:subscription_status, ^user, :attached}, 2_000
+    stream = Fake.stream_of(user)
+    server = Process.whereis(Subscriptions)
+
+    # kill the stream and add a second user to it in the same breath: whichever
+    # message the server sees first, it survives and both end up attached
+    Process.exit(stream, :kill)
+    Subscriptions.acquire([other], self())
+    assert_receive {:subscription_status, ^other, :attached}, 3_000
+    assert_receive {:subscription_status, ^user, :attached}, 3_000
+    assert Process.whereis(Subscriptions) == server
+    Subscriptions.release([user, other], self())
+  end
+
+  test "a restarted subscriptions process starts afresh and room servers acquire again" do
+    {sid, alice} = Fixtures.login("alice")
+
+    {:ok, room} = Rooms.create_room(sid, alice, %{"name" => "R", "visibility" => "public"})
+    ref = Room.ref(room)
+    Phoenix.PubSub.subscribe(PubkyRooms.PubSub, RoomServer.topic(ref))
+    {:ok, room_pid} = RoomServer.ensure(ref)
+    assert_receive {:room_event, ^ref, :ready}, 2_000
+    assert_receive {:subscription_status, ^alice, :attached}, 2_000
+    old_stream = Fake.stream_of(alice)
+
+    Process.exit(Process.whereis(Subscriptions), :kill)
+    assert wait_until(fn -> is_pid(Process.whereis(Subscriptions)) end)
+
+    # the old stream is gone, the room re-acquired its member on a new one
+    assert_receive {:subscription_status, ^alice, :attached}, 3_000
+    refute Process.alive?(old_stream)
+    assert Fake.stream_of(alice) != old_stream
+    assert Process.alive?(room_pid)
+    Process.exit(room_pid, :normal)
   end
 
   test "capture_cursor records the current cursor once and keeps it" do

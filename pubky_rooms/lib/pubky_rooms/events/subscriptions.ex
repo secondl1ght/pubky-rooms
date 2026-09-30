@@ -14,16 +14,24 @@ defmodule PubkyRooms.Events.Subscriptions do
   Whenever a user's live status changes, `{:subscription_status, z32, status}`
   is broadcast on the `"subscriptions"` topic (`subscribe/0`): `:attached`
   when their events flow, `{:error, reason}` while their stream is down or
-  could not be started (it is retried). Room servers use this to mark
-  members whose live updates are unavailable.
+  could not be started (it is retried with growing, jittered delays). Room
+  servers use this to mark members whose live updates are unavailable. A
+  stream reconnecting to apply a changed user list (`:resubscribe`) is not a
+  failure and changes nobody's status.
+
+  Streams are started as temporary children and every call into one guards
+  against it having just died (its `DOWN` may still be in the mailbox). If
+  this process itself is restarted, its first act is to stop every stream
+  (they would deliver to a dead pid) and broadcast `:subscriptions_reset` on
+  the same topic, which room servers answer by acquiring their members again;
+  users followed by a signed-in LiveView come back when that page reloads.
   """
   use GenServer
 
   require Logger
 
-  alias PubkyRooms.Events
+  alias PubkyRooms.{Events, Pubky, SafeTask}
   alias PubkyRooms.Events.Cursors
-  alias PubkyRooms.Pubky
   alias PubkyRooms.Rooms.Paths
 
   @max_per_stream 50
@@ -78,6 +86,8 @@ defmodule PubkyRooms.Events.Subscriptions do
 
   @impl true
   def init(_opts) do
+    Pubky.stop_all_streams()
+    Phoenix.PubSub.broadcast(PubkyRooms.PubSub, "subscriptions", :subscriptions_reset)
     {:ok, %{users: %{}, owners: %{}, streams: %{}}}
   end
 
@@ -150,7 +160,7 @@ defmodule PubkyRooms.Events.Subscriptions do
     case Map.fetch(state.streams, key) do
       {:ok, %{users: users, pid: pid}} ->
         if MapSet.size(users) == 0 do
-          Pubky.stop_stream(pid)
+          stop_stream(pid)
           {:noreply, %{state | streams: Map.delete(state.streams, key)}}
         else
           {:noreply, state}
@@ -169,7 +179,7 @@ defmodule PubkyRooms.Events.Subscriptions do
   # A stream's connection state applies to every user riding on it.
   def handle_info({:pubky_stream, {hs, name} = key, status}, state) do
     Logger.debug("stream #{inspect(name)} on #{String.slice(hs, 0, 8)}…: #{inspect(status)}")
-    PubkyRooms.Telemetry.stream_status(status)
+    unless status == {:disconnected, :resubscribe}, do: PubkyRooms.Telemetry.stream_status(status)
     Phoenix.PubSub.broadcast(PubkyRooms.PubSub, "streams", {:stream_status, hs, name, status})
     {:noreply, apply_stream_status(state, key, user_status(status))}
   end
@@ -186,9 +196,13 @@ defmodule PubkyRooms.Events.Subscriptions do
   def handle_info(_msg, state), do: {:noreply, state}
 
   defp user_status(:connected), do: :attached
+  # a planned reconnect (users added or removed): nobody's status changes
+  defp user_status({:disconnected, :resubscribe}), do: :keep
   defp user_status({:disconnected, reason}), do: {:error, {:disconnected, reason}}
   defp user_status({:error, reason}), do: {:error, reason}
   defp user_status(other), do: {:error, other}
+
+  defp apply_stream_status(state, _key, :keep), do: state
 
   defp apply_stream_status(state, key, status) do
     users = (state.streams[key] && state.streams[key].users) || MapSet.new()
@@ -269,16 +283,22 @@ defmodule PubkyRooms.Events.Subscriptions do
     server = self()
 
     Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn ->
-      result =
+      send(server, {:resolved, user, resolve_user(user)})
+    end)
+
+    put_in(state.users[user], %{entry | status: :resolving})
+  end
+
+  defp resolve_user(user) do
+    SafeTask.run(
+      fn ->
         with {:ok, hs} <- Pubky.homeserver_of(user),
              {:ok, cursor} <- capture_cursor(user) do
           {:ok, hs, cursor}
         end
-
-      send(server, {:resolved, user, result})
-    end)
-
-    put_in(state.users[user], %{entry | status: :resolving})
+      end,
+      fn -> {:error, :resolve_crashed} end
+    )
   end
 
   @doc """
@@ -331,9 +351,17 @@ defmodule PubkyRooms.Events.Subscriptions do
           "a member's homeserver events are unavailable (#{inspect(reason)}); retrying every #{retry_delay()} ms"
         )
 
-    Process.send_after(self(), {:retry, user}, retry_delay())
+    Process.send_after(self(), {:retry, user}, retry_in(entry.failures))
     entry = %{set_status(user, entry, {:error, reason}) | failures: entry.failures + 1}
     put_in(state.users[user], entry)
+  end
+
+  # Retries spread out (jitter) and slow down with repeated failures, so a
+  # room full of members on one dead homeserver does not hit it in lockstep
+  # every 30 s forever: 1×, 2×, … 5× the base delay, plus up to a quarter.
+  defp retry_in(failures) do
+    base = retry_delay()
+    base * min(failures + 1, 5) + :rand.uniform(div(base, 4) + 1)
   end
 
   # Records a status change and announces it (only actual changes are broadcast).
@@ -354,8 +382,7 @@ defmodule PubkyRooms.Events.Subscriptions do
            h == hs and MapSet.size(s.users) < @max_per_stream
          end) do
       {key, %{pid: pid}} ->
-        Pubky.add_users(pid, [{user, cursor}])
-        {:ok, key, state}
+        add_to_stream(state, key, pid, user, cursor)
 
       nil ->
         shard = state.streams |> Map.keys() |> Enum.count(fn {h, _} -> h == hs end)
@@ -367,7 +394,8 @@ defmodule PubkyRooms.Events.Subscriptions do
                users: [{user, cursor}],
                paths: [Paths.namespace()],
                live: true,
-               subscriber: self()
+               subscriber: self(),
+               restart: :temporary
              ) do
           {:ok, pid} ->
             Process.monitor(pid)
@@ -383,7 +411,7 @@ defmodule PubkyRooms.Events.Subscriptions do
     state =
       case key && state.streams[key] do
         %{pid: pid} = stream ->
-          Pubky.remove_users(pid, [user])
+          stream_call(fn -> Pubky.remove_users(pid, [user]) end)
           users = MapSet.delete(stream.users, user)
 
           if MapSet.size(users) == 0,
@@ -410,13 +438,34 @@ defmodule PubkyRooms.Events.Subscriptions do
             users
 
           entry ->
-            Process.send_after(self(), {:retry, user}, retry_delay())
+            Process.send_after(self(), {:retry, user}, retry_in(entry.failures))
             entry = set_status(user, entry, {:error, reason})
-            Map.put(users, user, %{entry | stream: nil})
+            Map.put(users, user, %{entry | stream: nil, failures: entry.failures + 1})
         end
       end)
 
     %{state | streams: streams, users: users}
+  end
+
+  defp stop_stream(pid), do: stream_call(fn -> Pubky.stop_stream(pid) end)
+
+  # The stream may have died a moment ago (its DOWN cleans up the rest).
+  defp add_to_stream(state, key, pid, user, cursor) do
+    case stream_call(fn -> Pubky.add_users(pid, [{user, cursor}]) end) do
+      :ok -> {:ok, key, state}
+      {:error, reason} -> {:error, reason, state}
+    end
+  end
+
+  # A call into a stream that has just died must not take this process down.
+  defp stream_call(fun) do
+    case fun.() do
+      :ok -> :ok
+      {:error, reason} -> {:error, reason}
+      _other -> :ok
+    end
+  catch
+    :exit, reason -> {:error, {:stream_down, reason}}
   end
 
   defp stream_key(state, pid) do

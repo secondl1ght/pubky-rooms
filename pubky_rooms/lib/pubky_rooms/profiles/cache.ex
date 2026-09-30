@@ -55,14 +55,22 @@ defmodule PubkyRooms.Profiles.Cache do
          (not Keyword.get(opts, :force, false) and fresh?(z32)) do
       {:noreply, state}
     else
-      server = self()
-
-      Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn ->
-        send(server, {:fetched, z32, Profiles.fetch_profile(z32)})
-      end)
-
+      fetch_async(z32)
       {:noreply, %{state | in_flight: MapSet.put(state.in_flight, z32)}}
     end
+  end
+
+  defp fetch_async(z32) do
+    server = self()
+
+    Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn ->
+      result =
+        PubkyRooms.SafeTask.run(fn -> Profiles.fetch_profile(z32) end, fn ->
+          {:error, :fetch_crashed}
+        end)
+
+      send(server, {:fetched, z32, result})
+    end)
   end
 
   @impl true

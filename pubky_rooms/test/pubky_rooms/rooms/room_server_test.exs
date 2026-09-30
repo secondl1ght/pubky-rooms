@@ -493,6 +493,30 @@ defmodule PubkyRooms.Rooms.RoomServerTest do
     assert RoomServer.history(table) == []
   end
 
+  test "results of fetches and paging rounds started before a ban are dropped on arrival", ctx do
+    %{alice: alice, ref: ref, sid: sid} = ctx
+    {_bob_sid, bob} = Fixtures.login("late-bob")
+    Directory.add_member(ref, bob)
+    {:ok, pid} = RoomServer.ensure(ref)
+    assert_receive {:room_event, ^ref, :ready}, 2_000
+    {:ok, %{table: table}} = RoomServer.attach(ref)
+    assert :ok = Rooms.ban(sid, alice, ref, bob, nil)
+    assert_receive {:room_event, ^ref, {:member_banned, ^bob, _}}, 1_000
+    drain_mailbox()
+
+    # a message fetch that was in flight when the ban landed
+    {:ok, late} = Message.new(bob, ref, "fetched too late")
+    send(pid, {:fetched, late.key, {:event, {:ok, late}}})
+    # a paging round that listed bob before the ban
+    {:ok, paged} = Message.new(bob, ref, "paged too late")
+    older = %{bob => %{entries: [], cursor: nil, floor: nil}}
+    send(pid, {:extended, {[paged], older, true}})
+    refute_receive {:room_event, ^ref, {:message_upserted, _}}, 200
+    assert RoomServer.history(table) == []
+    # and bob's paging entries were not restored either
+    assert {:ok, [], false} = RoomServer.older(ref, {"0035ZZZZZZZZZ", bob}, 10)
+  end
+
   test "a member without a message folder yet is not reported as unreachable", ctx do
     %{ref: ref} = ctx
     newcomer = Fixtures.z32("newcomer")

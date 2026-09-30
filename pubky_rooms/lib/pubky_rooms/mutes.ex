@@ -24,7 +24,7 @@ defmodule PubkyRooms.Mutes do
 
   require Logger
 
-  alias PubkyRooms.{Events, Ids, Pubky, RateLimit}
+  alias PubkyRooms.{Events, Ids, Pubky, RateLimit, SafeTask}
   alias PubkyRooms.Rooms.Paths
 
   @table :mutes_cache
@@ -150,13 +150,20 @@ defmodule PubkyRooms.Mutes do
         {:noreply, put_in(state.in_flight[z32], [from | waiters])}
 
       _ ->
-        server = self()
-
-        Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn ->
-          send(server, {:loaded, z32, read_lists(z32)})
-        end)
-
+        load_async(z32)
         {:noreply, put_in(state.in_flight[z32], [from])}
+    end
+  end
+
+  defp load_async(z32) do
+    server = self()
+    Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn -> load_and_report(server, z32) end)
+  end
+
+  defp load_and_report(server, z32) do
+    case SafeTask.run(fn -> {:ok, read_lists(z32)} end, fn -> :error end) do
+      {:ok, lists} -> send(server, {:loaded, z32, lists})
+      :error -> send(server, {:load_failed, z32})
     end
   end
 
@@ -188,6 +195,14 @@ defmodule PubkyRooms.Mutes do
     :ets.insert(@table, {z32, lists, now()})
     Enum.each(waiters, &GenServer.reply(&1, lists))
     broadcast(z32)
+    {:noreply, %{state | in_flight: in_flight}}
+  end
+
+  # The load crashed: waiters get empty lists for now, nothing is cached, and
+  # the next room open tries again.
+  def handle_info({:load_failed, z32}, state) do
+    {waiters, in_flight} = Map.pop(state.in_flight, z32, [])
+    Enum.each(waiters, &GenServer.reply(&1, %{own: MapSet.new(), app: MapSet.new()}))
     {:noreply, %{state | in_flight: in_flight}}
   end
 

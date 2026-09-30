@@ -62,6 +62,61 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert render(bob_view) =~ "Join the room to chat."
   end
 
+  test "a room that does not exist is not restarted from an open tab", ctx do
+    ref = {ctx.alice, "0035S410XTQ00"}
+    {:ok, view, _} = live(ctx.conn, "/r/#{ctx.alice}/0035S410XTQ00")
+    wait_for(fn -> render(view) end, &(&1 =~ "Room not found"))
+    pid = RoomServer.whereis(ref)
+    assert is_pid(pid)
+
+    # the server gives up after a while; the tab must not bring it back
+    Process.exit(pid, :kill)
+    Process.sleep(150)
+    assert RoomServer.whereis(ref) == nil
+    assert render(view) =~ "Room not found"
+  end
+
+  test "a slow bootstrap keeps the page loading instead of crashing the mount", ctx do
+    # test config: attach gives up after 300 ms; the room's first listing
+    # takes 800 ms (an anonymous viewer, whose own render lists nothing)
+    Fake.fail_list(ctx.alice, {:delay, 800})
+    {:ok, view, html} = live(ctx.conn, ctx.path)
+    assert html =~ "Loading messages…"
+    refute html =~ "No messages yet"
+    # the :ready broadcast attaches the page once the bootstrap is done
+    assert wait_for(fn -> render(view) end, &(&1 =~ "No messages yet"))
+  end
+
+  test "asking to retry unreachable members is limited per viewer", ctx do
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    wait_for(fn -> render(view) end, &(&1 =~ "Say hello"))
+    for _ <- 1..3, do: render_click(view, "retry_history", %{})
+
+    assert {:error, {:rate_limited, _}} =
+             PubkyRooms.RateLimit.check({:retry_history, view.id}, 3, 10_000)
+  end
+
+  test "a page request while one is in flight is declined with an empty older:loaded", ctx do
+    for i <- 1..12 do
+      {:ok, m} =
+        Message.new(ctx.alice, Room.ref(ctx.room), "msg #{String.pad_leading("#{i}", 2, "0")}")
+
+      Fake.seed(ctx.alice, Message.path(m), Message.encode(m))
+    end
+
+    Application.put_env(:pubky_rooms, :page_size, 4)
+    on_exit(fn -> Application.delete_env(:pubky_rooms, :page_size) end)
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    wait_for(fn -> render(view) end, &(&1 =~ "msg 12"))
+
+    Fake.fail_get(ctx.alice, {:delay, 500})
+    render_hook(view, "load_older", %{})
+    render_hook(view, "load_older", %{})
+    assert_push_event(view, "older:loaded", %{count: 0})
+    assert_push_event(view, "older:loaded", %{count: 4}, 3_000)
+    assert render(view) =~ "msg 04"
+  end
+
   test "invalid room links go back to the lobby", %{conn: conn, alice: alice} do
     assert {:error, {:redirect, %{to: "/"}}} = live(conn, "/r/#{alice}/not-an-id")
     assert {:error, {:redirect, %{to: "/"}}} = live(conn, "/r/nope/0000000000001")

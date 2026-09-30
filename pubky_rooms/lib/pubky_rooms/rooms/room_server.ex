@@ -67,7 +67,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
   require Logger
 
   alias Pubky.Crypto.Blake3
-  alias PubkyRooms.{Events, Ids, Pubky, Telemetry}
+  alias PubkyRooms.{Events, Ids, Pubky, SafeTask, Telemetry}
   alias PubkyRooms.Events.Subscriptions
   alias PubkyRooms.Rooms.{Ban, Directory, Message, Paths, Room}
 
@@ -127,9 +127,14 @@ defmodule PubkyRooms.Rooms.RoomServer do
   def start_link(ref), do: GenServer.start_link(__MODULE__, ref, name: via(ref))
   defp via(ref), do: {:via, Registry, {PubkyRooms.Rooms.Registry, ref}}
 
-  @doc "Registers the caller as a viewer and returns the current snapshot."
-  @spec attach(ref(), pid()) :: {:ok, map()}
-  def attach(ref, viewer \\ self()), do: GenServer.call(via(ref), {:attach, viewer})
+  @doc """
+  Registers the caller as a viewer and returns the current snapshot. A room
+  mid-bootstrap answers only once it is done; callers that cannot wait pass
+  a short `timeout` and catch the exit (the `:ready` broadcast follows).
+  """
+  @spec attach(ref(), pid(), timeout()) :: {:ok, map()}
+  def attach(ref, viewer \\ self(), timeout \\ 5_000),
+    do: GenServer.call(via(ref), {:attach, viewer}, timeout)
 
   @doc "The current snapshot without registering as a viewer."
   def snapshot(ref), do: GenServer.call(via(ref), :snapshot)
@@ -212,6 +217,7 @@ defmodule PubkyRooms.Rooms.RoomServer do
       viewers_timer: nil,
       older: %{},
       paging: false,
+      retrying: false,
       waiters: [],
       reactions: %{},
       bans: %{},
@@ -400,6 +406,10 @@ defmodule PubkyRooms.Rooms.RoomServer do
     {:noreply, apply_backfill(state, members, history)}
   end
 
+  def handle_info({:retry_backfilled, members, history}, state) do
+    {:noreply, apply_backfill(%{state | retrying: false}, members, history)}
+  end
+
   # A poll came back: new messages land like a backfill; then every message
   # of a listed member that is older than `since` and missing from the
   # listing has been deleted on their homeserver.
@@ -412,8 +422,10 @@ defmodule PubkyRooms.Rooms.RoomServer do
   # prepends them; nobody else is interested), then answer the waiters, some
   # of whom may need another round.
   def handle_info({:extended, {msgs, older, progress?}}, state) do
-    Enum.each(msgs, &insert_silently(state, &1))
-    state = %{state | older: older, paging: false}
+    # the round started from an older snapshot: authors banned or gone since
+    # are dropped, and members who joined meanwhile keep their entries
+    msgs |> Enum.reject(&dropped?(state, &1.author)) |> Enum.each(&insert_silently(state, &1))
+    state = %{state | older: merge_older(state.older, older), paging: false}
     {waiters, state} = {state.waiters, %{state | waiters: []}}
 
     state =
@@ -459,6 +471,12 @@ defmodule PubkyRooms.Rooms.RoomServer do
     if MapSet.member?(state.subscribed, z32),
       do: {:noreply, apply_statuses(state, %{z32 => status})},
       else: {:noreply, state}
+  end
+
+  # The subscriptions process restarted and forgot every owner: acquire again.
+  def handle_info(:subscriptions_reset, state) do
+    if MapSet.size(state.subscribed) > 0, do: Subscriptions.acquire(state.subscribed, self())
+    {:noreply, state}
   end
 
   def handle_info(:sweep_pending, state) do
@@ -845,7 +863,9 @@ defmodule PubkyRooms.Rooms.RoomServer do
       _ -> :ok
     end
 
-    upsert(%{state | pending: Map.delete(state.pending, key)}, msg)
+    state = %{state | pending: Map.delete(state.pending, key)}
+    # the author may have been banned or have left while the fetch ran
+    if dropped?(state, msg.author), do: state, else: upsert(state, msg)
   end
 
   defp apply_fetch(state, key, {:verify, {:error, :not_found}}) do
@@ -891,13 +911,18 @@ defmodule PubkyRooms.Rooms.RoomServer do
 
   # Joins and retries: fetch in the background; the result comes back as
   # `{:backfilled, …}`. Messages already in the table are not fetched again.
-  defp backfill_async(state, members) do
+  defp backfill_async(state, members, reply \\ :backfilled) do
     server = self()
     ref = state.ref
     known = known_keys(state, members)
 
     Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn ->
-      send(server, {:backfilled, members, fetch_history(members, ref, known)})
+      history =
+        SafeTask.run(fn -> fetch_history(members, ref, known) end, fn ->
+          {[], members, %{}, list_reactions(ref, [])}
+        end)
+
+      send(server, {reply, members, history})
     end)
   end
 
@@ -913,13 +938,18 @@ defmodule PubkyRooms.Rooms.RoomServer do
     since = Ids.encode(max(System.os_time(:microsecond) - lag_us, 0))
 
     Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn ->
-      {history, listed} = fetch_history(members, ref, known, :exact)
+      {history, listed} =
+        SafeTask.run(fn -> fetch_history(members, ref, known, :exact) end, fn ->
+          {{[], members, %{}, list_reactions(ref, [])}, %{}}
+        end)
+
       send(server, {:poll_result, members, since, history, listed})
     end)
   end
 
   defp apply_backfill(state, members, {msgs, failed, leftovers, reactions}) do
-    msgs = Enum.reject(msgs, &banned?(state, &1.author))
+    msgs = Enum.reject(msgs, &dropped?(state, &1.author))
+    leftovers = Map.reject(leftovers, fn {member, _} -> dropped?(state, member) end)
     state = Enum.reduce(msgs, state, fn msg, acc -> upsert(acc, msg) end)
     state = merge_leftovers(state, leftovers, msgs)
     state = apply_listed_reactions(state, reactions, broadcast: true)
@@ -983,9 +1013,16 @@ defmodule PubkyRooms.Rooms.RoomServer do
         do: {msg_id, member}
   end
 
+  # One retry in flight at a time: viewers can ask as often as they like.
+  defp retry_unreachable(%{retrying: true} = state), do: state
+
   defp retry_unreachable(%{unreachable: unreachable} = state) do
-    if MapSet.size(unreachable) > 0, do: backfill_async(state, MapSet.to_list(unreachable))
-    state
+    if MapSet.size(unreachable) > 0 do
+      backfill_async(state, MapSet.to_list(unreachable), :retry_backfilled)
+      %{state | retrying: true}
+    else
+      state
+    end
   end
 
   defp set_unreachable(state, unreachable) do
@@ -1260,11 +1297,23 @@ defmodule PubkyRooms.Rooms.RoomServer do
     %{ref: ref, older: older} = state
 
     Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn ->
-      send(server, {:extended, extend_history(ref, older, limit)})
+      result =
+        SafeTask.run(fn -> extend_history(ref, older, limit) end, fn -> {[], older, false} end)
+
+      send(server, {:extended, result})
     end)
 
     %{state | paging: true}
   end
+
+  # Paging entries after a round: members the round listed take its version,
+  # members that joined meanwhile keep theirs, members gone meanwhile stay gone.
+  defp merge_older(current, fresh),
+    do: Map.new(current, fn {member, entry} -> {member, Map.get(fresh, member, entry)} end)
+
+  # An author whose messages the room no longer holds: banned, or not a member.
+  defp dropped?(state, author),
+    do: banned?(state, author) or not MapSet.member?(state.members, author)
 
   # One paging round: refill members whose unfetched entries ran out (one
   # listing each, from their cursor), pick the newest `limit` entries across

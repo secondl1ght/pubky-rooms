@@ -7,14 +7,33 @@ defmodule Pubky.Events do
   alias Pubky.{Config, Http, PublicKey, Resolver}
   alias Pubky.Events.{Event, SSE, Stream}
 
-  @doc "Starts a supervised stream (see `Pubky.Events.Stream` for options)."
-  @spec start_stream([Stream.option()]) :: DynamicSupervisor.on_start_child()
+  @doc """
+  Starts a supervised stream (see `Pubky.Events.Stream` for options). The
+  extra `restart:` option (default `:transient`) sets the child's restart
+  strategy; a caller that recreates streams itself passes `:temporary`, so a
+  crashed stream is not brought back with a stale user list behind its back.
+  """
+  @spec start_stream([Stream.option() | {:restart, :transient | :temporary}]) ::
+          DynamicSupervisor.on_start_child()
   def start_stream(opts) do
+    {restart, opts} = Keyword.pop(opts, :restart, :transient)
+
     DynamicSupervisor.start_child(Pubky.Events.Supervisor, %{
       id: {Stream, Keyword.fetch!(opts, :homeserver), Keyword.get(opts, :name, :default)},
       start: {Stream, :start_link, [opts]},
-      restart: :transient
+      restart: restart
     })
+  end
+
+  @doc "Stops every supervised stream (e.g. when the process that subscribed to them is gone)."
+  @spec stop_all_streams() :: :ok
+  def stop_all_streams do
+    for {_, pid, _, _} <- DynamicSupervisor.which_children(Pubky.Events.Supervisor),
+        is_pid(pid) do
+      DynamicSupervisor.terminate_child(Pubky.Events.Supervisor, pid)
+    end
+
+    :ok
   end
 
   @doc "The pid of a running stream, if any."
