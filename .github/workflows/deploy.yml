@@ -1,0 +1,90 @@
+# Deploys staging after a green CI run on main (or by hand), then runs the
+# post-deploy smoke against the deployed app (docs/qa/README.md, "The regime";
+# docs/operations.md, "Deploy steps"). Docs-only pushes never reach here: CI
+# skips them, so no CI run completes for them.
+#
+# Secrets: FLY_API_TOKEN (a deploy token scoped to the staging app),
+# STAGING_SMOKE_ALICE_COOKIE / STAGING_SMOKE_BOB_COOKIE (the Rooms session
+# cookies of the two staging identities that are members of the smoke room).
+name: Deploy staging
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+# one deploy at a time, never cancelled half-way
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: fly deploy (pubky-rooms-staging)
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # built on the runner's Docker (like `fly deploy --local-only` by hand),
+      # one machine (one volume, one directory), the new machine must pass the
+      # health check before the old one goes
+      - run: flyctl deploy --app pubky-rooms-staging --ha=false --local-only
+      - name: Health after the deploy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS https://pubky-rooms-staging.fly.dev/healthz; then echo; exit 0; fi
+            sleep 2
+          done
+          echo "healthz did not answer"; exit 1
+
+  smoke:
+    name: post-deploy smoke (staging)
+    needs: deploy
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pubky_rooms
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: pubky_rooms/assets/package-lock.json
+      - run: npm ci
+        working-directory: pubky_rooms/assets
+      - uses: actions/cache@v4
+        id: playwright
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pubky_rooms/assets/package-lock.json') }}
+      - run: npx playwright install chromium
+        if: steps.playwright.outputs.cache-hit != 'true'
+        working-directory: pubky_rooms/assets
+      - run: npx playwright install-deps chromium
+        working-directory: pubky_rooms/assets
+      - run: node scripts/deploy_smoke.js
+        env:
+          NODE_PATH: assets/node_modules
+          ROOMS_URL: https://pubky-rooms-staging.fly.dev
+          # the unlisted smoke room on staging: alice (owner) and bob are its members
+          SMOKE_ROOM: /r/hckjqy589fh554iu854gs788dnp8y49i3nc9yg76x4bhm7msbtky/0035SEP9WB4N2
+          SMOKE_HOMESERVER_URL: https://homeserver.staging.pubky.app
+          SMOKE_NEXUS_URL: https://nexus.staging.pubky.app
+          SMOKE_ALICE_COOKIE: ${{ secrets.STAGING_SMOKE_ALICE_COOKIE }}
+          SMOKE_BOB_COOKIE: ${{ secrets.STAGING_SMOKE_BOB_COOKIE }}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: smoke-screenshots
+          path: pubky_rooms/tmp/smoke/
+          if-no-files-found: ignore

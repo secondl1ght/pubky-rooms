@@ -3,7 +3,14 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore: ["docs/**", "**.md"]
   pull_request:
+    paths-ignore: ["docs/**", "**.md"]
+
+# a newer push to the same branch supersedes the run in progress
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   MIX_ENV: test
@@ -82,13 +89,75 @@ jobs:
           restore-keys: ${{ runner.os }}-pubky_rooms-test-
       - run: npm ci
         working-directory: pubky_rooms/assets
-      - run: npx playwright install --with-deps chromium
+      # the Chromium build is cached per Playwright version; its apt libraries
+      # are not part of the cache, so install-deps always runs
+      - uses: actions/cache@v4
+        id: playwright
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pubky_rooms/assets/package-lock.json') }}
+      - run: npx playwright install chromium
+        if: steps.playwright.outputs.cache-hit != 'true'
+        working-directory: pubky_rooms/assets
+      - run: npx playwright install-deps chromium
         working-directory: pubky_rooms/assets
       - run: mix deps.get
       - run: mix assets.setup
       - run: mix assets.build
       # test/e2e: the checklist's smoke items in headless Chromium against the fakes
       - run: mix test --only e2e
+
+  testnet:
+    # both projects' :testnet suites against the real homeserver and relays of
+    # the public pubky-docker stack (docker hub image, pinned): writes,
+    # listings, sessions, event streams, restarts — no shared service involved
+    name: testnet integration (pubky-docker)
+    runs-on: ubuntu-latest
+    env:
+      PUBKY_DOCKER_REF: 75b1121f3e90b9b44d9416ca4f5ba87a4984e800
+      HOMESERVER_TAG: v0.14.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: |
+            pubky_ex/deps
+            pubky_ex/_build
+          key: ${{ runner.os }}-pubky_ex-test-${{ hashFiles('pubky_ex/mix.lock') }}
+          restore-keys: ${{ runner.os }}-pubky_ex-test-
+      - uses: actions/cache@v4
+        with:
+          path: |
+            pubky_rooms/deps
+            pubky_rooms/_build
+          key: ${{ runner.os }}-pubky_rooms-test-${{ hashFiles('pubky_rooms/mix.lock') }}
+          restore-keys: ${{ runner.os }}-pubky_rooms-test-
+      - name: Start the Pubky testnet (homeserver with its PKARR and HTTP relays, postgres)
+        run: |
+          git clone --quiet https://github.com/pubky/pubky-docker.git "$RUNNER_TEMP/pubky-docker"
+          cd "$RUNNER_TEMP/pubky-docker"
+          git -c advice.detachedHead=false checkout --quiet "$PUBKY_DOCKER_REF"
+          cp .env-sample .env
+          docker compose pull --quiet postgres homeserver
+          docker compose up --detach --no-build homeserver
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://localhost:6286/ && curl -fsS -o /dev/null http://localhost:15411/; then
+              echo "homeserver and relay up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "the testnet did not come up"; docker compose logs homeserver; exit 1
+      - run: mix deps.get && mix test --only testnet
+        working-directory: pubky_ex
+      - run: mix deps.get && mix test --only testnet test/integration
+        working-directory: pubky_rooms
+      - name: Homeserver logs
+        if: failure()
+        run: docker compose --project-directory "$RUNNER_TEMP/pubky-docker" logs --tail 200 homeserver
 
   dialyzer:
     name: ${{ matrix.project }} · dialyzer
