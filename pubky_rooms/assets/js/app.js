@@ -42,9 +42,6 @@ window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 // connect if there are any LiveViews on the page
 // before connect(), so this listener runs ahead of LiveView's own
 installOfflineNavigation()
-// the offline page retried once on its own; the app loaded, so it may again
-try { sessionStorage.removeItem("offline-retried") } catch (_e) { /* storage may be unavailable */ }
-
 liveSocket.connect()
 
 // Installable app shell: the worker caches digested assets and shows a static

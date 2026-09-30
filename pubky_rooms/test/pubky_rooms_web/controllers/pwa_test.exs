@@ -31,9 +31,10 @@ defmodule PubkyRoomsWeb.PwaTest do
     # (the logo and the icon are inline; a path here would be a broken image offline)
     refute offline.resp_body =~ ~r/(src|href)="\//
     assert offline.resp_body =~ "<svg"
-    # retries by itself when the connection comes back, and once after loading
+    # retries by itself, without flashing: probes the app and reloads only when it answers
     assert offline.resp_body =~ ~s|addEventListener("online"|
-    assert offline.resp_body =~ "offline-retried"
+    assert offline.resp_body =~ ~s|fetch(location.href, {method: "HEAD"|
+    refute offline.resp_body =~ "setTimeout(function () { location.reload() }"
   end
 
   test "the root layout declares the manifest, icons and app-capable metas", %{conn: conn} do

@@ -42,13 +42,26 @@
       <button type="button" onclick="location.reload()">Try again</button>
     </main>
     <script>
-      addEventListener("online", function () { location.reload() })
-      try {
-        if (navigator.onLine && !sessionStorage.getItem("offline-retried")) {
-          sessionStorage.setItem("offline-retried", "1")
-          setTimeout(function () { location.reload() }, 2000)
+      // Retry without flashing: probe the app (a HEAD the worker never
+      // intercepts) and reload only when it answers. A few attempts after
+      // loading (a freshly launched installed app can fail its first request
+      // while the OS is still connecting), then again whenever the browser
+      // reports the connection back. A real outage leaves the page as it is.
+      (function () {
+        var delays = [2000, 5000, 10000], attempt = 0, timer = null
+        function probe() {
+          timer = null
+          fetch(location.href, {method: "HEAD", cache: "no-store", credentials: "same-origin"})
+            .then(function () { location.reload() })
+            .catch(schedule)
         }
-      } catch (_e) {}
+        function schedule() {
+          if (timer || attempt >= delays.length) return
+          timer = setTimeout(probe, delays[attempt++])
+        }
+        addEventListener("online", function () { attempt = 0; if (!timer) probe() })
+        if (navigator.onLine) schedule()
+      })()
     </script>
   </body>
 </html>
