@@ -14,10 +14,15 @@ defmodule Pubky.Pkarr.Endpoint do
 
   Targets are chosen by whoever signs the packet, so on mainnet
   (`allow_private_hosts: false`) only public hostnames are accepted: loopback,
-  private and link-local addresses and reserved names such as `localhost` or
-  `*.internal` are skipped, and a key that advertises nothing else resolves to
-  `{:error, :no_icann_endpoint}`. Otherwise any user could point this client at
-  services on the node's own network.
+  private and link-local addresses (in any spelling the resolver would accept,
+  `127.1` included) and reserved names such as `localhost` or `*.internal` are
+  skipped, and a key that advertises nothing else resolves to
+  `{:error, :no_icann_endpoint}`. The name that survives is then resolved by
+  `Pubky.Resolver` and every address it yields must be public too
+  (`resolves_public?/1`), so a public name with a private A record is refused
+  as well. The plain-HTTP SvcParam `65280` is honoured only for
+  `plain_http_domains` or when private hosts are allowed. Otherwise any user
+  could point this client at services on the node's own network.
   """
 
   alias Pubky.{Config, PublicKey}
@@ -72,24 +77,51 @@ defmodule Pubky.Pkarr.Endpoint do
 
   @doc """
   True for a well-formed public hostname: RFC 1123 labels with at least one
-  dot, no reserved suffix, and — for IP literals — no loopback, private,
-  link-local, multicast or otherwise non-routable address.
+  dot and an alphabetic top-level label (so shortened, hex or octal address
+  spellings such as `127.1` or `0x7f.1` are not names), no reserved suffix,
+  and — for IP literals in any form the resolver accepts — no loopback,
+  private, link-local, multicast or otherwise non-routable address. Purely
+  syntactic: see `resolves_public?/1` for what the name points at.
   """
   @spec public_host?(String.t()) :: boolean()
   def public_host?(host) when is_binary(host) do
     host = host |> String.trim_trailing(".") |> String.downcase()
 
-    case :inet.parse_strict_address(String.to_charlist(host)) do
+    case :inet.parse_address(String.to_charlist(host)) do
       {:ok, ip} -> public_ip?(ip)
       {:error, _} -> public_name?(host)
     end
   end
+
+  @doc """
+  True unless the name resolves (A or AAAA) to a non-public address. A name
+  that does not resolve at all passes: the connection fails on its own.
+  """
+  @spec resolves_public?(String.t()) :: boolean()
+  def resolves_public?(host) when is_binary(host) do
+    name = String.to_charlist(host)
+
+    [:inet, :inet6]
+    |> Enum.flat_map(fn family ->
+      case :inet.getaddrs(name, family) do
+        {:ok, addresses} -> addresses
+        {:error, _} -> []
+      end
+    end)
+    |> Enum.all?(&public_ip?/1)
+  end
+
+  @doc "Whether the resolver may connect to `host` under `config`: allowed outright, or public by name and by address."
+  @spec vetted_host?(String.t(), Config.t()) :: boolean()
+  def vetted_host?(_host, %Config{allow_private_hosts: true}), do: true
+  def vetted_host?(host, %Config{}), do: public_host?(host) and resolves_public?(host)
 
   defp public_name?(host) do
     labels = String.split(host, ".")
 
     byte_size(host) <= 253 and length(labels) >= 2 and
       Enum.all?(labels, &Regex.match?(@label, &1)) and
+      Regex.match?(~r/^[a-z]/, List.last(labels)) and
       not Enum.any?(@reserved_suffixes, &String.ends_with?(host, &1))
   end
 
@@ -129,8 +161,13 @@ defmodule Pubky.Pkarr.Endpoint do
   defp domain_target?(%{target: ""}), do: false
   defp domain_target?(%{target: target}), do: not PublicKey.valid?(target)
 
+  # Plain HTTP only where the operator allows it (local testnets); a mainnet
+  # packet cannot downgrade the client to cleartext toward an arbitrary host.
   defp base_url(%{target: host, http_port: http_port, port: port}, config) do
-    if http_port != nil or host in config.plain_http_domains do
+    plain? =
+      host in config.plain_http_domains or (http_port != nil and config.allow_private_hosts)
+
+    if plain? do
       with_port("http://" <> host, http_port || port, 80)
     else
       with_port("https://" <> host, port, 443)

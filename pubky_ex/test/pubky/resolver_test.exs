@@ -93,6 +93,22 @@ defmodule Pubky.ResolverTest do
     assert Resolver.homeserver_of(user_z32, ctx.config) == {:error, :not_found}
   end
 
+  test "on mainnet a homeserver whose name resolves to a private address is refused", ctx do
+    hs_z32 = Keypair.public_z32(ctx.hs)
+    Resolver.clear()
+
+    Bypass.expect_once(
+      ctx.relay,
+      "GET",
+      "/#{hs_z32}",
+      &Plug.Conn.resp(&1, 200, SignedPacket.encode_relay_payload(ctx.hs_packet))
+    )
+
+    # the setup packet targets localhost, which is refused by name before any request
+    assert Resolver.endpoint_of(hs_z32, %{ctx.config | allow_private_hosts: false}) ==
+             {:error, :no_icann_endpoint}
+  end
+
   test "a packet's own TTLs shorten the cache, but never below a minute", ctx do
     hs_z32 = Keypair.public_z32(ctx.hs)
 

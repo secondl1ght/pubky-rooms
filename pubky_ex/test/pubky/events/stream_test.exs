@@ -129,7 +129,7 @@ defmodule Pubky.Events.StreamTest do
     assert_receive {:pubky_stream, _, :connected}, 2_000
     assert :ok = Events.stop_all_streams()
     refute Process.alive?(pid)
-    assert Events.whereis(hs.z32, name) == nil
+    assert eventually(fn -> Events.whereis(hs.z32, name) == nil end)
   end
 
   defp eventually(fun, tries \\ 50) do

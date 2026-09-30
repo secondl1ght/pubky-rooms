@@ -8,6 +8,10 @@ defmodule Pubky.Http do
   which becomes `{:error, {:rate_limited, retry_after_ms | nil}}` (from the
   `Retry-After` header); transport failures become `{:error, {:transport, reason}}`.
 
+  Redirects are never followed: a homeserver answers in place, and following
+  one would let a vetted public host send this client anywhere (a 3xx is an
+  ordinary `{:error, {:http, status, body}}`).
+
   Bodies are read in chunks and abandoned once they exceed `:max_body` bytes
   (`{:error, {:body_too_large, limit}}`) or once the whole exchange has taken
   longer than `:deadline` milliseconds (`{:error, {:transport, :deadline}}`),
@@ -48,6 +52,7 @@ defmodule Pubky.Http do
         finch: [name: config.finch],
         receive_timeout: config.request_timeout,
         retry: false,
+        redirect: false,
         decode_body: false,
         user_agent: @user_agent,
         into: collector(max_body, deadline)

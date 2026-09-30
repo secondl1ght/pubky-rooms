@@ -149,6 +149,9 @@ defmodule Pubky.Test.FakeHomeserver do
       {"GET", "/events-stream"} ->
         events_stream(conn, hs)
 
+      {"GET", "/redirect-test"} ->
+        conn |> put_resp_header("location", "/info") |> resp(302, "")
+
       {"GET", "/info"} ->
         features = if hs.path_addressed, do: ["path-addressed-storage"], else: []
         json(conn, 200, %{features: features})

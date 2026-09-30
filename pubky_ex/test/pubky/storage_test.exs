@@ -37,6 +37,13 @@ defmodule Pubky.StorageTest do
     assert_raise ArgumentError, fn -> Addressing.encode_path("/pub/./x") end
   end
 
+  test "redirects are never followed" do
+    {hs, config, _session} = signed_in(path_addressed: true)
+
+    assert {:error, {:http, 302, ""}} =
+             Pubky.Http.request(:get, hs.base_url <> "/redirect-test", [], config)
+  end
+
   test "bodies past max_body and exchanges past the deadline are abandoned" do
     {_hs, config, session} = signed_in(path_addressed: true)
     user = session.user

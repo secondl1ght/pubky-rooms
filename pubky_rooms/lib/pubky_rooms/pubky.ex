@@ -96,6 +96,7 @@ defmodule PubkyRooms.Pubky do
   def normalize({:error, {:http, status, _}}), do: {:error, {:http, status}}
   def normalize({:error, {:transport, _}}), do: {:error, :unreachable}
   def normalize({:error, :no_icann_endpoint}), do: {:error, :unreachable}
+  def normalize({:error, :private_endpoint}), do: {:error, :unreachable}
   def normalize({:error, {:relay, _}}), do: {:error, :unreachable}
   def normalize({:error, :unreachable}), do: {:error, :unreachable}
   def normalize({:error, reason}), do: {:error, {:unexpected, reason}}

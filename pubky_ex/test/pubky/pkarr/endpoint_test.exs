@@ -55,6 +55,10 @@ defmodule Pubky.Pkarr.EndpointTest do
         do: assert(Endpoint.public_host?(host), host)
 
     for host <- [
+          "127.1",
+          "10.1",
+          "0x7f.1",
+          "0177.0.0.1",
           "localhost",
           "LOCALHOST",
           "db.localhost",
@@ -83,6 +87,41 @@ defmodule Pubky.Pkarr.EndpointTest do
 
     assert Endpoint.allowed_target?("localhost", Config.mainnet(allow_private_hosts: true))
     refute Endpoint.allowed_target?("localhost", Config.mainnet())
+  end
+
+  test "a name is also judged by what it resolves to" do
+    # a public-looking name whose address is loopback is refused by address
+    refute Endpoint.resolves_public?("localhost")
+    refute Endpoint.resolves_public?("127.0.0.1")
+    refute Endpoint.vetted_host?("localhost", Config.mainnet())
+    assert Endpoint.vetted_host?("localhost", Config.mainnet(allow_private_hosts: true))
+    # a name that does not resolve at all is left to the connection to fail
+    assert Endpoint.resolves_public?("no-such-host.invalid")
+  end
+
+  test "the plain-http SvcParam is ignored on mainnet" do
+    kp = Keypair.generate()
+    hs = Keypair.public_z32(kp)
+
+    {:ok, sp} =
+      SignedPacket.build(kp, [
+        %RR{
+          name: hs,
+          type: 65,
+          ttl: 60,
+          rdata:
+            {:https, %{priority: 10, target: "hs.example.org", params: %{65_280 => <<8080::16>>}}}
+        }
+      ])
+
+    assert Endpoint.icann_base_url(Endpoint.from_packet(sp), Config.mainnet()) ==
+             {:ok, "https://hs.example.org"}
+
+    assert Endpoint.icann_base_url(
+             Endpoint.from_packet(sp),
+             Config.mainnet(allow_private_hosts: true)
+           ) ==
+             {:ok, "http://hs.example.org:8080"}
   end
 
   test "explicit non-default https port and z32 targets are skipped" do

@@ -7,6 +7,7 @@ defmodule PubkyRooms.PubkyTest do
     assert Pubky.normalize({:error, {:body_too_large, 65_536}}) == {:error, :too_large}
     assert Pubky.normalize({:error, {:transport, :deadline}}) == {:error, :unreachable}
     assert Pubky.normalize({:error, :no_icann_endpoint}) == {:error, :unreachable}
+    assert Pubky.normalize({:error, :private_endpoint}) == {:error, :unreachable}
     assert Pubky.normalize({:error, {:http, 401, ""}}) == {:error, :unauthorized}
   end
 end

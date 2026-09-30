@@ -28,7 +28,8 @@ defmodule Pubky.Resolver do
   @type endpoint :: %{base_url: String.t(), features: [String.t()]}
 
   @type homeserver_error :: :not_found | :no_pubky_record | :invalid_target | {:relay, term()}
-  @type endpoint_error :: :not_found | :no_icann_endpoint | {:relay, term()}
+  @type endpoint_error ::
+          :not_found | :no_icann_endpoint | :private_endpoint | {:relay, term()}
 
   # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -138,8 +139,12 @@ defmodule Pubky.Resolver do
         {:ok, base_url}
 
       :error ->
-        with {:ok, sp} <- Relay.resolve(hs_z32, config) do
-          sp |> Endpoint.from_packet() |> Endpoint.icann_base_url(config)
+        with {:ok, sp} <- Relay.resolve(hs_z32, config),
+             {:ok, base_url} <- sp |> Endpoint.from_packet() |> Endpoint.icann_base_url(config),
+             true <-
+               Endpoint.vetted_host?(URI.parse(base_url).host || "", config) ||
+                 {:error, :private_endpoint} do
+          {:ok, base_url}
         end
     end
   end
