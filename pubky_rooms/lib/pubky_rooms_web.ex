@@ -51,7 +51,10 @@ defmodule PubkyRoomsWeb do
 
   def live_view do
     quote do
-      use Phoenix.LiveView
+      # LiveView's own logger would print the decrypted session at mount
+      # (debug level), and the grant credential lives there (ADR 0005); no
+      # log level may ever show it, so per-view logging is off for good.
+      use Phoenix.LiveView, log: false
 
       unquote(html_helpers())
     end
