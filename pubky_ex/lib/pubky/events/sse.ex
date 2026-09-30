@@ -6,28 +6,58 @@ defmodule Pubky.Events.SSE do
   partial trailing line buffered. Lines may end in `\\n` or `\\r\\n`; comment
   lines (starting with `:`) are dropped but still count as activity for
   keep-alive purposes.
+
+  A line longer than #{64 * 1024} bytes, or a frame whose `data` grows past
+  that, is a protocol error (`{:error, :frame_too_large}`): a homeserver
+  cannot make this parser buffer without bound.
   """
+
+  @max_bytes 64 * 1024
 
   @type frame :: %{event: String.t(), data: String.t(), id: String.t() | nil}
   @type t :: %__MODULE__{
           buffer: binary(),
           event: String.t() | nil,
           data: [String.t()],
+          data_bytes: non_neg_integer(),
           id: String.t() | nil
         }
 
-  defstruct buffer: "", event: nil, data: [], id: nil
+  defstruct buffer: "", event: nil, data: [], data_bytes: 0, id: nil
 
   @doc "A fresh parser."
   @spec new() :: t()
   def new, do: %__MODULE__{}
 
-  @doc "Feeds a chunk; returns the frames completed by it and the updated parser."
-  @spec feed(t(), binary()) :: {[frame()], t()}
+  @doc "The largest line or frame data accepted, in bytes."
+  @spec max_bytes() :: pos_integer()
+  def max_bytes, do: @max_bytes
+
+  @doc """
+  Feeds a chunk; returns the frames completed by it and the updated parser,
+  or `{:error, :frame_too_large}` when the input exceeds `max_bytes/0`.
+  """
+  @spec feed(t(), binary()) :: {[frame()], t()} | {:error, :frame_too_large}
   def feed(%__MODULE__{buffer: buffer} = parser, chunk) do
     {lines, rest} = split_lines(buffer <> chunk)
-    {frames, parser} = Enum.reduce(lines, {[], %{parser | buffer: ""}}, &line/2)
-    {Enum.reverse(frames), %{parser | buffer: rest}}
+
+    if byte_size(rest) > @max_bytes do
+      {:error, :frame_too_large}
+    else
+      case parse_lines(lines, %{parser | buffer: ""}) do
+        {:error, _} = error -> error
+        {frames, parser} -> {Enum.reverse(frames), %{parser | buffer: rest}}
+      end
+    end
+  end
+
+  defp parse_lines(lines, parser) do
+    Enum.reduce_while(lines, {[], parser}, fn line, acc ->
+      case line(line, acc) do
+        {:error, _} = error -> {:halt, error}
+        acc -> {:cont, acc}
+      end
+    end)
   end
 
   # Splits complete lines off the buffer, keeping an incomplete tail (and a
@@ -40,6 +70,7 @@ defmodule Pubky.Events.SSE do
 
   defp line("", {frames, parser}), do: dispatch(frames, parser)
   defp line(":" <> _comment, acc), do: acc
+  defp line(line, _acc) when byte_size(line) > @max_bytes, do: {:error, :frame_too_large}
 
   defp line(line, {frames, parser}) do
     {field, value} =
@@ -49,15 +80,23 @@ defmodule Pubky.Events.SSE do
         [field] -> {field, ""}
       end
 
-    parser =
-      case field do
-        "event" -> %{parser | event: value}
-        "data" -> %{parser | data: [value | parser.data]}
-        "id" -> %{parser | id: value}
-        _ -> parser
-      end
+    case field do
+      "data" ->
+        bytes = parser.data_bytes + byte_size(value)
 
-    {frames, parser}
+        if bytes > @max_bytes,
+          do: {:error, :frame_too_large},
+          else: {frames, %{parser | data: [value | parser.data], data_bytes: bytes}}
+
+      "event" ->
+        {frames, %{parser | event: value}}
+
+      "id" ->
+        {frames, %{parser | id: value}}
+
+      _ ->
+        {frames, parser}
+    end
   end
 
   defp dispatch(frames, %{data: []} = parser), do: {frames, %{parser | event: nil, id: nil}}
@@ -69,6 +108,6 @@ defmodule Pubky.Events.SSE do
       id: parser.id
     }
 
-    {[frame | frames], %{parser | event: nil, data: [], id: nil}}
+    {[frame | frames], %{parser | event: nil, data: [], data_bytes: 0, id: nil}}
   end
 end

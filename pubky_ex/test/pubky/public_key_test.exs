@@ -12,6 +12,15 @@ defmodule Pubky.PublicKeyTest do
     assert PublicKey.valid?(@z32)
   end
 
+  test "every key has exactly one spelling: non-zero padding bits are rejected" do
+    canonical = "ihaqcthsdbk751sxctk849bdr7yz7a934qen5gmpcbwcur49i97y"
+    assert {:ok, ^canonical} = PublicKey.parse(canonical)
+    # the last character carries one data bit and four padding bits ('b' = 00001)
+    assert PublicKey.parse(String.slice(canonical, 0, 51) <> "b") == :error
+    # 'o' = 10000 flips the data bit only: a different, valid key
+    assert {:ok, _} = PublicKey.parse(String.slice(canonical, 0, 51) <> "o")
+  end
+
   test "rejects bad input" do
     assert PublicKey.parse("") == :error
     assert PublicKey.parse(String.slice(@z32, 0, 51)) == :error

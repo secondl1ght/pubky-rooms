@@ -84,6 +84,16 @@ defmodule Pubky.Pkarr.DnsTest do
     assert Dns.decode(loop) == {:error, :pointer_loop}
   end
 
+  test "an HTTPS record whose target name runs past its rdata does not raise" do
+    # header (ancount 1), root name, type 65, class 1, ttl 0, rdlen 2, priority 10,
+    # then a valid name that belongs to whatever follows the record
+    packet =
+      <<0::16, 0x8000::16, 0::16, 1::16, 0::16, 0::16, 0, 65::16, 1::16, 0::32, 2::16, 10::16, 1,
+        ?a, 0>>
+
+    assert {_ok_or_error, _} = Dns.decode(packet)
+  end
+
   test "names are lower-cased and the root name is empty" do
     assert Dns.decode_name(<<3, ?F, ?o, ?O, 0>>, 0) == {:ok, "foo", 5}
     assert Dns.decode_name(<<0>>, 0) == {:ok, "", 1}

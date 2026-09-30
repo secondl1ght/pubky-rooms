@@ -29,6 +29,7 @@ defmodule Pubky.Storage do
   @type listing :: %{entries: [Resource.t()], next_cursor: String.t() | nil}
 
   @default_limit 100
+  @max_limit 1000
 
   @doc """
   Fetches a file. Options: `if_none_match:` (an ETag; `{:error, :not_modified}`
@@ -39,6 +40,7 @@ defmodule Pubky.Storage do
   def get(target, path, opts \\ [], %Config{} = config \\ Config.get()) do
     with {:ok, {url, req_opts}} <- prepare(target, path, opts, config),
          req_opts = maybe_header(req_opts, "if-none-match", opts[:if_none_match]),
+         req_opts = Keyword.merge(req_opts, Keyword.take(opts, [:max_body, :deadline])),
          {:ok, resp} <- request(:get, url, req_opts, config) do
       meta = meta(resp)
 
@@ -77,35 +79,40 @@ defmodule Pubky.Storage do
 
   @doc """
   Lists a directory (the path must end with `/`). Options: `limit:` (default
-  100, max 1000), `cursor:` (from a previous page), `reverse:`, `shallow:`.
+  100, clamped to the homeserver's maximum of 1000), `cursor:` (from a
+  previous page), `reverse:`, `shallow:`, `max_body:`.
   """
   @spec list(target(), String.t(), keyword(), Config.t()) :: {:ok, listing()} | {:error, error()}
   def list(target, dir, opts \\ [], %Config{} = config \\ Config.get()) do
     unless String.ends_with?(dir, "/"),
       do: raise(ArgumentError, "directory paths must end with /")
 
-    limit = Keyword.get(opts, :limit, @default_limit)
+    limit = opts |> Keyword.get(:limit, @default_limit) |> min(@max_limit) |> max(1)
 
     params =
       [limit: limit, cursor: opts[:cursor], reverse: opts[:reverse], shallow: opts[:shallow]]
       |> Enum.reject(fn {_k, v} -> v in [nil, false] end)
 
     with {:ok, {url, req_opts}} <- prepare(target, dir, [], config),
+         req_opts = Keyword.merge(req_opts, Keyword.take(opts, [:max_body, :deadline])),
          {:ok, %Req.Response{body: body}} <-
            request(:get, url, Keyword.put(req_opts, :params, params), config) do
-      entries = parse_listing(body)
+      lines = String.split(body, "\n", trim: true)
+      entries = parse_listing(lines)
 
+      # A full page (counted in lines the server sent, whether or not every
+      # one parsed) means there may be more; the cursor is the last entry seen.
       next_cursor =
-        if length(entries) >= limit, do: entries |> List.last() |> Resource.to_uri(), else: nil
+        if length(lines) >= limit and entries != [],
+          do: entries |> List.last() |> Resource.to_uri(),
+          else: nil
 
       {:ok, %{entries: entries, next_cursor: next_cursor}}
     end
   end
 
-  defp parse_listing(body) do
-    body
-    |> String.split("\n", trim: true)
-    |> Enum.flat_map(fn line ->
+  defp parse_listing(lines) do
+    Enum.flat_map(lines, fn line ->
       case Resource.parse(String.trim(line)) do
         {:ok, r} -> [r]
         :error -> []

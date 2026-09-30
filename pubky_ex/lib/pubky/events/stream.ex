@@ -103,6 +103,8 @@ defmodule Pubky.Events.Stream do
       backoff: @min_backoff,
       idle_timer: nil,
       reconnect_timer: nil,
+      connected_at: nil,
+      last_uptime: 0,
       received: 0
     }
 
@@ -134,7 +136,7 @@ defmodule Pubky.Events.Stream do
 
   def handle_info(:idle_timeout, state) do
     Logger.warning(
-      "event stream #{state.homeserver}/#{inspect(state.name)} idle for #{@idle_timeout}ms, reconnecting"
+      "event stream #{inspect(state.name)} idle for #{@idle_timeout}ms, reconnecting"
     )
 
     {:noreply, state |> disconnect({:disconnected, :idle}) |> backoff_reconnect()}
@@ -170,7 +172,13 @@ defmodule Pubky.Events.Stream do
          {:ok, resp} <- open(state, base_url) do
       notify(state, {:pubky_stream, {state.homeserver, state.name}, :connected})
 
-      %{state | base_url: base_url, resp: resp, parser: SSE.new(), backoff: @min_backoff}
+      %{
+        state
+        | base_url: base_url,
+          resp: resp,
+          parser: SSE.new(),
+          connected_at: System.monotonic_time(:millisecond)
+      }
       |> reset_idle()
     else
       {:error, {:rejected, status, body}} ->
@@ -253,9 +261,14 @@ defmodule Pubky.Events.Stream do
   end
 
   defp handle_chunk({:data, data}, state) do
-    {frames, parser} = SSE.feed(state.parser, data)
-    state = %{state | parser: parser} |> reset_idle()
-    Enum.reduce(frames, state, &handle_frame/2)
+    case SSE.feed(state.parser, data) do
+      {:error, reason} ->
+        state |> disconnect({:disconnected, reason}) |> backoff_reconnect()
+
+      {frames, parser} ->
+        state = %{state | parser: parser} |> reset_idle()
+        Enum.reduce(frames, state, &handle_frame/2)
+    end
   end
 
   defp handle_chunk(:done, state) do
@@ -294,7 +307,8 @@ defmodule Pubky.Events.Stream do
 
   defp disconnect(state, reason) do
     notify(state, {:pubky_stream, {state.homeserver, state.name}, reason})
-    cancel(state)
+    uptime = if state.connected_at, do: System.monotonic_time(:millisecond) - state.connected_at
+    cancel(%{state | connected_at: nil, last_uptime: uptime || state.last_uptime})
   end
 
   defp cancel(%{resp: %Req.Response{} = resp} = state) do
@@ -305,10 +319,23 @@ defmodule Pubky.Events.Stream do
 
   defp cancel(state), do: state
 
-  defp backoff_reconnect(%{backoff: backoff} = state) do
+  # The delay grows while connections keep failing or dying young; a
+  # connection that stayed up longer than the longest delay resets it, so a
+  # homeserver that accepts and immediately closes cannot make us hammer it,
+  # and a healthy stream that drops after hours comes back promptly.
+  defp backoff_reconnect(state) do
+    state = cancel_reconnect(state)
+    backoff = if state.last_uptime >= @max_backoff, do: @min_backoff, else: state.backoff
     jitter = :rand.uniform(div(backoff, 5) + 1)
     timer = Process.send_after(self(), :reconnect, backoff + jitter)
-    %{state | reconnect_timer: timer, backoff: min(backoff * 2, @max_backoff)}
+    %{state | reconnect_timer: timer, backoff: min(backoff * 2, @max_backoff), last_uptime: 0}
+  end
+
+  defp cancel_reconnect(%{reconnect_timer: nil} = state), do: state
+
+  defp cancel_reconnect(%{reconnect_timer: timer} = state) do
+    Process.cancel_timer(timer)
+    %{state | reconnect_timer: nil}
   end
 
   defp schedule_reconnect(%{reconnect_timer: nil} = state) do

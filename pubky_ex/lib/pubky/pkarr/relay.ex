@@ -43,9 +43,8 @@ defmodule Pubky.Pkarr.Relay do
         {:ok, packet}
 
       {:error, reason} ->
-        Logger.warning(
-          "pkarr relay #{relay} returned an invalid payload for #{z32}: #{inspect(reason)}"
-        )
+        Logger.warning("pkarr relay #{relay} returned an invalid payload: #{inspect(reason)}")
+        Logger.debug("invalid pkarr payload was for #{String.slice(z32, 0, 8)}…")
 
         {:error, {:relay, {relay, reason}}}
     end

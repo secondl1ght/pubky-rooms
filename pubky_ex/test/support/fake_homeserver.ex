@@ -21,7 +21,8 @@ defmodule Pubky.Test.FakeHomeserver do
     :base_url,
     path_addressed: true,
     token_ttl: 3600,
-    drop_after: nil
+    drop_after: nil,
+    session_overrides: %{}
   ]
 
   @doc "Starts a fake homeserver. Options: `path_addressed: false` to emulate legacy servers, `token_ttl:` seconds."
@@ -52,7 +53,8 @@ defmodule Pubky.Test.FakeHomeserver do
       base_url: "http://localhost:#{port}",
       path_addressed: Keyword.get(opts, :path_addressed, true),
       token_ttl: Keyword.get(opts, :token_ttl, 3600),
-      drop_after: Keyword.get(opts, :drop_after)
+      drop_after: Keyword.get(opts, :drop_after),
+      session_overrides: Keyword.get(opts, :session_overrides, %{})
     }
 
     Agent.update(agent, &%{&1 | hs: hs})
@@ -184,16 +186,20 @@ defmodule Pubky.Test.FakeHomeserver do
 
           json(conn, 200, %{
             token: token,
-            session: %{
-              homeserver: hs.z32,
-              pubky: grant.iss,
-              client_id: grant.client_id,
-              capabilities: Enum.map(grant.caps, &to_string/1),
-              grant_id: grant.jti,
-              token_expires_at: expires,
-              grant_expires_at: grant.exp,
-              created_at: now
-            }
+            session:
+              Map.merge(
+                %{
+                  homeserver: hs.z32,
+                  pubky: grant.iss,
+                  client_id: grant.client_id,
+                  capabilities: Enum.map(grant.caps, &to_string/1),
+                  grant_id: grant.jti,
+                  token_expires_at: expires,
+                  grant_expires_at: grant.exp,
+                  created_at: now
+                },
+                hs.session_overrides
+              )
           })
         else
           {:error, status, msg} -> resp(conn, status, msg)

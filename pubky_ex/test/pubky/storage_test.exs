@@ -28,6 +28,37 @@ defmodule Pubky.StorageTest do
              "http://h/storage/u/pub/a"
   end
 
+  test "path segments cannot smuggle a query, a fragment or a parent directory" do
+    assert Addressing.target("http://h", [], "u", "/pub/a?pubky-host=zzz#f") ==
+             {"http://h/pub/a%3Fpubky-host%3Dzzz%23f", [{"pubky-host", "u"}]}
+
+    assert Addressing.encode_path("/pub/app/it~em.json") == "/pub/app/it~em.json"
+    assert_raise ArgumentError, fn -> Addressing.encode_path("/pub/../auth/grant/session") end
+    assert_raise ArgumentError, fn -> Addressing.encode_path("/pub/./x") end
+  end
+
+  test "bodies past max_body and exchanges past the deadline are abandoned" do
+    {_hs, config, session} = signed_in(path_addressed: true)
+    user = session.user
+    big = String.duplicate("x", 3000)
+    :ok = Storage.put(session, "/pub/app/big.txt", big, [], config)
+
+    assert {:ok, %{body: ^big}} = Storage.get(user, "/pub/app/big.txt", [], config)
+
+    assert Storage.get(user, "/pub/app/big.txt", [max_body: 1024], config) ==
+             {:error, {:body_too_large, 1024}}
+
+    assert Storage.get(user, "/pub/app/big.txt", [deadline: 0], config) ==
+             {:error, {:transport, :deadline}}
+
+    assert Storage.list(user, "/pub/app/", [max_body: 8], config) ==
+             {:error, {:body_too_large, 8}}
+
+    # a limit above the homeserver maximum is clamped, not sent as-is
+    assert {:ok, %{entries: [_], next_cursor: nil}} =
+             Storage.list(user, "/pub/app/", [limit: 5000], config)
+  end
+
   for mode <- [true, false] do
     test "crud + listing round trip (path_addressed: #{mode})" do
       {_hs, config, session} = signed_in(path_addressed: unquote(mode))

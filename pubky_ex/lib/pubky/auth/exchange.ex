@@ -30,12 +30,12 @@ defmodule Pubky.Auth.Exchange do
          base_url: base_url,
          features: features,
          token: token,
-         token_expires_at: info["token_expires_at"] || 0,
-         grant_expires_at: info["grant_expires_at"] || grant.exp,
-         grant_id: info["grant_id"] || grant.jti,
-         client_id: info["client_id"] || grant.client_id,
+         token_expires_at: integer_or(info["token_expires_at"], 0),
+         grant_expires_at: integer_or(info["grant_expires_at"], grant.exp),
+         grant_id: binary_or(info["grant_id"], grant.jti),
+         client_id: binary_or(info["client_id"], grant.client_id),
          capabilities: capabilities(info["capabilities"], grant.caps),
-         created_at: info["created_at"] || System.os_time(:second),
+         created_at: integer_or(info["created_at"], System.os_time(:second)),
          credential: %Credential{
            grant_jws: grant.jws,
            client_secret: client.secret,
@@ -92,4 +92,12 @@ defmodule Pubky.Auth.Exchange do
   end
 
   defp capabilities(_, fallback), do: fallback
+
+  # Session fields come from the homeserver's JSON; anything of the wrong type
+  # falls back rather than blowing up arithmetic or string handling later.
+  defp integer_or(value, _fallback) when is_integer(value), do: value
+  defp integer_or(_value, fallback), do: fallback
+
+  defp binary_or(value, _fallback) when is_binary(value), do: value
+  defp binary_or(_value, fallback), do: fallback
 end

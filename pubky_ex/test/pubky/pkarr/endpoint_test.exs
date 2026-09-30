@@ -42,8 +42,47 @@ defmodule Pubky.Pkarr.EndpointTest do
 
     {:ok, sp} = SignedPacket.build(kp, records)
 
-    assert Endpoint.icann_base_url(Endpoint.from_packet(sp), Config.mainnet()) ==
+    assert Endpoint.icann_base_url(Endpoint.from_packet(sp), Config.testnet()) ==
              {:ok, "http://localhost:6286"}
+
+    # on mainnet a packet cannot point the client at the node's own network
+    assert Endpoint.icann_base_url(Endpoint.from_packet(sp), Config.mainnet()) ==
+             {:error, :no_icann_endpoint}
+  end
+
+  test "mainnet accepts only public hostnames" do
+    for host <- ["homeserver.pubky.app", "hs.example.org.", "203.0.113.9", "2001:db8::1"],
+        do: assert(Endpoint.public_host?(host), host)
+
+    for host <- [
+          "localhost",
+          "LOCALHOST",
+          "db.localhost",
+          "printer.local",
+          "api.internal",
+          "router.home.arpa",
+          "intranet",
+          "",
+          "bad_host.example",
+          "-x.example",
+          "127.0.0.1",
+          "10.0.0.5",
+          "100.64.1.1",
+          "169.254.169.254",
+          "172.16.0.1",
+          "192.168.1.1",
+          "0.0.0.0",
+          "224.0.0.1",
+          "::1",
+          "::",
+          "::ffff:127.0.0.1",
+          "fdaa::1",
+          "fe80::1"
+        ],
+        do: refute(Endpoint.public_host?(host), host)
+
+    assert Endpoint.allowed_target?("localhost", Config.mainnet(allow_private_hosts: true))
+    refute Endpoint.allowed_target?("localhost", Config.mainnet())
   end
 
   test "explicit non-default https port and z32 targets are skipped" do

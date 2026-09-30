@@ -164,7 +164,7 @@ defmodule Pubky.Pkarr.Dns do
   defp decode_rdata(type, <<priority::16, _::binary>> = rdata, packet, off)
        when type in [@type_svcb, @type_https] do
     case decode_name(packet, off + 2) do
-      {:ok, target, next} ->
+      {:ok, target, next} when next - off <= byte_size(rdata) ->
         params_bin = binary_part(rdata, next - off, byte_size(rdata) - (next - off))
         params = decode_svcparams(params_bin, %{})
 

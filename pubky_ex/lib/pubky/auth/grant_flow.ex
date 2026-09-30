@@ -182,19 +182,23 @@ defmodule Pubky.Auth.GrantFlow do
     end
   end
 
-  @doc "State needed to resume a pending flow later (contains secrets; store briefly and securely)."
+  @doc """
+  State needed to resume a pending flow later (contains secrets; store briefly
+  and securely). The deadline is saved as the time left in milliseconds, so it
+  survives a restart of the VM (monotonic clocks do not).
+  """
   @spec save(t()) :: %{
           url: String.t(),
           client_secret: binary(),
           kind: term(),
-          deadline: integer()
+          deadline_in_ms: non_neg_integer()
         }
   def save(%__MODULE__{} = flow),
     do: %{
       url: flow.url,
       client_secret: flow.client.secret,
       kind: flow.kind,
-      deadline: flow.deadline
+      deadline_in_ms: max(flow.deadline - System.monotonic_time(:millisecond), 0)
     }
 
   @doc "Rebuilds a pending flow from `save/1` output."
@@ -222,7 +226,8 @@ defmodule Pubky.Auth.GrantFlow do
          url: url,
          channel_url: RelayChannel.url(params.relay, params.secret),
          deadline:
-           Map.get(saved, :deadline, System.monotonic_time(:millisecond) + config.flow_deadline),
+           System.monotonic_time(:millisecond) +
+             Map.get(saved, :deadline_in_ms, config.flow_deadline),
          config: config
        }}
     else

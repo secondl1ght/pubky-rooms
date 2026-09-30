@@ -53,13 +53,16 @@ defmodule Pubky.Events do
   end
 
   defp newest_cursor(body, homeserver) do
-    {frames, _} = SSE.feed(SSE.new(), body <> "\n\n")
+    case SSE.feed(SSE.new(), body <> "\n\n") do
+      {:error, _} -> nil
+      {frames, _} -> Enum.find_value(frames, &frame_cursor(&1, homeserver))
+    end
+  end
 
-    Enum.find_value(frames, fn frame ->
-      case Event.from_frame(frame, homeserver) do
-        {:ok, %Event{cursor: cursor}} -> cursor
-        _ -> nil
-      end
-    end)
+  defp frame_cursor(frame, homeserver) do
+    case Event.from_frame(frame, homeserver) do
+      {:ok, %Event{cursor: cursor}} -> cursor
+      _ -> nil
+    end
   end
 end

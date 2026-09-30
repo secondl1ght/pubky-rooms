@@ -14,6 +14,17 @@ defmodule Pubky.SessionTest do
     %{hs: hs, config: config, user: user}
   end
 
+  test "session fields of the wrong type fall back instead of crashing later" do
+    hs = FakeHomeserver.start(session_overrides: %{token_expires_at: "soon", created_at: 1.5})
+    config = FakeHomeserver.config(hs, client_id: "test.app")
+    user = Keypair.generate()
+    assert :ok = LocalSigner.signup(user, hs.z32, [], config)
+    assert {:ok, session} = LocalSigner.signin(user, hs.z32, [], config)
+    assert session.token_expires_at == 0
+    assert is_integer(session.created_at)
+    assert Session.needs_refresh?(session)
+  end
+
   test "signin yields a session that can read and write", %{hs: hs, config: config, user: user} do
     {:ok, cap} = Capability.read_write("/pub/test.app/")
 

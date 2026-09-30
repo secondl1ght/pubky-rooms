@@ -12,7 +12,11 @@ defmodule Pubky.ResolverTest do
     Resolver.clear()
 
     config =
-      Config.mainnet(pkarr_relays: ["http://localhost:#{relay.port}"], negative_ttl: 60_000)
+      Config.mainnet(
+        pkarr_relays: ["http://localhost:#{relay.port}"],
+        negative_ttl: 60_000,
+        allow_private_hosts: true
+      )
 
     user = Keypair.generate()
     hs = Keypair.generate()
@@ -87,6 +91,39 @@ defmodule Pubky.ResolverTest do
     assert Resolver.homeserver_of(user_z32, ctx.config) == {:error, :not_found}
     # negative result is cached too
     assert Resolver.homeserver_of(user_z32, ctx.config) == {:error, :not_found}
+  end
+
+  test "a packet's own TTLs shorten the cache, but never below a minute", ctx do
+    hs_z32 = Keypair.public_z32(ctx.hs)
+
+    {:ok, packet} =
+      SignedPacket.build(ctx.hs, [
+        %RR{
+          name: hs_z32,
+          type: 65,
+          ttl: 0,
+          rdata:
+            {:https,
+             %{
+               priority: 10,
+               target: "localhost",
+               params: %{65_280 => <<ctx.homeserver.port::16>>}
+             }}
+        }
+      ])
+
+    Bypass.expect_once(
+      ctx.relay,
+      "GET",
+      "/#{hs_z32}",
+      &Plug.Conn.resp(&1, 200, SignedPacket.encode_relay_payload(packet))
+    )
+
+    Bypass.expect_once(ctx.homeserver, "GET", "/info", &Plug.Conn.resp(&1, 200, ~s({})))
+
+    assert {:ok, _} = Resolver.endpoint_of(hs_z32, ctx.config)
+    [{_, _, expires_at}] = :ets.lookup(:pubky_resolver, {:endpoint, hs_z32})
+    assert expires_at - System.monotonic_time(:millisecond) > 55_000
   end
 
   test "homeserver overrides skip PKARR and /info failures degrade to no features", ctx do

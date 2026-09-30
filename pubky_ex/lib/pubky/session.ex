@@ -135,7 +135,7 @@ defmodule Pubky.Session do
   @doc "Revokes another grant by id (requires the root capability)."
   @spec revoke_grant(t(), String.t(), Config.t()) :: :ok | {:error, term()}
   def revoke_grant(%__MODULE__{} = s, grant_id, %Config{} = config \\ Config.get()) do
-    url = s.base_url <> "/auth/grant/session/" <> URI.encode(grant_id)
+    url = s.base_url <> "/auth/grant/session/" <> URI.encode(grant_id, &URI.char_unreserved?/1)
     with {:ok, _} <- Http.request(:delete, url, auth(s), config), do: :ok
   end
 

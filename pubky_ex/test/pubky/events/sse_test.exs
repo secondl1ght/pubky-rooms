@@ -43,6 +43,25 @@ defmodule Pubky.Events.SSETest do
              Event.from_frame(Enum.at(frames, 1), "hs")
   end
 
+  test "lines and frames beyond max_bytes are refused instead of buffered" do
+    max = SSE.max_bytes()
+
+    # a line that never ends
+    assert SSE.feed(SSE.new(), String.duplicate("a", max + 1)) == {:error, :frame_too_large}
+    # a complete line that is too long
+    assert SSE.feed(SSE.new(), "data: " <> String.duplicate("a", max + 1) <> "\n") ==
+             {:error, :frame_too_large}
+
+    # data lines that add up past the cap within one frame
+    half = String.duplicate("b", div(max, 2) + 1)
+    assert {[], parser} = SSE.feed(SSE.new(), "data: #{half}\n")
+    assert SSE.feed(parser, "data: #{half}\n") == {:error, :frame_too_large}
+
+    # the same data split across two frames is fine
+    assert {[%{data: ^half}], parser} = SSE.feed(SSE.new(), "data: #{half}\n\n")
+    assert {[%{data: ^half}], _} = SSE.feed(parser, "data: #{half}\n\n")
+  end
+
   test "defaults, unknown fields and malformed frames" do
     {[%{event: "message", data: "x", id: "7"}], _} =
       SSE.feed(SSE.new(), "id: 7\nfoo: bar\ndata: x\n\n")

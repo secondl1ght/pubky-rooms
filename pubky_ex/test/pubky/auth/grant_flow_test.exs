@@ -169,7 +169,9 @@ defmodule Pubky.Auth.GrantFlowTest do
   test "save/restore resumes a pending flow", %{config: config, user: user} do
     flow = GrantFlow.start([caps: ["/pub/rooms.test/:rw"], client_id: "rooms.test"], config)
     saved = GrantFlow.save(flow)
+    assert saved.deadline_in_ms in 0..config.flow_deadline
     assert {:ok, restored} = GrantFlow.restore(saved, config)
+    assert restored.deadline > System.monotonic_time(:millisecond)
     assert restored.channel_url == flow.channel_url
     assert restored.url == flow.url
     {:ok, _} = FakeRing.approve(restored.url, user, config)

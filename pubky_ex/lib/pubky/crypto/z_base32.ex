@@ -23,8 +23,9 @@ defmodule Pubky.Crypto.ZBase32 do
   end
 
   @doc """
-  Decodes a z-base-32 string. Trailing partial bits (padding) are dropped;
-  any non-alphabet character yields `:error`.
+  Decodes a z-base-32 string. Any non-alphabet character yields `:error`, and
+  so do non-zero trailing padding bits: every byte string has exactly one
+  encoding, so two different strings can never name the same key.
   """
   @spec decode(String.t()) :: {:ok, binary()} | :error
   def decode(str) when is_binary(str) do
@@ -38,7 +39,8 @@ defmodule Pubky.Crypto.ZBase32 do
     end)
     |> case do
       :error -> :error
-      {acc, _buf, _nbits} -> {:ok, acc}
+      {acc, 0, _nbits} -> {:ok, acc}
+      {_acc, _padding, _nbits} -> :error
     end
   end
 

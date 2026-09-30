@@ -5,6 +5,10 @@ defmodule Pubky.Storage.Addressing do
   Homeservers that advertise the `path-addressed-storage` feature take the
   owner in the URL (`/storage/<user>/pub/...`); older ones take the path as-is
   plus a `pubky-host` header (or `?pubky-host=` query for browsers).
+
+  Paths are encoded segment by segment, so a segment can never smuggle a query
+  string, a fragment or an extra `/` into the request; `.` and `..` segments
+  are refused outright (they are always a caller bug, never a storage path).
   """
 
   alias Pubky.PublicKey
@@ -38,5 +42,16 @@ defmodule Pubky.Storage.Addressing do
     end
   end
 
-  defp encode_path(path), do: URI.encode(path)
+  @doc "Percent-encodes a storage path one segment at a time."
+  @spec encode_path(String.t()) :: String.t()
+  def encode_path(path) when is_binary(path) do
+    path
+    |> String.split("/")
+    |> Enum.map_join("/", &encode_segment/1)
+  end
+
+  defp encode_segment(segment) when segment in [".", ".."],
+    do: raise(ArgumentError, "storage paths cannot contain #{inspect(segment)} segments")
+
+  defp encode_segment(segment), do: URI.encode(segment, &URI.char_unreserved?/1)
 end

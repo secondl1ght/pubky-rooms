@@ -79,8 +79,17 @@ defmodule Pubky.Resolver do
     now = System.monotonic_time(:millisecond)
 
     case :ets.lookup(@table, key) do
-      [{^key, value, expires_at}] when expires_at > now -> value
-      _ -> GenServer.call(__MODULE__, {:resolve, key, fetch, config}, config.request_timeout * 3)
+      [{^key, value, expires_at}] when expires_at > now ->
+        value
+
+      _ ->
+        # A fetch that outlives the call budget (relays and /info all timing
+        # out) is reported as an error rather than exiting the caller.
+        try do
+          GenServer.call(__MODULE__, {:resolve, key, fetch, config}, config.request_timeout * 3)
+        catch
+          :exit, {:timeout, _} -> {:error, :timeout}
+        end
     end
   end
 
@@ -153,13 +162,17 @@ defmodule Pubky.Resolver do
     end
   end
 
+  # The packet's own TTLs shorten the cache, but never below a minute: a
+  # packet published with `ttl: 0` must not turn every read into relay traffic.
+  @min_positive_ttl 60_000
+
   defp positive_ttl(%SignedPacket{records: records}, config) do
     records
     |> Enum.map(& &1.ttl)
     |> Enum.min(fn -> config.resolver_ttl end)
     |> Kernel.*(1000)
     |> min(config.resolver_ttl)
-    |> max(1000)
+    |> max(min(@min_positive_ttl, config.resolver_ttl))
   end
 
   # ── GenServer ──────────────────────────────────────────────────────────────

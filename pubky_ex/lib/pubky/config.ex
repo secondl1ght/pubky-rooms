@@ -22,6 +22,12 @@ defmodule Pubky.Config do
       allows only 10 requests per minute.
     * `:http_relay` — HTTP relay inbox base URL used by the auth flow (with trailing `/`)
     * `:plain_http_domains` — ICANN hostnames reached over plain `http://` (local testnets)
+    * `:allow_private_hosts` — accept homeserver endpoints on loopback, private
+      or link-local addresses and reserved names (`localhost`, `*.internal`, …).
+      Off on mainnet, where a user's PKARR packet must not be able to point this
+      client at internal services; on for local testnets
+    * `:max_body` — largest response body read from a homeserver (bytes); larger
+      ones are abandoned with `{:error, {:body_too_large, limit}}`
     * `:homeserver_overrides` — `%{homeserver_z32 => base_url}` that bypass PKARR resolution
     * `:client_id` — the application's client id shown to the user in Pubky Ring
     * `:finch` / `:stream_finch` — Finch pool names for regular and long-lived (SSE) requests
@@ -36,6 +42,8 @@ defmodule Pubky.Config do
           pkarr_relays: [String.t()],
           http_relay: String.t(),
           plain_http_domains: [String.t()],
+          allow_private_hosts: boolean(),
+          max_body: pos_integer(),
           homeserver_overrides: %{optional(String.t()) => String.t()},
           client_id: String.t(),
           finch: atom(),
@@ -49,7 +57,9 @@ defmodule Pubky.Config do
   defstruct network: :mainnet,
             pkarr_relays: ["https://pkarr.pubky.org", "https://pkarr.pubky.app"],
             http_relay: "https://httprelay.pubky.app/inbox/",
-            plain_http_domains: ["localhost", "127.0.0.1"],
+            plain_http_domains: [],
+            allow_private_hosts: false,
+            max_body: 1_048_576,
             homeserver_overrides: %{},
             client_id: "pubky-ex.example",
             finch: Pubky.Finch,
@@ -82,6 +92,8 @@ defmodule Pubky.Config do
         network: :testnet,
         pkarr_relays: ["http://localhost:15411"],
         http_relay: "http://localhost:15412/inbox/",
+        plain_http_domains: ["localhost", "127.0.0.1"],
+        allow_private_hosts: true,
         homeserver_overrides: %{@testnet_homeserver => "http://localhost:6286"}
       },
       overrides
