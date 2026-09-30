@@ -93,6 +93,16 @@ defmodule PubkyRooms.Nexus do
     ]
   end
 
+  # `/v0/resource/by-uri` wraps the same fields as "resource" (staging Nexus,
+  # 2026-09-30; docs/fixtures/nexus) and carries no taggers_count
+  defp parse_resource(%{"resource" => %{"uri" => uri}} = view) when is_binary(uri),
+    do:
+      parse_resource(%{
+        "details" => %{"uri" => uri},
+        "tags" => view["tags"],
+        "taggers_count" => view["taggers_count"]
+      })
+
   defp parse_resource(%{"uri" => uri} = view) when is_binary(uri),
     do:
       parse_resource(%{

@@ -1,0 +1,34 @@
+{
+    "resource": {
+        "id": "82e34334c8d6fa31f376e9bd722aee8f",
+        "uri": "pubky://hckjqy589fh554iu854gs788dnp8y49i3nc9yg76x4bhm7msbtky/pub/pubky-rooms/rooms/0035SBMXT68RR",
+        "scheme": "pubky",
+        "indexed_at": 1790754903883
+    },
+    "tags": [
+        {
+            "label": "staging",
+            "taggers": [
+                "hckjqy589fh554iu854gs788dnp8y49i3nc9yg76x4bhm7msbtky"
+            ],
+            "taggers_count": 1,
+            "relationship": false
+        },
+        {
+            "label": "smoke",
+            "taggers": [
+                "hckjqy589fh554iu854gs788dnp8y49i3nc9yg76x4bhm7msbtky"
+            ],
+            "taggers_count": 1,
+            "relationship": false
+        },
+        {
+            "label": "room",
+            "taggers": [
+                "hckjqy589fh554iu854gs788dnp8y49i3nc9yg76x4bhm7msbtky"
+            ],
+            "taggers_count": 1,
+            "relationship": false
+        }
+    ]
+}

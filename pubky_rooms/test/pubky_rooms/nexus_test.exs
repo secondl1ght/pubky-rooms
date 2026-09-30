@@ -16,6 +16,31 @@ defmodule PubkyRooms.NexusTest do
     end)
   end
 
+  @fixtures Path.expand("../../../docs/fixtures/nexus", __DIR__)
+  @staging_uri "pubky://hckjqy589fh554iu854gs788dnp8y49i3nc9yg76x4bhm7msbtky/pub/pubky-rooms/rooms/0035SBMXT68RR"
+
+  defp fixture(name), do: @fixtures |> Path.join(name) |> File.read!() |> JSON.decode!()
+
+  test "the captured staging responses parse: by-uri wraps the fields as \"resource\"" do
+    Req.Test.stub(Nexus, fn conn ->
+      case conn.request_path do
+        "/v0/resource/by-uri" -> Req.Test.json(conn, fixture("resource_by_uri.json"))
+        "/v0/stream/resources" -> Req.Test.json(conn, fixture("stream_resources.json"))
+      end
+    end)
+
+    tagger = "hckjqy589fh554iu854gs788dnp8y49i3nc9yg76x4bhm7msbtky"
+
+    assert {:ok,
+            [
+              %{label: "staging", count: 1, taggers: [^tagger]},
+              %{label: "smoke", count: 1, taggers: [^tagger]},
+              %{label: "room", count: 1, taggers: [^tagger]}
+            ]} = Nexus.tags_by_uri(@staging_uri)
+
+    assert {:ok, [%{uri: @staging_uri, taggers_count: 3, tags: [_, _, _]}]} = Nexus.resources()
+  end
+
   test "disabled without a base url" do
     Application.delete_env(:pubky_rooms, :nexus_url)
     refute Nexus.enabled?()
