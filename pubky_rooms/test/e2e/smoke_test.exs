@@ -15,6 +15,7 @@ defmodule PubkyRoomsWeb.E2E.SmokeTest do
   alias PubkyRooms.Auth.FakeGrantLogin
   alias PubkyRooms.E2E.Console
   alias PubkyRooms.Fixtures
+  alias PubkyRooms.Profiles
   alias PubkyRooms.Pubky.Fake
   alias PubkyRooms.Rooms
   alias PubkyRooms.Rooms.Paths
@@ -157,7 +158,8 @@ defmodule PubkyRoomsWeb.E2E.SmokeTest do
     _ = bob_conn
   end
 
-  test "a room with many members: the sidebar scrolls, the page does not grow", %{conn: conn} do
+  test "a room with many members: the sidebar scrolls, the page does not grow",
+       %{conn: conn} = ctx do
     {sid, alice} = Fixtures.login("e2e-crowd-owner")
     {:ok, room} = Rooms.create_room(sid, alice, %{"name" => "Crowd", "visibility" => "public"})
 
@@ -166,6 +168,16 @@ defmodule PubkyRoomsWeb.E2E.SmokeTest do
       :ok = Rooms.join(member_sid, member, {alice, room.id})
     end
 
+    # a signed-in visitor who has not joined fills the Also here card
+    [conn: visitor] = BrowserCase.do_setup(ctx)
+    visitor = visitor |> visit(~p"/login") |> assert_has("body", text: "Waiting for approval")
+    FakeGrantLogin.resolve({:ok, Fixtures.session(Fixtures.z32("e2e-crowd-visitor"))})
+
+    visitor
+    |> assert_has("header a[href='/me']")
+    |> visit(~p"/r/#{alice}/#{room.id}")
+    |> assert_has("button", text: "Join room")
+
     conn = conn |> visit(~p"/login") |> assert_has("body", text: "Waiting for approval")
     FakeGrantLogin.resolve({:ok, Fixtures.session(alice)})
 
@@ -173,13 +185,19 @@ defmodule PubkyRoomsWeb.E2E.SmokeTest do
     |> assert_has("header a[href='/me']")
     |> visit(~p"/r/#{alice}/#{room.id}")
     |> assert_has("aside", text: "Members · 61")
+    |> assert_has("#also-here", text: Profiles.short_key(Fixtures.z32("e2e-crowd-visitor")))
     |> evaluate(
       "[document.documentElement.scrollHeight - window.innerHeight, " <>
         "[...document.querySelectorAll('aside *')].some(el => " <>
-        "el.scrollHeight > el.clientHeight + 1 && getComputedStyle(el).overflowY === 'auto')]",
-      fn [page_overflow, list_scrolls] ->
+        "el.scrollHeight > el.clientHeight + 1 && getComputedStyle(el).overflowY === 'auto'), " <>
+        "(c => { const b = c.querySelector('[class*=overflow-y-auto]'); " <>
+        "return [b.scrollHeight - b.clientHeight, c.clientHeight]; })(document.querySelector('#also-here'))]",
+      fn [page_overflow, list_scrolls, [also_here_clipped, also_here_height]] ->
         assert page_overflow <= 0, "the page scrolls by #{page_overflow}px"
         assert list_scrolls, "no list in the sidebar scrolls"
+        # the small card is not squeezed by the big one: its rows are fully visible
+        assert also_here_clipped <= 1, "Also here is clipped by #{also_here_clipped}px"
+        assert also_here_height > 120, "Also here is only #{also_here_height}px tall"
       end
     )
 
