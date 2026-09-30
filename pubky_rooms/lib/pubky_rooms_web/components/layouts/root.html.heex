@@ -14,7 +14,9 @@
     <link rel="icon" href={~p"/images/pubky-favicon.svg"} type="image/svg+xml" />
     <link rel="apple-touch-icon" href={~p"/images/icons/apple-touch-icon.png"} />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <.live_title default="Pubky Rooms" suffix=" · Pubky Rooms" phx-no-format>{assigns[:page_title]}</.live_title>
+    <%!-- the data attributes keep LiveView's client-side title updates working;
+         an empty page title is the site name alone (live_title would add the suffix) --%>
+    <title data-default="Pubky Rooms" data-suffix=" · Pubky Rooms" phx-no-format>{PubkyRoomsWeb.Meta.document_title(assigns)}</title>
     <meta name="description" content={PubkyRoomsWeb.Meta.description(assigns)} />
     <meta property="og:site_name" content={PubkyRoomsWeb.Meta.site()} />
     <meta property="og:type" content="website" />

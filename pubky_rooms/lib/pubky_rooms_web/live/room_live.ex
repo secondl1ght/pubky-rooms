@@ -31,7 +31,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           ref: ref,
           creator: creator,
           room_id: room_id,
-          page_title: "Room",
+          page_title: nil,
           status: :loading,
           room: nil,
           table: nil,
@@ -464,7 +464,7 @@ defmodule PubkyRoomsWeb.RoomLive do
     |> assign(
       status: status,
       room: room,
-      page_title: (room && room.name) || "Room",
+      page_title: room && room.name,
       page_description: room_description(room)
     )
     |> assign_members(members)
@@ -482,9 +482,9 @@ defmodule PubkyRoomsWeb.RoomLive do
     )
   end
 
-  # Link previews: the topic when the room has one, else a sentence about rooms.
+  # Link previews: the topic when the room has one, else the site's own line.
   defp room_description(%Room{topic: topic}) when is_binary(topic) and topic != "", do: topic
-  defp room_description(_room), do: PubkyRoomsWeb.Meta.room_description()
+  defp room_description(_room), do: nil
 
   defp assign_members(socket, members) do
     profiles = Map.new(members, &{&1, Profiles.get(&1)})

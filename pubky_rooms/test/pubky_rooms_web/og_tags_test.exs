@@ -61,12 +61,13 @@ defmodule PubkyRoomsWeb.OgTagsTest do
 
     html = conn |> get(~p"/r/#{alice}/#{bare.id}") |> html_response(200)
     assert meta(html, "property", "og:title") == "Quiet · Pubky Rooms"
-    assert meta(html, "property", "og:description") == Meta.room_description()
-
-    # a room nobody knows keeps the generic title and description
-    html = conn |> get(~p"/r/#{alice}/0035S410XTQ00") |> html_response(200)
-    assert meta(html, "property", "og:title") == "Room · Pubky Rooms"
     assert meta(html, "property", "og:description") == Meta.default_description()
+
+    # a room nobody knows previews as the site itself
+    html = conn |> get(~p"/r/#{alice}/0035S410XTQ00") |> html_response(200)
+    assert meta(html, "property", "og:title") == "Pubky Rooms"
+    assert meta(html, "property", "og:description") == Meta.default_description()
+    assert html =~ "<title" and html =~ ">Pubky Rooms</title>"
   end
 
   test "sign-in and account pages describe themselves", %{conn: conn} do
@@ -81,7 +82,10 @@ defmodule PubkyRoomsWeb.OgTagsTest do
   end
 
   test "Meta falls back sensibly" do
-    assert Meta.title(%{}) == "Pubky Rooms · Live rooms. Your homeserver."
+    assert Meta.document_title(%{}) == "Pubky Rooms"
+    assert Meta.document_title(%{page_title: "Slice"}) == "Slice · Pubky Rooms"
+    assert Meta.title(%{}) == "Pubky Rooms"
+    assert Meta.title(%{page_title: nil}) == "Pubky Rooms"
     assert Meta.title(%{page_title: "Lobby"}) == "Pubky Rooms · Live rooms. Your homeserver."
     assert Meta.title(%{page_title: "Slice"}) == "Slice · Pubky Rooms"
     assert Meta.description(%{page_description: ""}) == Meta.default_description()
