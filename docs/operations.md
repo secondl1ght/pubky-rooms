@@ -32,7 +32,7 @@ Everything here is one node (no clustering in v1). Costs scale **per room and pe
 | | Staging | Production |
 |---|---|---|
 | Fly app / host | `pubky-rooms-staging` → `pubky-rooms-staging.fly.dev` (placeholder) | `pubky-rooms` → `rooms.pubky.app` (custom domain, later) |
-| `PUBKY_NETWORK` | `staging` (public PKARR relays + `httprelay.staging.pubky.app` + `nexus.staging.pubky.app`; identities from Pubky App staging live on `homeserver.staging.pubky.app`) | `mainnet` (+ `NEXUS_URL=https://nexus.pubky.app`) |
+| `PUBKY_NETWORK` | `staging` (public PKARR relays + `httprelay.staging.pubky.app` + `nexus.staging.pubky.app` + the sign-in page's Pubky App link → `https://staging.pubky.app`, password-protected; identities from Pubky App staging live on `homeserver.staging.pubky.app`) | `mainnet` (+ `NEXUS_URL=https://nexus.pubky.app`) |
 | `PHX_HOST` | the Fly hostname | `rooms.pubky.app` |
 | `PUBKY_DATA_DIR` | `/data` (a Fly volume; the room directory DETS) | same, its own volume |
 | Secrets | `SECRET_KEY_BASE` only (`mix phx.gen.secret`) | same, its own value |

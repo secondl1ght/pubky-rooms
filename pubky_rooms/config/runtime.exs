@@ -42,7 +42,8 @@ staging_defaults =
     do: %{
       http_relay: "https://httprelay.staging.pubky.app/inbox/",
       nexus_url: "https://nexus.staging.pubky.app",
-      nexus_cdn_url: "https://nexus.staging.pubky.app/static"
+      nexus_cdn_url: "https://nexus.staging.pubky.app/static",
+      pubky_app_url: "https://staging.pubky.app"
     },
     else: %{}
 
@@ -77,7 +78,8 @@ config :pubky_rooms,
   simulator_url:
     System.get_env("PUBKY_SIMULATOR_URL") || Application.get_env(:pubky_rooms, :simulator_url),
   pubky_app_url:
-    System.get_env("PUBKY_APP_URL") || Application.get_env(:pubky_rooms, :pubky_app_url),
+    System.get_env("PUBKY_APP_URL") || staging_defaults[:pubky_app_url] ||
+      Application.get_env(:pubky_rooms, :pubky_app_url),
   pubky_ring_url:
     System.get_env("PUBKY_RING_URL") || Application.get_env(:pubky_rooms, :pubky_ring_url)
 
