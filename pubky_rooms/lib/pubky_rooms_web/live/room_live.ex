@@ -1569,7 +1569,12 @@ defmodule PubkyRoomsWeb.RoomLive do
                 />
                 <.spinner :if={@status in [:loading, :bootstrapping]} class="size-6" />
                 <span :if={@status in [:loading, :bootstrapping]}>Loading messages…</span>
-                <span :if={@status == :not_found}>This room does not exist on its owner's homeserver.</span>
+                <.empty_state
+                  :if={@status == :not_found}
+                  icon="lucide-door-closed"
+                  title="Room not found"
+                  class="bg-transparent"
+                />
                 <span :if={match?({:error, _}, @status)}>The owner's homeserver could not be reached. Try again later.</span>
               </div>
               <.message_row

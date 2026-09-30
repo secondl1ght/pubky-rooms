@@ -28,6 +28,13 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     assert {:error, {:redirect, %{to: "/"}}} = live(conn, "/r/nope/0000000000001")
   end
 
+  test "a well-formed link to a room that does not exist says so once", ctx do
+    {:ok, view, _} = live(ctx.conn, "/r/#{ctx.alice}/0035S410XTQ00")
+    html = wait_for(fn -> render(view) end, &(&1 =~ "does not exist on its owner"))
+    assert html =~ "Room not found"
+    assert length(String.split(html, "does not exist on its owner")) == 2
+  end
+
   test "the disconnected first render already shows what the directory knows", ctx do
     # a hard refresh paints the real header, members and composer state, not placeholders
     html = ctx.alice_conn |> get(ctx.path) |> html_response(200)
