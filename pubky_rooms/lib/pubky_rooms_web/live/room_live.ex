@@ -47,6 +47,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           saving: false,
           tags: [],
           tag_suggestions: [],
+          tags_expanded: false,
           muted: MapSet.new(),
           app_muted: MapSet.new(),
           mutes_known: true,
@@ -821,6 +822,9 @@ defmodule PubkyRoomsWeb.RoomLive do
     end
   end
 
+  def handle_event("show_all_tags", _params, socket),
+    do: {:noreply, assign(socket, tags_expanded: true)}
+
   # Tags: any signed-in user toggles their own tag on the room (a chip they
   # already used removes it) or adds a new label.
   def handle_event(
@@ -1561,6 +1565,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           writer={can_tag?(assigns)}
           remover={can_write?(assigns)}
           suggestions={@tag_suggestions}
+          expanded={@tags_expanded}
         />
 
         <div :if={not loading_shell?(assigns)} class="flex min-h-0 flex-1 gap-6">
@@ -1795,7 +1800,7 @@ defmodule PubkyRoomsWeb.RoomLive do
 
           <aside
             :if={@status != :not_found}
-            class="hidden min-h-0 w-64 shrink-0 flex-col gap-4 overflow-y-auto xl:flex"
+            class="hidden min-h-0 w-64 shrink-0 flex-col gap-4 xl:flex"
           >
             <.members_panel
               id_prefix=""
@@ -2115,6 +2120,7 @@ defmodule PubkyRoomsWeb.RoomLive do
       :if={visitors(@online, @members) != [] or Rooms.anonymous_count(@viewers, @online) > 0}
       id={"#{@id_prefix}also-here"}
       card={@card}
+      class="max-h-2/5 shrink-0"
     >
       <:header>
         <.section_title class="text-xl">Also here</.section_title>
@@ -2150,6 +2156,11 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   attr :id, :string, default: nil
   attr :card, :boolean, required: true
+
+  attr :class, :any,
+    default: nil,
+    doc: "extra classes on the card (its share of the sidebar height)"
+
   slot :header, required: true
   slot :inner_block, required: true
 
@@ -2157,9 +2168,11 @@ defmodule PubkyRoomsWeb.RoomLive do
   # the sheet (whose own panel is the surface; the header clears the close x).
   defp panel_section(%{card: true} = assigns) do
     ~H"""
-    <.card id={@id} class="gap-3 py-5">
-      <.card_header>{render_slot(@header)}</.card_header>
-      <.card_content class="flex flex-col gap-3">{render_slot(@inner_block)}</.card_content>
+    <.card id={@id} class={["min-h-0 shrink gap-3 py-5", @class]}>
+      <.card_header class="shrink-0">{render_slot(@header)}</.card_header>
+      <.card_content class="flex min-h-0 flex-col gap-3 overflow-y-auto">
+        {render_slot(@inner_block)}
+      </.card_content>
     </.card>
     """
   end
@@ -2428,11 +2441,16 @@ defmodule PubkyRoomsWeb.RoomLive do
   # (same one as the create dialog) adds a new label. Anonymous viewers just
   # see them; on an unlisted room only removing your own tag is possible; the
   # creator's automatic "room" label is fixed (the server refuses too).
+  # the row shows the most-used labels; the rest unfold on request
+  @tags_shown 12
+
   defp tag_row(assigns) do
+    assigns = assign(assigns, shown: shown_tags(assigns.tags, assigns.expanded))
+
     ~H"""
     <div id="room-tags" class="flex flex-wrap items-center gap-1.5">
       <.tag
-        :for={t <- @tags}
+        :for={t <- @shown}
         label={t.label}
         count={t.count}
         size="sm"
@@ -2451,6 +2469,15 @@ defmodule PubkyRoomsWeb.RoomLive do
           end
         }
       />
+      <button
+        :if={length(@tags) > length(@shown)}
+        type="button"
+        id="show-all-tags"
+        phx-click="show_all_tags"
+        class="rounded-full border border-dashed border-border px-2.5 py-0.5 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"
+      >
+        +{length(@tags) - length(@shown)} more
+      </button>
       <.tag_input
         :if={@writer}
         id="room-tag-input"
@@ -2461,6 +2488,9 @@ defmodule PubkyRoomsWeb.RoomLive do
     </div>
     """
   end
+
+  defp shown_tags(tags, true), do: tags
+  defp shown_tags(tags, false), do: Enum.take(tags, @tags_shown)
 
   # a mute is the viewer's own: it takes the muted people's reactions off every
   # row for them (a ban does it for everyone, in the room server)

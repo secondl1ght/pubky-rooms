@@ -23,6 +23,29 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     }
   end
 
+  test "the tag row shows twelve labels and unfolds the rest on request", ctx do
+    ref = Room.ref(ctx.room)
+    uri = Paths.room_uri(ref)
+    for i <- 1..14, do: Directory.add_tag(ref, "label-#{i}", ctx.alice, Tag.id(uri, "label-#{i}"))
+
+    chips = fn view ->
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("#room-tags button[phx-value-label]")
+      |> Enum.count()
+    end
+
+    {:ok, view, _} = live(ctx.alice_conn, ctx.path)
+    render_async(view)
+    assert chips.(view) == 12
+    assert has_element?(view, "#show-all-tags", "+3 more")
+
+    view |> element("#show-all-tags") |> render_click()
+    assert chips.(view) == 15
+    refute has_element?(view, "#show-all-tags")
+  end
+
   test "hand-crafted ids and payloads never crash the room view", ctx do
     {:ok, view, _} = live(ctx.alice_conn, ctx.path)
     wait_for(fn -> render(view) end, &(&1 =~ "Say hello"))

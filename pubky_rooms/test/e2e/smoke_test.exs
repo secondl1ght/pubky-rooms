@@ -175,10 +175,11 @@ defmodule PubkyRoomsWeb.E2E.SmokeTest do
     |> assert_has("aside", text: "Members · 61")
     |> evaluate(
       "[document.documentElement.scrollHeight - window.innerHeight, " <>
-        "(a => a.scrollHeight - a.clientHeight)(document.querySelector('aside'))]",
-      fn [page_overflow, aside_overflow] ->
+        "[...document.querySelectorAll('aside *')].some(el => " <>
+        "el.scrollHeight > el.clientHeight + 1 && getComputedStyle(el).overflowY === 'auto')]",
+      fn [page_overflow, list_scrolls] ->
         assert page_overflow <= 0, "the page scrolls by #{page_overflow}px"
-        assert aside_overflow > 0, "the sidebar does not scroll"
+        assert list_scrolls, "no list in the sidebar scrolls"
       end
     )
 
