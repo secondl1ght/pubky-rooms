@@ -51,7 +51,7 @@ Legend: **smoke** = minimum pre-deploy set · **A+B** = needs both identities ·
 - [ ] Restart the dev server: the tab reconnects and you are still signed in (the credential lives in the cookie; the server holds nothing on disk).
 - [ ] Sign out from `/me`: back on the lobby signed out; the homeserver session is gone (a second sign-out or a write in another tab fails cleanly).
 - [ ] Revoke the grant in the Simulator (or sign out there) then act in Rooms → a "signed out on the homeserver" style error, not a crash; signing in again works.
-- [ ] Sign-in start limit: 21 `/login` loads within a minute → "Slow down" message, recovers after the window.
+- [ ] Sign-in start limit: the 21st connected `/login` load within a minute shows "Too many sign-in attempts. Please wait a minute." with no code (the limit counts connected mounts, so `curl` never hits it); recovers after the window.
 - [ ] Two tabs, same identity: presence shows one person; typing in one is **not** shown in the other (you never see yourself typing); sign-out in one signs out the other on its next action (same browser: the cookie is shared; a second sign-in in another browser is a separate homeserver session and stays valid).
 
 ## 4. Lobby, signed in
@@ -112,7 +112,7 @@ Legend: **smoke** = minimum pre-deploy set · **A+B** = needs both identities ·
 ## 9. Degraded states
 
 - [ ] Member with a dead key (post-reboot identity): banner "Live updates from N members are unavailable", member marker, room still readable; an archive whose definition is gone shows as closed.
-- [ ] Homeserver down while browsing: bootstrap shows the unavailable state with Retry, no crash, recovers when the container is back.
+- [ ] Homeserver unreachable while browsing: a cold room shows "The owner's homeserver could not be reached. Try again later." (no button: the room server gives up after 30 s, the page re-attaches and bootstraps again, so it recovers by itself within about a minute of the homeserver returning), no crash. **Never `docker stop`/`restart` the testnet homeserver to simulate this**: its PKARR relay and file blobs live in the container, so a restart kills every identity and empties every file (the listing index survives, so rooms read as closed archives with no messages; 2026-09-30, learned the hard way). Use `docker pause homeserver` / `docker unpause homeserver` (untried) or a firewall rule on port 6286 instead.
 - [ ] Rate-limited homeserver (`429`): one retry honouring `Retry-After`, then the member is marked unreachable with Retry.
 - [ ] Over the live budget (`max_members_subscribed` lowered in config for the test): the notice "over the live-subscription budget" and polled members' messages arriving within a minute.
 - [ ] No `NEXUS_URL` (testnet): the Directory still lists rooms this node saw; no errors logged.
@@ -154,3 +154,4 @@ Never exercised on the testnet; each one is verified on the staging deploy befor
 |------|--------|-----|-------|-------------------|
 | 2026-09-22 → 09-28 | `6ba3bae`…`1330f80` | user + Claude | signed-out screens, signed-in lobby, `/me`, Open-a-room dialog, room page (first paint, header, members, banners; composer and actions still to come) | see `findings.md` "Design", "Signed-in pass", "Bugs" |
 | 2026-09-28/29 | `560c96b`…`94d5dcb` | user (Chrome) + Claude (in-app), two identities live | room page: composer, actions, reactions, edit/delete/quotes, mute, leave/rejoin, ban/restore, members, settings dialog, lobby directory | findings in `findings.md` (2026-09-28/29); order-aware stream, leave semantics, owner wording |
+| 2026-09-30 | `2f3df1e`…`4d61289` | Claude alone: A in the in-app browser, B (`SST4…ST5Y`, via the Simulator) in a persistent headless Chromium, anon in headless Chromium, phone at 375/390 | sections 1–12 except: revoke-in-Simulator, tag/join/settings hourly limits and the 429 / live-budget / `Subscriptions.info` items (unit-tested), PWA caching and offline (dev never registers the worker → staging) | fixed: styled 404/500 pages, not-found room sentence twice, rejected messages ate the send budget, restore left the removal error toast, request paths (public keys) logged at info; not bugs: same-identity tabs never show your own typing, a second browser's sign-in is its own session, the login limit wording; gotcha: never stop/restart the testnet homeserver (identities and blobs gone) |
