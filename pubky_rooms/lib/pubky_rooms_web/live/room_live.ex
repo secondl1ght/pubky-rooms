@@ -1537,16 +1537,18 @@ defmodule PubkyRoomsWeb.RoomLive do
                 id="messages-top"
                 class={["order-first flex shrink-0 justify-center py-1", !@has_more && "hidden"]}
               >
+                <span :if={@loading_older} class="flex h-8 items-center" role="status">
+                  <.spinner class="size-4 text-muted-foreground" />
+                  <span class="sr-only">Loading earlier messages</span>
+                </span>
                 <.button
+                  :if={!@loading_older}
                   variant="ghost"
                   size="sm"
                   phx-click="load_older"
-                  disabled={@loading_older}
                   class="text-muted-foreground"
                 >
-                  <.spinner :if={@loading_older} class="size-4" />
-                  <.icon :if={!@loading_older} name="lucide-clock-arrow-up" class="size-4" />
-                  {if @loading_older, do: "Loading earlier messages…", else: "Load earlier messages"}
+                  <.icon name="lucide-clock-arrow-up" class="size-4" />Load earlier messages
                 </.button>
               </div>
               <div
