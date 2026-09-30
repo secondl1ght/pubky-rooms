@@ -105,6 +105,20 @@ describe("Composer", () => {
     expect(document.activeElement).toBe(el)
   })
 
+  it("Escape cancels an edit or reply (the compose context) and does nothing otherwise", () => {
+    const plain = keydown(el, "Escape")
+    expect(plain.defaultPrevented).toBe(false)
+    expect(mounted.pushes.map((p) => p.event)).not.toContain("cancel_compose")
+
+    const context = document.createElement("div")
+    context.id = "composer-context"
+    document.body.appendChild(context)
+    const escape = keydown(el, "Escape")
+    context.remove()
+    expect(escape.defaultPrevented).toBe(true)
+    expect(mounted.pushes.map((p) => p.event)).toContain("cancel_compose")
+  })
+
   it("grows with its content up to eight lines", () => {
     Object.defineProperty(el, "scrollHeight", {value: 500, configurable: true})
     input(el, "many\nlines")

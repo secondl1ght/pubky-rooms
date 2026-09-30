@@ -15,6 +15,12 @@ const Composer = {
     this.lastTyping = 0
     if (touchKeyboard()) this.el.setAttribute("enterkeyhint", "enter")
     this.el.addEventListener("keydown", e => {
+      // Escape leaves an edit or a reply the way the Cancel button does
+      if (e.key === "Escape" && document.querySelector("#composer-context")) {
+        e.preventDefault()
+        this.pushEvent("cancel_compose", {})
+        return
+      }
       if ((e.key === "Enter" || e.keyCode === 13) && !e.shiftKey && !e.isComposing && !touchKeyboard()) {
         e.preventDefault()
         if (this.el.value.trim() !== "") this.el.form.requestSubmit()

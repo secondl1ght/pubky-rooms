@@ -65,8 +65,9 @@ defmodule PubkyRoomsWeb.MeLiveTest do
 
   test "with a Pubky App profile the nickname form is hidden", %{conn: conn, user: user} do
     Fake.seed(user, Profiles.pubky_app_profile_path(), JSON.encode!(%{name: "App Name"}))
-    Profiles.refresh(user)
+    # subscribe first: the refresh may finish before a later subscription (a CI flake)
     Profiles.subscribe()
+    Profiles.refresh(user)
     assert_receive {:profile_updated, ^user, %{name: "App Name"}}, 1_000
 
     {:ok, view, html} = live(conn, ~p"/me")
