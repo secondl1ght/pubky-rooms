@@ -40,6 +40,37 @@ Everything here is one node (no clustering in v1). Costs scale **per room and pe
 
 Staging and production are separate Fly apps: no shared volume, secrets or sessions. Every `PUBKY_*`/`NEXUS_*` variable overrides its preset value individually.
 
+## Deploy steps (Fly)
+
+The release is standard Phoenix (`mix phx.gen.release --docker`, Elixir 1.18.3 / OTP 27.3.4.6 on Debian trixie). The `Dockerfile`, `.dockerignore` and `fly.toml` sit at the **repository root** because the app depends on the sibling library by path (`{:pubky, path: "../pubky_ex"}`): the build context is the whole repo and the Dockerfile copies `pubky_ex/` and `pubky_rooms/` into the builder. `pubky_rooms/rel/overlays/bin/server` starts the release with `PHX_SERVER=true`. The runtime image runs as `nobody`, listens on `PORT` (8080 on Fly) and keeps the DETS directory under `PUBKY_DATA_DIR` (a volume at `/data`; the image creates the directory owned by `nobody`).
+
+Check the image locally before touching Fly (a container has its own `/data`, so this is safe next to a running dev server):
+
+```bash
+docker build -t pubky-rooms:staging .
+docker run --rm -p 127.0.0.1:8080:8080 -e SECRET_KEY_BASE="$(cd pubky_rooms && mix phx.gen.secret)" \
+  -e PHX_HOST=localhost -e PORT=8080 -e PUBKY_NETWORK=staging -e PUBKY_DATA_DIR=/data \
+  -v pubky-rooms-local-data:/data pubky-rooms:staging
+curl -s http://localhost:8080/healthz      # 200 {"status":"ok",…}; /login shows the staging Pubky App link
+```
+
+`PHX_HOST=localhost` keeps the HTTPS redirect out of the way (`force_ssl` excludes that host); the share image, fonts and `sw.js` are served from their digested paths; the service worker registers in a real browser (headless Chromium is fine, the in-app browser pane refuses workers). Remove the container and the `pubky-rooms-local-data` volume afterwards.
+
+First deploy of the staging app (each command creates or changes something on Fly; `fly.toml` at the root carries the app name, region, env, volume mount, health check and VM size):
+
+```bash
+fly apps create pubky-rooms-staging --org personal
+fly volumes create pubky_rooms_data --app pubky-rooms-staging --region dfw --size 1 --yes
+fly secrets set SECRET_KEY_BASE="$(cd pubky_rooms && mix phx.gen.secret)" --app pubky-rooms-staging
+fly deploy --app pubky-rooms-staging --ha=false --local-only
+```
+
+`--ha=false` keeps one machine (one volume, one DETS file; a second machine would need its own volume and would run a second, independent directory). `--local-only` builds with the local Docker and pushes the image; drop it to use Fly's remote builder. The secret is generated straight into the command and never printed or stored. Later deploys are `fly deploy --ha=false --local-only` from the root; a redeploy replaces the machine in place, the volume stays attached, sessions survive through the cookie.
+
+After the deploy: `fly status`, `fly checks list`, `fly logs` (no public keys, IPs or content at info), `curl -s https://pubky-rooms-staging.fly.dev/healthz`, then the smoke items of `docs/qa/checklist.md` §13 with the real Ring APK and a staging Pubky App identity. `fly ssh console` and `fly machine restart` are the two operator tools; `/app/bin/pubky_rooms remote` (the `console_command`) opens an IEx shell on the running node.
+
+Production later: a second Fly app (`pubky-rooms`) with its own `fly.production.toml` (`fly deploy --config fly.production.toml`), volume, secret and `PUBKY_NETWORK=mainnet` + `NEXUS_URL`; the custom domain `rooms.pubky.app` via `fly certs add` once DNS is ready.
+
 ## Runbook
 
 Before every deploy: green CI (both projects + hook tests) and the **smoke** items of `docs/qa/checklist.md` on the testnet.

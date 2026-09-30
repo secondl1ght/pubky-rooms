@@ -1,0 +1,56 @@
+# Pubky Rooms on Fly.io — the staging app (docs/operations.md, "Deploy targets").
+# Production is a separate Fly app with its own file (fly.production.toml,
+# `fly deploy --config fly.production.toml`) so nothing is shared: no volume,
+# secrets or sessions. Build context is the repository root (see Dockerfile).
+#
+# Secrets (never in this file): SECRET_KEY_BASE, set with `fly secrets set`.
+
+app = "pubky-rooms-staging"
+primary_region = "dfw"
+kill_signal = "SIGTERM"
+kill_timeout = "5s"
+console_command = "/app/bin/pubky_rooms remote"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # the public hostname: endpoint URL, websocket origin check, and the client
+  # id Ring shows unless PUBKY_CLIENT_ID overrides it
+  PHX_HOST = "pubky-rooms-staging.fly.dev"
+  PORT = "8080"
+  # Pubky's staging stack: public PKARR relays, staging HTTP relay and Nexus,
+  # the sign-in page's Pubky App link; PUBKY_*/NEXUS_* variables override
+  PUBKY_NETWORK = "staging"
+  # the room directory (DETS) on the volume below
+  PUBKY_DATA_DIR = "/data"
+
+[mounts]
+  source = "pubky_rooms_data"
+  destination = "/data"
+  initial_size = "1gb"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # rooms stay warm and event streams stay open: never stop the machine
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 1000
+    soft_limit = 800
+
+  [[http_service.checks]]
+    grace_period = "15s"
+    interval = "15s"
+    method = "GET"
+    timeout = "5s"
+    path = "/healthz"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

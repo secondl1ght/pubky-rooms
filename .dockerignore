@@ -1,0 +1,45 @@
+# Paths excluded from the Docker build context (the repository root; see the
+# Dockerfile). Everything the image needs is under pubky_ex/ and pubky_rooms/;
+# everything built, downloaded, generated or local stays out.
+
+.dockerignore
+Dockerfile
+fly*.toml
+
+# git, except what is needed to read the current commit
+.git
+!.git/HEAD
+!.git/refs
+.github
+.claude
+
+# documentation, project memory, tooling
+docs
+*.md
+
+# development and test artifacts
+**/cover
+**/doc
+**/test
+**/tmp
+**/.elixir_ls
+**/.lexical
+erl_crash.dump
+
+# Mix artifacts (fetched and compiled inside the image)
+**/_build
+**/deps
+*.ez
+
+# the app's local state and generated assets
+pubky_rooms/priv/data
+pubky_rooms/priv/static/assets
+pubky_rooms/priv/static/cache_manifest.json
+pubky_rooms/assets/node_modules
+pubky_rooms/assets/og
+pubky_rooms/scripts
+
+# secrets never enter the context
+.env
+*.secret
+*.sess

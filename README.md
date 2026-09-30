@@ -142,7 +142,7 @@ Capacity limits, what happens when each is hit, the runbook and the telemetry co
 
 ## Deploy
 
-Target: a single Fly.io machine with a volume for the DETS directory. The release is standard Phoenix (`mix phx.gen.release --docker`); `GET /healthz` is the health check and is excluded from the HTTPS redirect; behind Fly's proxy the sign-in rate limit keys on the client entry of `x-forwarded-for` (the one before Fly's own, appended last). The exact steps, secrets and the first mainnet sign-in with a real Pubky Ring are the next milestone in [`docs/PLAN.md`](docs/PLAN.md) and will be recorded in `docs/operations.md`.
+One Fly.io machine per environment with a volume for the DETS directory. The release is standard Phoenix (`mix phx.gen.release --docker`); the `Dockerfile`, `.dockerignore` and `fly.toml` live at the repository root because the app depends on `pubky_ex/` by path, so the build context is the whole repo. `GET /healthz` is the health check and is excluded from the HTTPS redirect; behind Fly's proxy the sign-in rate limit keys on the client entry of `x-forwarded-for` (the one before Fly's own, appended last). Staging (`pubky-rooms-staging.fly.dev`, `PUBKY_NETWORK=staging`: Pubky's staging homeserver, HTTP relay and Nexus) and production (`rooms.pubky.app`, mainnet) are separate apps; the only secret is `SECRET_KEY_BASE`. The exact commands, the local image check and the runbook are in [`docs/operations.md`](docs/operations.md) ("Deploy targets", "Deploy steps").
 
 ## Decisions
 

@@ -139,7 +139,7 @@ The service worker is **never registered in development** (`app.js`: asset names
 ## 13. Real infrastructure (staging, before production) — the dependency unknowns
 Never exercised on the testnet; each one is verified on the staging deploy before anyone else gets the link.
 - [ ] **smoke** Sign in with the real Pubky Ring (grant auth; the APK is shared with the team until Ring ships it): the deep link opens Ring, the grant lands, `/me` shows the identity.
-- [ ] **smoke** A real write to `homeserver.pubky.app` through the grant session (open a room, send a message): the library detects that the homeserver lacks `path-addressed-storage` (`/info` fails) and uses legacy addressing (`/pub/...` + `pubky-host`); the message confirms. If the production homeserver has been upgraded meanwhile, path addressing is used automatically.
+- [ ] **smoke** A real write to `homeserver.staging.pubky.app` through the grant session (open a room, send a message): the staging homeserver advertises `path-addressed-storage`, so path addressing is used and the message confirms. (On production, a homeserver without the feature makes the library fall back to legacy addressing, `/pub/...` + `pubky-host`, automatically; check the log line at debug if that ever matters.)
 - [ ] **smoke** Live updates on mainnet: a second identity sees the message live (`/events-stream`), and a reconnect resumes from the cursor without duplicates.
 - [ ] PKARR resolution on mainnet: `pkarr.pubky.org` is tried first (`pkarr.pubky.app` allows about 10 requests per minute per IP), results are cached; a room whose members were never seen resolves them all without errors in the logs.
 - [ ] Anonymous read throttling from Fly's shared egress IP: a big room bootstraps (slowly is fine, errors are not).
