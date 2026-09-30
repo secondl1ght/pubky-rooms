@@ -19,7 +19,10 @@ defmodule Pubky.Events.Stream do
   :connected | {:disconnected, reason} | {:error, reason}}`. The stream stops
   with `{:error, reason}` when the homeserver rejects the subscription (4xx).
   Cursors are exclusive: after reconnecting, only newer events are delivered,
-  and `cursors/1` exposes the latest ones so callers can persist them.
+  and `cursors/1` exposes the latest ones so callers can persist them. A
+  stream that follows nobody (started without users, or its last user was
+  removed) closes its connection and waits, without asking the homeserver for
+  an empty subscription (a 400), until `add_users/2` gives it someone to follow.
   """
 
   use GenServer
@@ -65,7 +68,7 @@ defmodule Pubky.Events.Stream do
           :ok | {:error, :too_many_users}
   def add_users(server, users), do: GenServer.call(server, {:add_users, users})
 
-  @doc "Removes users; reconnects to apply."
+  @doc "Removes users; reconnects to apply, or closes the connection when nobody is left."
   @spec remove_users(GenServer.server(), [Pubky.PublicKey.z32()]) :: :ok
   def remove_users(server, users), do: GenServer.call(server, {:remove_users, users})
 
@@ -126,7 +129,11 @@ defmodule Pubky.Events.Stream do
   end
 
   def handle_call({:remove_users, users}, _from, state) do
-    {:reply, :ok, schedule_reconnect(%{state | users: Map.drop(state.users, users)})}
+    state = %{state | users: Map.drop(state.users, users)}
+
+    if map_size(state.users) == 0,
+      do: {:reply, :ok, state |> cancel_reconnect() |> close_without_users()},
+      else: {:reply, :ok, schedule_reconnect(state)}
   end
 
   def handle_call(:cursors, _from, state), do: {:reply, state.users, state}
@@ -164,6 +171,10 @@ defmodule Pubky.Events.Stream do
   end
 
   # ── connection lifecycle ───────────────────────────────────────────────────
+
+  # nothing to follow: the homeserver rejects a subscription without users, so
+  # wait for add_users/2 instead
+  defp connect(%{users: users} = state) when map_size(users) == 0, do: cancel(state)
 
   defp connect(state) do
     state = cancel(state)
@@ -304,6 +315,9 @@ defmodule Pubky.Events.Stream do
 
   defp newer?(nil, _cursor), do: true
   defp newer?(last, cursor), do: cursor > last
+
+  defp close_without_users(%{resp: nil} = state), do: state
+  defp close_without_users(state), do: disconnect(state, {:disconnected, :no_users})
 
   defp disconnect(state, reason) do
     notify(state, {:pubky_stream, {state.homeserver, state.name}, reason})

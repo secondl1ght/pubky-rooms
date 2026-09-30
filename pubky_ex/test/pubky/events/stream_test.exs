@@ -99,7 +99,7 @@ defmodule Pubky.Events.StreamTest do
   end
 
   test "the homeserver rejecting the subscription stops the stream" do
-    {hs, config, _} = setup_hs([])
+    {hs, config, [alice, _]} = setup_hs(reject_streams: {403, "no streams for you"})
     Process.flag(:trap_exit, true)
 
     {:ok, pid} =
@@ -108,11 +108,54 @@ defmodule Pubky.Events.StreamTest do
         name: make_ref(),
         subscriber: self(),
         config: config,
-        users: []
+        users: [{alice.user, nil}]
       )
 
-    assert_receive {:pubky_stream, _, {:error, {:http, 400, _}}}, 2_000
-    assert_receive {:EXIT, ^pid, {:shutdown, {:http, 400, _}}}, 2_000
+    assert_receive {:pubky_stream, _, {:error, {:http, 403, _}}}, 2_000
+    assert_receive {:EXIT, ^pid, {:shutdown, {:http, 403, _}}}, 2_000
+  end
+
+  test "a stream started without users waits for add_users instead of asking the homeserver" do
+    {hs, config, [alice, _]} = setup_hs([])
+
+    {:ok, pid} =
+      Stream.start_link(
+        homeserver: hs.z32,
+        name: make_ref(),
+        subscriber: self(),
+        config: config,
+        users: [],
+        paths: ["/pub/app/"]
+      )
+
+    refute_receive {:pubky_stream, _, _}, 300
+    assert FakeHomeserver.requests(hs) == []
+    assert Process.alive?(pid)
+
+    :ok = Stream.add_users(pid, [{alice.user, nil}])
+    assert_receive {:pubky_stream, _, :connected}, 2_000
+    :ok = Storage.put(alice, "/pub/app/a", "x", [], config)
+    assert_receive {:pubky_event, %Event{path: "/pub/app/a"}}, 2_000
+    Stream.stop(pid)
+  end
+
+  test "removing the last user closes the connection without a new request; adding one reconnects" do
+    {hs, config, [alice, bob]} = setup_hs([])
+    pid = start_stream(hs, config, users: [{alice.user, nil}])
+    requests_before = length(FakeHomeserver.requests(hs))
+
+    :ok = Stream.remove_users(pid, [alice.user])
+    assert_receive {:pubky_stream, _, {:disconnected, :no_users}}, 2_000
+    # no reconnect attempt, so no rejection either; the process stays
+    refute_receive {:pubky_stream, _, _}, 400
+    assert Process.alive?(pid)
+    assert length(FakeHomeserver.requests(hs)) == requests_before
+
+    :ok = Stream.add_users(pid, [{bob.user, nil}])
+    assert_receive {:pubky_stream, _, :connected}, 2_000
+    :ok = Storage.put(bob, "/pub/app/b", "x", [], config)
+    assert_receive {:pubky_event, %Event{path: "/pub/app/b"}}, 2_000
+    Stream.stop(pid)
   end
 
   test "temporary streams are not restarted and stop_all_streams stops every stream" do

@@ -22,10 +22,15 @@ defmodule Pubky.Test.FakeHomeserver do
     path_addressed: true,
     token_ttl: 3600,
     drop_after: nil,
+    reject_streams: nil,
     session_overrides: %{}
   ]
 
-  @doc "Starts a fake homeserver. Options: `path_addressed: false` to emulate legacy servers, `token_ttl:` seconds."
+  @doc """
+  Starts a fake homeserver. Options: `path_addressed: false` to emulate legacy
+  servers, `token_ttl:` seconds, `drop_after: n` to close every event stream
+  after n events, `reject_streams: {status, body}` to refuse every event stream.
+  """
   def start(opts \\ []) do
     {:ok, agent} =
       Agent.start_link(fn ->
@@ -54,6 +59,7 @@ defmodule Pubky.Test.FakeHomeserver do
       path_addressed: Keyword.get(opts, :path_addressed, true),
       token_ttl: Keyword.get(opts, :token_ttl, 3600),
       drop_after: Keyword.get(opts, :drop_after),
+      reject_streams: Keyword.get(opts, :reject_streams),
       session_overrides: Keyword.get(opts, :session_overrides, %{})
     }
 
@@ -413,6 +419,10 @@ defmodule Pubky.Test.FakeHomeserver do
         )
 
     cond do
+      match?({_, _}, hs.reject_streams) ->
+        {status, body} = hs.reject_streams
+        resp(conn, status, body)
+
       map_size(users) == 0 or map_size(users) > 50 ->
         resp(conn, 400, "user param required (1..50)")
 
