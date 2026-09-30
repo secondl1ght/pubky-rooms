@@ -61,7 +61,13 @@ defmodule PubkyRoomsWeb.OgTagsTest do
 
     html = conn |> get(~p"/r/#{alice}/#{bare.id}") |> html_response(200)
     assert meta(html, "property", "og:title") == "Quiet · Pubky Rooms"
-    assert meta(html, "property", "og:description") == Meta.default_description()
+
+    assert meta(html, "property", "og:description") ==
+             "Join Quiet, a live room on Pubky Rooms. Every message stays on its author's homeserver."
+
+    assert :ok = Rooms.close_room(sid, alice, bare)
+    html = conn |> get(~p"/r/#{alice}/#{bare.id}") |> html_response(200)
+    assert meta(html, "property", "og:description") =~ "Quiet is closed: a read-only room"
 
     # a room nobody knows previews as the site itself
     html = conn |> get(~p"/r/#{alice}/0035S410XTQ00") |> html_response(200)

@@ -482,8 +482,17 @@ defmodule PubkyRoomsWeb.RoomLive do
     )
   end
 
-  # Link previews: the topic when the room has one, else the site's own line.
+  # Link previews: the topic when the room has one, else a line about this room.
   defp room_description(%Room{topic: topic}) when is_binary(topic) and topic != "", do: topic
+
+  defp room_description(%Room{name: name, closed_at: closed}) when is_binary(name) do
+    if closed,
+      do:
+        "#{name} is closed: a read-only room on Pubky Rooms whose messages stay on their authors' homeservers.",
+      else:
+        "Join #{name}, a live room on Pubky Rooms. Every message stays on its author's homeserver."
+  end
+
   defp room_description(_room), do: nil
 
   defp assign_members(socket, members) do
