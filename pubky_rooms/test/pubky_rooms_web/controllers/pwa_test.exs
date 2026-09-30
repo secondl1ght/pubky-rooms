@@ -27,6 +27,10 @@ defmodule PubkyRoomsWeb.PwaTest do
     offline = get(build_conn(), "/offline.html")
     assert offline.status == 200
     assert offline.resp_body =~ "You are offline"
+    # served from the worker cache with no network: it may reference nothing
+    # (the logo and the icon are inline; a path here would be a broken image offline)
+    refute offline.resp_body =~ ~r/(src|href)="\//
+    assert offline.resp_body =~ "<svg"
   end
 
   test "the root layout declares the manifest, icons and app-capable metas", %{conn: conn} do

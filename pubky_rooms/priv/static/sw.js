@@ -12,7 +12,7 @@
 // asset names are not hashed; the bump makes those browsers refetch app.js,
 // whose dev build unregisters the worker). No push handling yet: web push for
 // mentions/replies can be added here later without changing the strategy.
-const VERSION = "pubky-rooms-v2"
+const VERSION = "pubky-rooms-v3"
 const OFFLINE_URL = "/offline.html"
 const ASSET_PREFIXES = ["/assets/", "/fonts/", "/images/"]
 
