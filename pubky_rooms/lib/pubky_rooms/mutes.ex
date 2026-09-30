@@ -155,18 +155,6 @@ defmodule PubkyRooms.Mutes do
     end
   end
 
-  defp load_async(z32) do
-    server = self()
-    Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn -> load_and_report(server, z32) end)
-  end
-
-  defp load_and_report(server, z32) do
-    case SafeTask.run(fn -> {:ok, read_lists(z32)} end, fn -> :error end) do
-      {:ok, lists} -> send(server, {:loaded, z32, lists})
-      :error -> send(server, {:load_failed, z32})
-    end
-  end
-
   def handle_call({:apply, user, target, type}, _from, state) do
     case :ets.lookup(@table, user) do
       [{^user, %{own: own} = lists, loaded_at}] ->
@@ -187,6 +175,18 @@ defmodule PubkyRooms.Mutes do
   def handle_call(:reset, _from, state) do
     :ets.delete_all_objects(@table)
     {:reply, :ok, %{state | in_flight: %{}}}
+  end
+
+  defp load_async(z32) do
+    server = self()
+    Task.Supervisor.start_child(PubkyRooms.TaskSupervisor, fn -> load_and_report(server, z32) end)
+  end
+
+  defp load_and_report(server, z32) do
+    case SafeTask.run(fn -> {:ok, read_lists(z32)} end, fn -> :error end) do
+      {:ok, lists} -> send(server, {:loaded, z32, lists})
+      :error -> send(server, {:load_failed, z32})
+    end
   end
 
   @impl true
