@@ -6,6 +6,8 @@ on:
     paths-ignore: ["docs/**", "**.md"]
   pull_request:
     paths-ignore: ["docs/**", "**.md"]
+  # by hand, e.g. after the "VRT baselines" workflow committed new screenshots
+  workflow_dispatch:
 
 # a newer push to the same branch supersedes the run in progress
 concurrency:

@@ -14,6 +14,7 @@ defmodule PubkyRoomsWeb.E2E.SmokeTest do
   alias PhoenixTest.Playwright.Case, as: BrowserCase
   alias PubkyRooms.Auth.FakeGrantLogin
   alias PubkyRooms.E2E.Console
+  alias PubkyRooms.E2E.Steps
   alias PubkyRooms.Fixtures
   alias PubkyRooms.Profiles
   alias PubkyRooms.Pubky.Fake
@@ -118,14 +119,7 @@ defmodule PubkyRoomsWeb.E2E.SmokeTest do
 
     bob_conn =
       bob_conn
-      |> visit(~p"/login")
-      |> assert_has("body", text: "Waiting for approval")
-
-    FakeGrantLogin.resolve({:ok, Fixtures.session(bob)})
-
-    bob_conn =
-      bob_conn
-      |> assert_has("header a[href='/me']")
+      |> Steps.sign_in(bob)
       |> visit(room_path)
       |> assert_has("#messages > [id^='msg-']", text: "hello from alice")
       |> assert_has("#messages > [id^='msg-']", text: "line two")
@@ -170,19 +164,14 @@ defmodule PubkyRoomsWeb.E2E.SmokeTest do
 
     # a signed-in visitor who has not joined fills the Also here card
     [conn: visitor] = BrowserCase.do_setup(ctx)
-    visitor = visitor |> visit(~p"/login") |> assert_has("body", text: "Waiting for approval")
-    FakeGrantLogin.resolve({:ok, Fixtures.session(Fixtures.z32("e2e-crowd-visitor"))})
 
     visitor
-    |> assert_has("header a[href='/me']")
+    |> Steps.sign_in(Fixtures.z32("e2e-crowd-visitor"))
     |> visit(~p"/r/#{alice}/#{room.id}")
     |> assert_has("button", text: "Join room")
 
-    conn = conn |> visit(~p"/login") |> assert_has("body", text: "Waiting for approval")
-    FakeGrantLogin.resolve({:ok, Fixtures.session(alice)})
-
     conn
-    |> assert_has("header a[href='/me']")
+    |> Steps.sign_in(alice)
     |> visit(~p"/r/#{alice}/#{room.id}")
     |> assert_has("aside", text: "Members · 61")
     |> assert_has("#also-here", text: Profiles.short_key(Fixtures.z32("e2e-crowd-visitor")))
@@ -214,15 +203,8 @@ defmodule PubkyRoomsWeb.E2E.SmokeTest do
 
     conn =
       conn
-      |> visit(~p"/login")
-      |> assert_has("body", text: "Waiting for approval")
-
-    FakeGrantLogin.resolve({:ok, Fixtures.session(alice)})
-
-    conn =
-      conn
+      |> Steps.sign_in(alice)
       |> assert_path(~p"/")
-      |> assert_has("a[href='/me']")
       |> visit(~p"/rooms/new")
       |> fill_in("Name", with: "Phone room")
       |> click_button("Open room")

@@ -43,7 +43,8 @@
     </main>
     <script>
       // Retry without flashing: probe the app (a HEAD the worker never
-      // intercepts) and reload only when it answers. A few attempts after
+      // intercepts) and reload only when it answers with a good status (a 5xx
+      // while a deploy replaces the machine is not the app being back). A few attempts after
       // loading (a freshly launched installed app can fail its first request
       // while the OS is still connecting), then again whenever the browser
       // reports the connection back. A real outage leaves the page as it is.
@@ -52,7 +53,7 @@
         function probe() {
           timer = null
           fetch(location.href, {method: "HEAD", cache: "no-store", credentials: "same-origin"})
-            .then(function () { location.reload() })
+            .then(function (r) { if (r.ok) location.reload(); else schedule() })
             .catch(schedule)
         }
         function schedule() {

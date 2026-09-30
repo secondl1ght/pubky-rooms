@@ -18,6 +18,7 @@ defmodule PubkyRoomsWeb.VRT.ScreensTest do
 
   alias PubkyRooms.Auth.FakeGrantLogin
   alias PubkyRooms.E2E.Console
+  alias PubkyRooms.E2E.Steps
   alias PubkyRooms.Fixtures
   alias PubkyRooms.Profiles.LocalProfile
   alias PubkyRooms.Pubky.Fake
@@ -28,8 +29,8 @@ defmodule PubkyRoomsWeb.VRT.ScreensTest do
 
   @desktop [viewport: %{width: 1280, height: 800}]
   @phone [has_touch: true, is_mobile: true, viewport: %{width: 390, height: 844}]
-  # what changes between runs: message clock times
-  @masks ["#messages time"]
+  # message clock times vary between runs: pinned in the page before the shot
+  @pin_times "document.querySelectorAll('#messages time').forEach(t => t.textContent = '12:00'); true"
 
   setup do
     reset_state()
@@ -58,7 +59,7 @@ defmodule PubkyRoomsWeb.VRT.ScreensTest do
   @tag browser_context_opts: @desktop
   test "signed in: the lobby, the new-room dialog and /me", %{conn: conn, alice: alice} do
     conn
-    |> sign_in(alice)
+    |> Steps.sign_in(alice)
     |> visit(~p"/")
     |> assert_has("main", text: "Your rooms")
     |> assert_has("#directory", text: "Lobby chatter")
@@ -82,7 +83,7 @@ defmodule PubkyRoomsWeb.VRT.ScreensTest do
   @tag browser_context_opts: @desktop
   test "a room with history, members and tags", %{conn: conn, alice: alice, path: path} do
     conn
-    |> sign_in(alice)
+    |> Steps.sign_in(alice)
     |> visit(path)
     |> assert_has("#messages > [id^='msg-']", count: 6)
     |> assert_has("aside", text: "Members · 3")
@@ -94,7 +95,7 @@ defmodule PubkyRoomsWeb.VRT.ScreensTest do
   @tag browser_context_opts: @phone
   test "on a phone: the lobby and the room", %{conn: conn, alice: alice, path: path} do
     conn
-    |> sign_in(alice)
+    |> Steps.sign_in(alice)
     |> visit(~p"/")
     |> assert_has("#directory", text: "Lobby chatter")
     |> shoot("lobby-phone.png")
@@ -107,21 +108,16 @@ defmodule PubkyRoomsWeb.VRT.ScreensTest do
 
   # ── helpers ────────────────────────────────────────────────────────────────
 
-  defp sign_in(conn, z32) do
-    conn = conn |> visit(~p"/login") |> assert_has("body", text: "Waiting for approval")
-    FakeGrantLogin.resolve({:ok, Fixtures.session(z32)})
-    assert_has(conn, "a[href='/me']")
-  end
-
-  # the LiveView connected and the webfonts loaded before the picture is taken
+  # the LiveView connected and the webfonts loaded before the picture is taken;
+  # CI-to-CI screenshots are pixel-exact, another machine's Chromium rasterises
+  # the animated live dots and spinner a little differently (a few dozen pixels),
+  # far below any layout or copy change
   defp shoot(conn, name, opts \\ []) do
     conn
     |> assert_has(".phx-connected")
     |> evaluate("document.fonts.ready.then(() => document.fonts.status)", &assert(&1 == "loaded"))
-    |> assert_screenshot(
-      name,
-      Keyword.merge([full_page: false, mask: @masks, max_diff_pixel_ratio: 0.002], opts)
-    )
+    |> evaluate(@pin_times, &assert(&1 == true))
+    |> assert_screenshot(name, Keyword.merge([full_page: false, max_diff_pixels: 200], opts))
   end
 
   # three named identities, three listed rooms, one of them with a conversation
@@ -145,6 +141,8 @@ defmodule PubkyRoomsWeb.VRT.ScreensTest do
     {:ok, _} = Rooms.tag_room(alice_sid, alice, ref, "feedback")
     :ok = Rooms.join(bob_sid, bob, ref)
     :ok = Rooms.join(carol_sid, carol, ref)
+    # the directory orders by activity time: a gap keeps the order the same every run
+    Process.sleep(20)
 
     {:ok, builders} =
       Rooms.create_room(bob_sid, bob, %{
@@ -155,6 +153,7 @@ defmodule PubkyRoomsWeb.VRT.ScreensTest do
       })
 
     :ok = Rooms.join(alice_sid, alice, Room.ref(builders))
+    Process.sleep(20)
 
     {:ok, _chatter} =
       Rooms.create_room(carol_sid, carol, %{
@@ -162,6 +161,8 @@ defmodule PubkyRoomsWeb.VRT.ScreensTest do
         "visibility" => "public",
         "tags" => "general"
       })
+
+    Process.sleep(20)
 
     lines = [
       {alice, "Welcome! Drop screens here and say what feels off."},

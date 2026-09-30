@@ -53,8 +53,9 @@ defmodule PubkyRooms.Events.SubscriptionsTest do
       end)
 
     assert log =~ "throttled by the homeserver (429), retrying in 3000 ms"
-    refute log =~ hs
-    assert log =~ String.slice(hs, 0, 8)
+    # a warning names the stream, never its homeserver (ADR 0006: keys at debug only)
+    assert log =~ inspect(name)
+    refute log =~ String.slice(hs, 0, 8)
 
     send(Subscriptions, {:pubky_stream, {hs, name}, :connected})
     assert_receive {:subscription_status, ^user, :attached}, 1_000

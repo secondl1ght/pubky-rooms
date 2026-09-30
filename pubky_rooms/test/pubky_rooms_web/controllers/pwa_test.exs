@@ -35,6 +35,9 @@ defmodule PubkyRoomsWeb.PwaTest do
     assert offline.resp_body =~ ~s|addEventListener("online"|
     assert offline.resp_body =~ ~s|fetch(location.href, {method: "HEAD"|
     refute offline.resp_body =~ "setTimeout(function () { location.reload() }"
+
+    # and only when the app answers with a good status (a 5xx mid-deploy is not the app being back)
+    assert offline.resp_body =~ "if (r.ok) location.reload(); else schedule()"
   end
 
   test "the root layout declares the manifest, icons and app-capable metas", %{conn: conn} do
