@@ -1277,10 +1277,16 @@ defmodule PubkyRoomsWeb.RoomLive do
     me? = match?(%{pubky: ^z32}, socket.assigns.current_user)
 
     notice =
-      if me?,
-        do: "You left the room. Your messages went with you; join again to bring them back.",
-        else:
+      cond do
+        me? and socket.assigns.status == :closed ->
+          "You left the closed room; it no longer appears in your lobby."
+
+        me? ->
+          "You left the room. Your messages went with you; join again to bring them back."
+
+        true ->
           "#{profile_of(socket.assigns.profiles, z32).name} left the room; their messages went with them."
+      end
 
     socket
     |> assign_members(List.delete(socket.assigns.members, z32))
@@ -1716,7 +1722,7 @@ defmodule PubkyRoomsWeb.RoomLive do
             </div>
           </div>
 
-          <aside class="hidden w-64 shrink-0 flex-col gap-4 xl:flex">
+          <aside :if={@status != :not_found} class="hidden w-64 shrink-0 flex-col gap-4 xl:flex">
             <.members_panel
               id_prefix=""
               members={@members}
@@ -2264,6 +2270,7 @@ defmodule PubkyRoomsWeb.RoomLive do
       </div>
       <div class="flex shrink-0 items-center gap-2">
         <button
+          :if={@status != :not_found}
           type="button"
           id="members-button"
           phx-click="open_members"
@@ -2274,6 +2281,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           <.icon name="lucide-users" class="size-3.5" /> {length(active_members(@members, @bans))}
         </button>
         <span
+          :if={@status != :not_found}
           class="flex items-center gap-1.5 text-xs text-muted-foreground xl:hidden"
           title="Signed-in people in the room right now"
         >
@@ -2281,7 +2289,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           <span id="online-count">{@online_count} online</span>
         </span>
         <span
-          :if={@anonymous_count > 0}
+          :if={@anonymous_count > 0 and @status != :not_found}
           id="anonymous-count"
           class="hidden items-center gap-1 text-xs text-muted-foreground sm:flex xl:hidden"
           title="Viewers who are not signed in"
@@ -2305,7 +2313,13 @@ defmodule PubkyRoomsWeb.RoomLive do
           variant="ghost"
           size="sm"
           phx-click="leave"
-          data-confirm="Leave the room? Your messages leave with you (they stay on your homeserver); joining again brings them back."
+          data-confirm={
+            if @status == :closed,
+              do:
+                "Leave this closed room? It disappears from your lobby; your messages stay on your homeserver.",
+              else:
+                "Leave the room? Your messages leave with you (they stay on your homeserver); joining again brings them back."
+          }
           disabled={@joining}
         >
           Leave

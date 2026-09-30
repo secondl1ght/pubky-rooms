@@ -33,6 +33,10 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     html = wait_for(fn -> render(view) end, &(&1 =~ "does not exist on its owner"))
     assert html =~ "Room not found"
     assert length(String.split(html, "does not exist on its owner")) == 2
+    # nothing to count or list for a room that does not exist
+    refute html =~ "Members ·"
+    refute html =~ ~s(id="members-button")
+    refute html =~ "Also here"
   end
 
   test "the disconnected first render already shows what the directory knows", ctx do
@@ -1179,6 +1183,7 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     render_click(bob_view, "delete", %{"id" => bob_id})
     render_hook(bob_view, "add_tag", %{"label" => "late"})
     render_async(bob_view)
+
     assert [%Message{content: "bob before close"}] = messages_on_homeserver(bob, ctx.room)
     refute Fake.files(bob) |> Map.keys() |> Enum.any?(&String.contains?(&1, "/tags/"))
 
@@ -1207,6 +1212,14 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     html = wait_for(fn -> render(anon) end, &(&1 =~ "bob before close"))
     assert html =~ "read-only now"
     refute html =~ "Join room"
+
+    # leaving the archive says what actually happens (no "join again" on a closed room)
+    again |> element("button", "Leave") |> render_click()
+
+    assert wait_for(
+             fn -> render(again) end,
+             &(&1 =~ "You left the closed room; it no longer appears in your lobby.")
+           )
   end
 
   test "room tags are shown to everyone; signed-in users toggle their own", ctx do
