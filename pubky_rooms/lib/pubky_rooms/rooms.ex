@@ -410,7 +410,7 @@ defmodule PubkyRooms.Rooms do
   @spec explain(term()) :: String.t()
   def explain(:quota), do: "Your homeserver is out of storage."
   def explain(:too_large), do: "That is too large for your homeserver."
-  def explain({:rate_limited, ms}), do: "Slow down — try again in #{max(div(ms, 1000), 1)} s."
+  def explain({:rate_limited, ms}), do: "Slow down — try again in #{wait(ms)}."
   def explain(:unauthorized), do: "Your session has expired. Please sign in again."
   def explain(:unreachable), do: "Your homeserver could not be reached."
   def explain(:invalid_reaction), do: "That reaction is not available."
@@ -418,6 +418,10 @@ defmodule PubkyRooms.Rooms do
   def explain({:http, status}), do: "Your homeserver answered with status #{status}."
   def explain(reason) when is_binary(reason), do: reason
   def explain(reason), do: "Something went wrong (#{inspect(reason)})."
+
+  # a wait of minutes (the hourly limits) reads as minutes, rounded up
+  defp wait(ms) when ms >= 120_000, do: "#{div(ms + 59_999, 60_000)} min"
+  defp wait(ms), do: "#{max(div(ms, 1000), 1)} s"
 
   defp limit(key, count, window) do
     case RateLimit.check(key, count, window) do
