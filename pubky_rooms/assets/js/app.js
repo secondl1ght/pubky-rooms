@@ -26,6 +26,7 @@ import {hooks as colocatedHooks} from "phoenix-colocated/pubky_rooms"
 import topbar from "../vendor/topbar"
 import hooks from "./hooks"
 import {installOfflineNavigation} from "./offline_nav"
+import {installAvatarFallback} from "./avatar_fallback"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
@@ -42,6 +43,7 @@ window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 // connect if there are any LiveViews on the page
 // before connect(), so this listener runs ahead of LiveView's own
 installOfflineNavigation()
+installAvatarFallback()
 liveSocket.connect()
 
 // Installable app shell: the worker caches digested assets and shows a static

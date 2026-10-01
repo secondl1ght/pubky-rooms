@@ -92,11 +92,16 @@ defmodule PubkyRoomsWeb.UserAuth do
       |> Phoenix.Component.assign(:current_user, user)
       |> Phoenix.Component.assign(:sid, sid)
 
-    if user && LiveView.connected?(socket) do
-      SessionStore.touch(sid)
-      SessionStore.attach(sid)
-      PubkyRooms.Rooms.on_user_connected(user.pubky)
-      PubkyRoomsWeb.Presence.track_lobby(user)
+    if LiveView.connected?(socket) do
+      if user do
+        SessionStore.touch(sid)
+        SessionStore.attach(sid)
+        PubkyRooms.Rooms.on_user_connected(user.pubky)
+        PubkyRoomsWeb.Presence.track_lobby(user)
+      end
+
+      # every connected viewer, signed in or not: profiles arrive after the
+      # first paint when the cache is cold (members, Also here, lobby cards)
       Profiles.subscribe()
       LiveView.attach_hook(socket, :own_profile, :handle_info, &own_profile_hook/2)
     else

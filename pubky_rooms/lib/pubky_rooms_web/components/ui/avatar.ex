@@ -2,8 +2,8 @@ defmodule PubkyRoomsWeb.UI.Avatar do
   @moduledoc """
   Round user avatars.
 
-  When no image is available (or it fails to load) a generative fallback is
-  shown: a disc in one of the six Pubky signal colors, chosen from the user's
+  When no image is available (or it fails to load: `assets/js/avatar_fallback.js`
+  removes the broken `<img data-avatar>`) a generative fallback is shown: a disc in one of the six Pubky signal colors, chosen from the user's
   public key, with the first letter of their name. `online` adds a small
   presence dot.
   """
@@ -76,13 +76,15 @@ defmodule PubkyRoomsWeb.UI.Avatar do
         >
           {@initial}
         </span>
+        <%!-- no id and no hook: the same picture appears in several places at
+             once, and a hook needs a unique id; a broken image is removed by
+             the page-level listener in app.js (avatar_fallback.js) --%>
         <img
           :if={@src}
-          id={"avatar-img-#{:erlang.phash2(@src)}"}
           src={@src}
           alt={@name || ""}
           class="absolute inset-0 size-full object-cover"
-          phx-hook=".HideOnError"
+          data-avatar
           loading="lazy"
         />
       </span>
@@ -93,11 +95,6 @@ defmodule PubkyRoomsWeb.UI.Avatar do
         role="img"
       />
     </span>
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".HideOnError">
-      export default {
-        mounted() { this.el.addEventListener("error", () => this.el.remove(), {once: true}) }
-      }
-    </script>
     """
   end
 

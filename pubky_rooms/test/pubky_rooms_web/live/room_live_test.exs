@@ -61,6 +61,44 @@ defmodule PubkyRoomsWeb.RoomLiveTest do
     refute has_element?(view, "#show-all-tags")
   end
 
+  test "an anonymous viewer sees a member's profile arrive after the first paint", ctx do
+    {bob_sid, bob} = Fixtures.login("bob")
+    :ok = Rooms.join(bob_sid, bob, Room.ref(ctx.room))
+    {:ok, m} = Message.new(bob, Room.ref(ctx.room), "hi from bob")
+    Fake.seed(bob, Message.path(m), Message.encode(m))
+
+    {:ok, view, _} = live(build_conn(), ctx.path)
+    html = wait_for(fn -> render(view) end, &(&1 =~ "hi from bob"))
+    # nothing known about bob yet: the shortened key in the members card and on the row
+    assert html =~ Profiles.short_key(bob)
+    refute html =~ "Bobby"
+
+    # his profile lands (a cold cache fills in after the page is up)
+    Fake.seed(bob, Paths.profile(), LocalProfile.encode("Bobby"))
+    Profiles.refresh(bob)
+    html = wait_for(fn -> render(view) end, &(&1 =~ "Bobby"))
+    assert has_element?(view, "#member-#{bob}", "Bobby")
+    assert html =~ ~s(id="msg-#{bob}-#{m.msg_id}")
+    assert length(Regex.scan(~r/Bobby/, html)) >= 2
+  end
+
+  test "the composer, the members card and the rows follow the viewer's own profile", ctx do
+    {:ok, view, html} = live(ctx.alice_conn, ctx.path)
+    refute html =~ "https://cdn.test/alice.png"
+
+    Fake.seed(
+      ctx.alice,
+      Profiles.pubky_app_profile_path(),
+      JSON.encode!(%{name: "Alicia", image: "https://cdn.test/alice.png"})
+    )
+
+    Profiles.refresh(ctx.alice)
+    wait_for(fn -> render(view) end, &(&1 =~ "Alicia"))
+    assert has_element?(view, "#composer-box img[src='https://cdn.test/alice.png']")
+    assert has_element?(view, "#member-#{ctx.alice} img[src='https://cdn.test/alice.png']")
+    assert has_element?(view, "#member-#{ctx.alice}", "Alicia")
+  end
+
   test "Also here lists visitors by name, like the members", ctx do
     amy = Fixtures.z32("amy-visitor")
     zed = Fixtures.z32("zed-visitor")

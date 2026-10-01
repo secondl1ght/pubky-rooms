@@ -4,7 +4,8 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
 
   import Phoenix.LiveViewTest
 
-  alias PubkyRooms.{Fixtures, Rooms}
+  alias PubkyRooms.{Fixtures, Profiles, Rooms}
+  alias PubkyRooms.Profiles.LocalProfile
   alias PubkyRooms.Pubky.Fake
   alias PubkyRooms.Rooms.{Directory, Paths, Room}
 
@@ -125,6 +126,19 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     # nothing left for the directory, but not "no rooms yet": they are all hers
     assert html =~ "Nothing else listed"
     refute html =~ "No rooms yet"
+  end
+
+  test "an anonymous lobby shows a creator's profile once it arrives", %{conn: _conn} do
+    {sid, alice} = Fixtures.login("alice")
+    {:ok, _} = Rooms.create_room(sid, alice, %{"name" => "Cold cache", "visibility" => "public"})
+
+    {:ok, lobby, html} = live(build_conn(), ~p"/")
+    assert html =~ "Cold cache"
+    refute html =~ "Alicia"
+
+    Fake.seed(alice, Paths.profile(), LocalProfile.encode("Alicia"))
+    Profiles.refresh(alice)
+    assert wait_for(fn -> render(lobby) end, &(&1 =~ "Alicia"))
   end
 
   test "the sixth room within an hour is refused with a warning toast; the dialog stays open",
