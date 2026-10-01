@@ -127,6 +127,35 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     refute html =~ "No rooms yet"
   end
 
+  test "the sixth room within an hour is refused with a warning toast; the dialog stays open",
+       %{conn: conn} do
+    {sid, alice} = Fixtures.login("alice")
+    alice_conn = init_test_session(conn, Fixtures.cookie(sid))
+
+    for i <- 1..5 do
+      {:ok, _} =
+        Rooms.create_room(sid, alice, %{"name" => "Room #{i}", "visibility" => "unlisted"})
+    end
+
+    {:ok, view, _html} = live(alice_conn, ~p"/rooms/new")
+
+    view
+    |> form("#new-room-form", room: %{name: "One too many", visibility: "public"})
+    |> render_submit()
+
+    render_async(view)
+
+    html = render(view)
+    # a limit is a warning to wait out, not an error: amber, dismisses itself
+    assert html =~ "Slow down"
+    assert has_element?(view, "#flash-warning")
+    refute has_element?(view, "#flash-error")
+    # nothing was written and the form is still there to submit again later
+    assert has_element?(view, "#new-room-form input[name='room[name]'][value='One too many']")
+    assert %{created: created} = Directory.rooms_of(alice)
+    assert length(created) == 5
+  end
+
   test "switching the new room to Unlisted drops its tags; back to Listed starts empty",
        %{conn: conn} do
     {sid, _alice} = Fixtures.login("alice")

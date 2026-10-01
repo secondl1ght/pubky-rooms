@@ -13,6 +13,15 @@ defmodule PubkyRoomsWeb.UI.FeedbackTest do
     end
   end
 
+  test "warning toasts (a limit to wait out) are amber and dismiss after 8 s" do
+    html =
+      render_component(&Feedback.flash/1, kind: :warning, flash: %{"warning" => "Slow down."})
+
+    assert html =~ "lucide-triangle-alert text-warning"
+    assert html =~ "border-warning/40"
+    assert html =~ ~s(data-dismiss-after="8000")
+  end
+
   test "error toasts stay until dismissed" do
     html = render_component(&Feedback.flash/1, kind: :error, flash: %{"error" => "Failed."})
     refute html =~ "AutoDismiss"

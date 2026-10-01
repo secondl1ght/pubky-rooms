@@ -22,11 +22,16 @@ defmodule PubkyRoomsWeb.UI.Feedback do
   attr :id, :string, doc: "the optional id of flash container"
   attr :flash, :map, default: %{}, doc: "the map of flash messages to display"
   attr :title, :string, default: nil
-  attr :kind, :atom, values: [:info, :error, :success], doc: "used for styling and flash lookup"
+
+  attr :kind, :atom,
+    values: [:info, :error, :success, :warning],
+    doc:
+      "used for styling and flash lookup; a warning is something to wait out (a rate limit), not a failure"
 
   attr :dismiss_after, :integer,
     default: nil,
-    doc: "ms before the toast dismisses itself; default 5000 for info/success, never for errors"
+    doc:
+      "ms before the toast dismisses itself; default 5000 for info/success, 8000 for warnings, never for errors"
 
   attr :rest, :global, doc: "the arbitrary HTML attributes to add to the flash container"
   slot :inner_block, doc: "the optional inner block that renders the flash message"
@@ -38,6 +43,7 @@ defmodule PubkyRoomsWeb.UI.Feedback do
       |> assign_new(:auto_dismiss, fn
         %{dismiss_after: ms} when is_integer(ms) -> ms
         %{kind: kind} when kind in [:info, :success] -> 5000
+        %{kind: :warning} -> 8000
         _ -> nil
       end)
 
@@ -52,6 +58,7 @@ defmodule PubkyRoomsWeb.UI.Feedback do
       class={[
         "pointer-events-auto flex w-full items-start gap-3 rounded-xl border bg-card p-4 text-sm shadow-lg sm:w-96",
         @kind == :error && "border-destructive/40",
+        @kind == :warning && "border-warning/40",
         @kind == :success && "border-brand/40"
       ]}
       {@rest}
@@ -61,7 +68,8 @@ defmodule PubkyRoomsWeb.UI.Feedback do
           "size-5 shrink-0",
           @kind == :info && "lucide-info text-secondary-foreground",
           @kind == :success && "lucide-circle-check text-brand",
-          @kind == :error && "lucide-circle-alert text-destructive"
+          @kind == :error && "lucide-circle-alert text-destructive",
+          @kind == :warning && "lucide-triangle-alert text-warning"
         ]}
         aria-hidden="true"
       />

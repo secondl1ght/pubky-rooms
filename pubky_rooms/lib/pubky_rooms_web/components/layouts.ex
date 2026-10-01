@@ -189,6 +189,7 @@ defmodule PubkyRoomsWeb.Layouts do
     >
       <.flash kind={:success} flash={@flash} />
       <.flash kind={:info} flash={@flash} />
+      <.flash kind={:warning} flash={@flash} />
       <.flash kind={:error} flash={@flash} />
 
       <.flash

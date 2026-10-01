@@ -11,6 +11,7 @@ defmodule PubkyRoomsWeb.MeLive do
   alias PubkyRooms.Auth.GrantLogin
   alias PubkyRooms.Profiles.LocalProfile
   alias PubkyRooms.Rooms
+  alias PubkyRoomsWeb.Flash
 
   on_mount {PubkyRoomsWeb.UserAuth, :require_authenticated}
 
@@ -79,11 +80,11 @@ defmodule PubkyRoomsWeb.MeLive do
   end
 
   def handle_async(_name, {:ok, {:error, reason}}, socket) do
-    {:noreply, socket |> assign(saving: false) |> put_flash(:error, Rooms.explain(reason))}
+    {:noreply, socket |> assign(saving: false) |> Flash.put_failure(reason)}
   end
 
   def handle_async(_name, {:exit, reason}, socket) do
-    {:noreply, socket |> assign(saving: false) |> put_flash(:error, Rooms.explain(reason))}
+    {:noreply, socket |> assign(saving: false) |> Flash.put_failure(reason)}
   end
 
   @impl true

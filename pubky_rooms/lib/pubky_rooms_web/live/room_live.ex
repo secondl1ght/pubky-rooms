@@ -13,7 +13,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   alias PubkyRooms.{Ids, Mutes, Profiles, RateLimit, Rooms}
   alias PubkyRooms.Rooms.{Ban, Directory, Message, Paths, Reaction, Room, RoomServer}
   alias PubkyRooms.Tags.Tag
-  alias PubkyRoomsWeb.{Format, Linkify, Presence}
+  alias PubkyRoomsWeb.{Flash, Format, Linkify, Presence}
 
   # a viewer is shown as typing for this long after their last keystroke event
   @typing_ttl 4_000
@@ -979,7 +979,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   def handle_async({:react, _msg_key, _key}, {:ok, :ok}, socket), do: {:noreply, socket}
 
   def handle_async({:react, _msg_key, _key}, {:ok, {:error, reason}}, socket),
-    do: {:noreply, put_flash(socket, :error, "Reaction not stored: " <> Rooms.explain(reason))}
+    do: {:noreply, Flash.put_failure(socket, reason, "Reaction not stored: ")}
 
   def handle_async({:react, _msg_key, _key}, {:exit, reason}, socket),
     do: {:noreply, put_flash(socket, :error, Rooms.explain({:unexpected, reason}))}
@@ -1013,7 +1013,7 @@ defmodule PubkyRoomsWeb.RoomLive do
     do: {:noreply, load_tags(socket)}
 
   def handle_async({:tag, _label}, {:ok, {:error, reason}}, socket),
-    do: {:noreply, put_flash(socket, :error, "Tag not saved: " <> Rooms.explain(reason))}
+    do: {:noreply, Flash.put_failure(socket, reason, "Tag not saved: ")}
 
   def handle_async({:tag, _label}, {:exit, reason}, socket),
     do: {:noreply, put_flash(socket, :error, Rooms.explain({:unexpected, reason}))}
@@ -1037,8 +1037,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   def handle_async(:save_settings, {:ok, {:error, reason}}, socket) do
-    {:noreply,
-     socket |> assign(saving: false) |> put_flash(:error, "Not saved: " <> Rooms.explain(reason))}
+    {:noreply, socket |> assign(saving: false) |> Flash.put_failure(reason, "Not saved: ")}
   end
 
   def handle_async(:close_room, {:ok, :ok}, socket) do
@@ -1050,8 +1049,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   def handle_async(:close_room, {:ok, {:error, reason}}, socket) do
-    {:noreply,
-     socket |> assign(saving: false) |> put_flash(:error, "Not closed: " <> Rooms.explain(reason))}
+    {:noreply, socket |> assign(saving: false) |> Flash.put_failure(reason, "Not closed: ")}
   end
 
   def handle_async(:ban, {:ok, :ok}, socket) do
@@ -1065,7 +1063,7 @@ defmodule PubkyRoomsWeb.RoomLive do
     {:noreply,
      socket
      |> assign(joining: false)
-     |> put_flash(:error, "Not removed: " <> Rooms.explain(reason))}
+     |> Flash.put_failure(reason, "Not removed: ")}
   end
 
   def handle_async(:unban, {:ok, :ok}, socket) do
@@ -1076,7 +1074,7 @@ defmodule PubkyRoomsWeb.RoomLive do
     {:noreply,
      socket
      |> assign(joining: false)
-     |> put_flash(:error, "Not restored: " <> Rooms.explain(reason))}
+     |> Flash.put_failure(reason, "Not restored: ")}
   end
 
   def handle_async({:mute, _z32}, {:ok, :ok}, socket), do: {:noreply, socket}
@@ -1086,14 +1084,14 @@ defmodule PubkyRoomsWeb.RoomLive do
     {:noreply,
      socket
      |> set_muted(MapSet.delete(socket.assigns.muted, z32))
-     |> put_flash(:error, "Not muted: " <> Rooms.explain(reason))}
+     |> Flash.put_failure(reason, "Not muted: ")}
   end
 
   def handle_async({:unmute, z32}, {:ok, {:error, reason}}, socket) do
     {:noreply,
      socket
      |> set_muted(MapSet.put(socket.assigns.muted, z32))
-     |> put_flash(:error, "Not unmuted: " <> Rooms.explain(reason))}
+     |> Flash.put_failure(reason, "Not unmuted: ")}
   end
 
   def handle_async(:join, {:ok, :ok}, socket) do
@@ -1105,7 +1103,7 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   def handle_async(:join, {:ok, {:error, reason}}, socket) do
-    {:noreply, socket |> assign(joining: false) |> put_flash(:error, Rooms.explain(reason))}
+    {:noreply, socket |> assign(joining: false) |> Flash.put_failure(reason)}
   end
 
   # the room's {:member_left} event carries the toast, so it shows once
@@ -1114,11 +1112,11 @@ defmodule PubkyRoomsWeb.RoomLive do
   end
 
   def handle_async(:leave, {:ok, {:error, reason}}, socket) do
-    {:noreply, socket |> assign(joining: false) |> put_flash(:error, Rooms.explain(reason))}
+    {:noreply, socket |> assign(joining: false) |> Flash.put_failure(reason)}
   end
 
   def handle_async(_name, {:exit, reason}, socket) do
-    {:noreply, socket |> assign(joining: false) |> put_flash(:error, Rooms.explain(reason))}
+    {:noreply, socket |> assign(joining: false) |> Flash.put_failure(reason)}
   end
 
   # ── room events ────────────────────────────────────────────────────────────
@@ -1428,7 +1426,7 @@ defmodule PubkyRoomsWeb.RoomLive do
           {_edited, %Message{} = original} ->
             socket
             |> stream_insert(:messages, original)
-            |> put_flash(:error, "Edit not stored: " <> Rooms.explain(reason))
+            |> Flash.put_failure(reason, "Edit not stored: ")
 
           {_edited, nil} ->
             msg = %{msg | state: :failed, fail_reason: reason}
@@ -1442,7 +1440,7 @@ defmodule PubkyRoomsWeb.RoomLive do
 
   # A delete that did not land: show the message again.
   defp restore_message(socket, key, reason) do
-    socket = put_flash(socket, :error, "Not deleted: " <> Rooms.explain(reason))
+    socket = Flash.put_failure(socket, reason, "Not deleted: ")
 
     case stored_message(socket, key) do
       %Message{} = msg -> stream_insert(socket, :messages, msg)

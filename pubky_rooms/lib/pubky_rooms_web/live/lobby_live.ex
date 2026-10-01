@@ -13,7 +13,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
   alias PubkyRooms.{Profiles, Rooms}
   alias PubkyRooms.Rooms.{Directory, Room}
   alias PubkyRooms.Tags.Tag
-  alias PubkyRoomsWeb.{Format, Presence}
+  alias PubkyRoomsWeb.{Flash, Format, Presence}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -149,11 +149,11 @@ defmodule PubkyRoomsWeb.LobbyLive do
   end
 
   def handle_async(:create, {:ok, {:error, reason}}, socket) do
-    {:noreply, socket |> assign(creating: false) |> put_flash(:error, Rooms.explain(reason))}
+    {:noreply, socket |> assign(creating: false) |> Flash.put_failure(reason)}
   end
 
   def handle_async(:create, {:exit, reason}, socket) do
-    {:noreply, socket |> assign(creating: false) |> put_flash(:error, Rooms.explain(reason))}
+    {:noreply, socket |> assign(creating: false) |> Flash.put_failure(reason)}
   end
 
   @impl true

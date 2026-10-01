@@ -33,7 +33,7 @@ Legend: **smoke** = minimum pre-deploy set · **A+B** = needs both identities ·
 - [ ] **smoke** Lobby, room, `/login`, `/me`: console has no errors and no CSP violations after a full navigation of each.
 - [ ] `/r/not/valid` → "That room link is not valid." flash, back on the lobby; a well-formed link to a room that does not exist → the styled "Room not found" page; a 404 page for `/nope` in the app's styling ("Page not found · Pubky Rooms").
 - [ ] Header: logo alignment, the three round buttons hover like Pubky App (`bg-accent`), tooltips, active state on the current page; avatar has no hover ring.
-- [ ] Toasts: info/success dismiss after 5 s, pause on hover, error stays; text centred with the icon; close button centred. **phone**: full width inside the 16 px gutters, above the tab bar.
+- [ ] Toasts: info/success dismiss after 5 s, warnings (rate limits, "Slow down — try again in N s.", amber) after 8 s, pause on hover, error stays; text centred with the icon; close button centred. **phone**: full width inside the 16 px gutters, above the tab bar.
 
 ## 2. Signed out (anon)
 

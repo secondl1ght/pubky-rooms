@@ -54,6 +54,7 @@
   --color-accent-foreground: oklch(0.951 0.011 286.195);
   --color-destructive: oklch(0.628 0.258 29.234);
   --color-destructive-foreground: oklch(0.971 0.013 17.38);
+  --color-warning: oklch(0.83 0.16 80); /* amber: a limit, not a failure */
   --color-border: oklch(0.311 0.007 285.98);
   --color-input: #525252;
   --color-ring: oklch(0.55 0.008 286.145);
