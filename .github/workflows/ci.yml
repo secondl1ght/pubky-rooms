@@ -244,3 +244,18 @@ jobs:
           restore-keys: ${{ runner.os }}-${{ matrix.project }}-dialyzer-
       - run: mix deps.get
       - run: mix dialyzer --format github
+
+  # A CI run started by hand or by the "VRT baselines" workflow (both through
+  # GITHUB_TOKEN) completes without producing a workflow_run event for the
+  # deploy workflow, so a green hand-started run on main dispatches it itself.
+  deploy_after_dispatch:
+    name: dispatch the staging deploy
+    needs: [test, hooks, e2e, vrt, testnet, dialyzer]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - run: gh workflow run "Deploy staging" --ref main --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}
