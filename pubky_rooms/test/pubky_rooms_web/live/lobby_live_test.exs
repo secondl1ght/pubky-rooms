@@ -212,6 +212,9 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     assert html =~ "music"
     assert html =~ "Bitcoin devs"
     assert html =~ "Music"
+    # the automatic label is never a chip on the lobby (every listed room has it)
+    refute has_element?(lobby, "#popular-tags button", "room")
+    refute html =~ ~r/data-label="room"|>room</
 
     # filtering by a tag
     lobby |> element("#popular-tags button", "music") |> render_click()
@@ -247,8 +250,9 @@ defmodule PubkyRoomsWeb.LobbyLiveTest do
     assert html_mine =~ "Nothing else listed"
     refute html_mine =~ "No rooms yet"
     assert html =~ ~r/data-label="dd"|>dd</
-    # the room carries aa bb cc dd room: three shown, "+2" for the rest
-    assert html =~ "+2"
+    # the room carries aa bb cc dd (and the automatic room, not counted): three shown, "+1"
+    assert html =~ "+1"
+    refute html =~ "+2"
     refute busy.id == room.id
 
     lobby |> element("a", "Clear filter") |> render_click()

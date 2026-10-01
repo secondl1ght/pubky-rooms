@@ -211,7 +211,9 @@ defmodule PubkyRoomsWeb.LobbyLive do
       public: public,
       closed: closed,
       profiles: profiles,
-      popular_tags: Directory.popular_tags(),
+      # the automatic label is on every listed room: it says nothing here
+      popular_tags:
+        Enum.reject(Directory.popular_tags(), fn {label, _} -> label == Tag.auto_label() end),
       room_tags: Map.new(all, &{Room.ref(&1), Directory.tags_of(Room.ref(&1))})
     )
     |> load_viewers()
@@ -524,7 +526,10 @@ defmodule PubkyRoomsWeb.LobbyLive do
   # The three tags a card shows: the active filter first when the room carries
   # it (so a filtered list never hides the reason a room is listed), then the
   # most-used; the rest become a "+n".
+  # the automatic `room` label is left out (every listed room carries it; the
+  # room page and the dialog still show it, where the contract is explained)
   defp card_tags(tags, filter) do
+    tags = Enum.reject(tags, &(&1.label == Tag.auto_label()))
     {matching, others} = Enum.split_with(tags, &(&1.label == filter))
     shown = Enum.take(matching ++ others, 3)
     {shown, length(tags) - length(shown)}
@@ -659,7 +664,7 @@ defmodule PubkyRoomsWeb.LobbyLive do
             </span>
           </div>
           <.card_description :if={@room.topic} class="line-clamp-2">{@room.topic}</.card_description>
-          <div :if={@tags != []} class="flex flex-wrap items-center gap-1.5 pt-1">
+          <div :if={@shown_tags != []} class="flex flex-wrap items-center gap-1.5 pt-1">
             <.tag
               :for={t <- @shown_tags}
               label={t.label}
