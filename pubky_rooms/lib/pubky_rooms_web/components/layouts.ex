@@ -98,11 +98,14 @@ defmodule PubkyRoomsWeb.Layouts do
       aria-label={@label}
       aria-current={@active && "page"}
       data-tip={@label}
-      class={[
-        "tooltip flex size-12 items-center justify-center rounded-full border border-border shadow-xs backdrop-blur-md transition-all",
-        "text-secondary-foreground hover:bg-accent",
-        (@active && "bg-secondary") || "bg-white/5"
-      ]}
+      class={
+        [
+          # the tooltip opens below: above, it sat against the top edge of the window
+          "tooltip tooltip-bottom flex size-12 items-center justify-center rounded-full border border-border shadow-xs backdrop-blur-md transition-all",
+          "text-secondary-foreground hover:bg-accent",
+          (@active && "bg-secondary") || "bg-white/5"
+        ]
+      }
     >
       <.icon name={@icon} class="size-6" />
     </.link>
