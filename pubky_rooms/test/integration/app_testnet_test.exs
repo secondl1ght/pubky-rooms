@@ -4,7 +4,7 @@ defmodule PubkyRooms.Integration.AppTestnetTest do
   PKARR relay, real SSE streams, real sessions — only Pubky Ring is replaced by
   `Pubky.Auth.LocalSigner`.
 
-      (cd ~/CODE/pubky-docker && docker compose up homeserver -d)
+      docker compose up homeserver -d   # in a pubky-docker checkout
       mix test --include testnet test/integration
   """
   use PubkyRoomsWeb.ConnCase, async: false

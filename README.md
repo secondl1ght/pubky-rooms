@@ -6,9 +6,9 @@ Every message is a file the author writes to their **own homeserver**. This serv
 
 - `pubky_ex/` — pure-Elixir Pubky client library (identity, PKARR discovery, grant auth, storage, event streams). Its own [README](pubky_ex/README.md) documents the API.
 - `pubky_rooms/` — the Phoenix application.
-- `docs/` — [plan](docs/PLAN.md), [progress and handoff](docs/PROGRESS.md), [protocol notes](docs/notes/pubky-protocol-notes.md), [app design](docs/notes/rooms-app-design.md), [operations](docs/operations.md), [design system](docs/design-system.md), [ADRs](docs/adr/).
+- `docs/` — [index](docs/README.md): [protocol notes](docs/notes/pubky-protocol-notes.md), [app design](docs/notes/rooms-app-design.md), [operations](docs/operations.md), [QA](docs/qa/README.md), [design system](docs/design-system.md), [ADRs](docs/adr/).
 
-Status: feature-complete for launch, in QA before the first deployment (see `docs/PROGRESS.md`). Part of the Pubky Vibes initiative; to be hosted at `rooms.pubky.app` and linked from Pubky App.
+Status: feature-complete and running on a staging deployment for the team's feedback; production follows. Part of the Pubky Vibes initiative; to be hosted at `rooms.pubky.app` and linked from Pubky App. Contributions: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## How it works
 
@@ -97,8 +97,8 @@ Toolchain: Elixir 1.18 / OTP 27, Docker (for the local Pubky testnet) and Node 2
 
 ```bash
 # 1. local Pubky testnet: homeserver + PKARR and HTTP relays on localhost
-git clone https://github.com/pubky/pubky-docker ~/CODE/pubky-docker
-cd ~/CODE/pubky-docker && cp .env-sample .env && docker compose up homeserver -d
+git clone https://github.com/pubky/pubky-docker
+cd pubky-docker && cp .env-sample .env && docker compose up homeserver -d
 curl http://localhost:6286/info        # {"features":[...]}
 
 # 2. the app (dev config points at the testnet)
@@ -106,8 +106,8 @@ cd pubky_rooms && mix setup && mix phx.server
 # http://localhost:4000 — styleguide at /dev/ui, metrics at /dev/dashboard, health at /healthz
 
 # 3. an identity to sign in with: the Pubky Ring Simulator
-git clone https://github.com/pubky/pubky-ring-simulator ~/CODE/pubky-ring-simulator
-cd ~/CODE/pubky-ring-simulator && npm install && npm run dev -- --port 5173
+git clone https://github.com/pubky/pubky-ring-simulator
+cd pubky-ring-simulator && npm install && npm run dev -- --port 5173
 # on /login press "Copy link", paste it into the Simulator's Shortcut mode, done
 ```
 

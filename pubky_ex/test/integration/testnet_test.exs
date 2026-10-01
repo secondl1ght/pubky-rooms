@@ -2,7 +2,7 @@ defmodule Pubky.Integration.TestnetTest do
   @moduledoc """
   End-to-end checks against a local pubky-docker testnet.
 
-      docker compose up homeserver -d      # in ~/CODE/pubky-docker
+      docker compose up homeserver -d      # in a pubky-docker checkout
       PUBKY_TESTNET=1 mix test --include testnet
   """
   use ExUnit.Case, async: false
