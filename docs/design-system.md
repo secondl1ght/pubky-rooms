@@ -25,7 +25,7 @@ https://pubky.app. Reference data: `docs/notes/pubky-app-design-system.md`, `doc
 | Component | Notes |
 |---|---|
 | `<.icon name="lucide-house" class="size-5" />` | any Lucide icon; color from `currentColor` |
-| `<.logo />`, `<.pubky_mark />` | Pubky's crowned mark, Rooms' own cut: the keyhole replaced by an arched doorway with a knob (user's choice 2026-10-01; the knob reads from 32 px, below that it is the arch alone) + "Pubky" wordmark + lime "Rooms". One source, `priv/static/images/pubky-logo.svg`; the favicon, the PWA icons (`scratchpad`-rendered PNGs at 60 % height on `#05050A`), the share image (`scripts/render_og.js`) and the inline copy on the offline page are derived from it |
+| `<.logo />`, `<.pubky_mark />` | Pubky's crowned mark, Rooms' own cut: the keyhole replaced by an arched doorway with a knob (the knob reads from 32 px; below that it is the arch alone) + "Pubky" wordmark + lime "Rooms". One source, `priv/static/images/pubky-logo.svg`; the favicon, the PWA icons (`scratchpad`-rendered PNGs at 60 % height on `#05050A`), the share image (`scripts/render_og.js`) and the inline copy on the offline page are derived from it |
 | `<.button variant size>` | variants default (lime tint), brand (solid lime), secondary, ghost, outline, destructive, destructive-soft, link, dark, dark-outline; sizes default/sm/lg/icon-sm/icon/icon-lg/tab (48 px pill matching the tab-bar circles); renders `<.link>` with href/navigate/patch |
 | `<.fab navigate label />` | 80px translucent circle, lime on hover; in the library for Pubky App parity, not used by any page (the lobby dropped it on 2026-09-22: opening a room is not a frequent action and the header, sidebar and tab bar already offer it) |
 | `<.avatar src name pubky size online>` | xs…2xl; generative fallback (signal-color disc + initial), hides broken images; `online` adds the lime presence dot |
@@ -49,7 +49,7 @@ https://pubky.app. Reference data: `docs/notes/pubky-app-design-system.md`, `doc
 
 - Dialogs: the panel is a flex column with 24 px gaps between header, body and footer; `show_dialog/2` shows it with `display: "flex"` (a plain `JS.show` would set `display: block` and silently drop the gaps). A native `<select>` is never used for a two-or-three-way choice; use `<.choice_cards>`. The same `display` rule holds for every `JS.show` on a non-block element: `Transitions.show(selector, display: "flex")` (the connection toasts stacked their row until this was passed).
 - Borders: a box nested inside a card (a form group, an explainer panel) takes `border-input/60`, the input outline at reduced opacity so it sits behind the inputs it contains; separators between regions use `border-border`; cards themselves have no border. Two greys, each with one job.
-- Never copy code from `~/CODE/pubky-app`; only the recorded tokens/specs. Verify parity with side-by-side
+- Never copy code from the Pubky App repository; only the recorded tokens/specs. Verify parity with side-by-side
   screenshots (`/dev/ui` vs pubky.app) and computed styles.
 - Prefer components over ad-hoc classes in LiveViews; extend the library when a pattern repeats.
 - Every component has `@doc` with an example and declared `attr`/`slot`s.

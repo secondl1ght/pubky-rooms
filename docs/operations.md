@@ -54,7 +54,7 @@ docker run --rm -p 127.0.0.1:8080:8080 -e SECRET_KEY_BASE="$(cd pubky_rooms && m
 curl -s http://localhost:8080/healthz      # 200 {"status":"ok",…}; /login shows the staging Pubky App link
 ```
 
-`PHX_HOST=localhost` keeps the HTTPS redirect out of the way (`force_ssl` excludes that host); the share image, fonts and `sw.js` are served from their digested paths; the service worker registers in a real browser (headless Chromium is fine, the in-app browser pane refuses workers). Remove the container and the `pubky-rooms-local-data` volume afterwards.
+`PHX_HOST=localhost` keeps the HTTPS redirect out of the way (`force_ssl` excludes that host); the share image, fonts and `sw.js` are served from their digested paths; the service worker registers in a real browser (headless Chromium is fine; embedded browser panes may refuse workers). Remove the container and the `pubky-rooms-local-data` volume afterwards.
 
 First deploy of the staging app (each command creates or changes something on Fly; `fly.toml` at the root carries the app name, region, env, volume mount, health check and VM size):
 

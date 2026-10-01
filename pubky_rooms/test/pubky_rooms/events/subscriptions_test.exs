@@ -136,7 +136,7 @@ defmodule PubkyRooms.Events.SubscriptionsTest do
 
     Process.exit(stream, :kill)
     # once in ~10 full runs the DOWN reason arrives as :noproc instead of
-    # :killed (docs/qa/findings.md, Bugs); either way the user is re-attached
+    # :killed (docs/maintainers/history/findings.md, Bugs); either way the user is re-attached
     assert_receive {:subscription_status, ^user, {:error, reason}}, 2_000
     assert reason in [:killed, :noproc]
     assert_receive {:subscription_status, ^user, :attached}, 2_000

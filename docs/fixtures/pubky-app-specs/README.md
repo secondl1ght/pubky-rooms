@@ -16,9 +16,10 @@ against the real thing. Which constants, and how to update them, is in
 
 ```bash
 # from a checkout that has the package installed (Pubky App does)
-cd ~/CODE/pubky-app && npm ls pubky-app-specs
-cp node_modules/pubky-app-specs/validationLimits.json ~/CODE/pubky-phoenix/docs/fixtures/pubky-app-specs/
-node -e "console.log(require('pubky-app-specs/package.json').version)" > ~/CODE/pubky-phoenix/docs/fixtures/pubky-app-specs/VERSION
+ROOMS=/path/to/pubky-rooms          # this repository
+cd /path/to/pubky-app && npm ls pubky-app-specs
+cp node_modules/pubky-app-specs/validationLimits.json $ROOMS/docs/fixtures/pubky-app-specs/
+node -e "console.log(require('pubky-app-specs/package.json').version)" > $ROOMS/docs/fixtures/pubky-app-specs/VERSION
 ```
 
 Then regenerate `vectors.json` with the package (the script in the mirror

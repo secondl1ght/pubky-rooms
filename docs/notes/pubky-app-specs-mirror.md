@@ -23,8 +23,8 @@ list of what such a package must cover, and the test is the conformance check.
    assertion in `spec_mirror_test.exs`. No spec value lives only in a template or
    a comment.
 2. **When the spec bumps**, refresh the fixtures (below), run the test, fix every
-   constant it names, update the table and the `VERSION` file, and note the bump
-   in `docs/PROGRESS.md`.
+   constant it names, update the table and the `VERSION` file, and say so in the commit
+   message.
 3. Rooms' **own** formats (`/pub/pubky-rooms/…` rooms, members, messages,
    reactions, bans, mutes markers, nickname) are not the spec; they are documented
    in `docs/notes/rooms-app-design.md`. Where one of them deliberately shadows a
@@ -57,9 +57,10 @@ when reading).
 
 ```bash
 # 1. copy the limits and record the version (any checkout with the package; Pubky App has it)
-cd ~/CODE/pubky-app && npm ls pubky-app-specs
-cp node_modules/pubky-app-specs/validationLimits.json ~/CODE/pubky-phoenix/docs/fixtures/pubky-app-specs/
-node -e "console.log(require('pubky-app-specs/package.json').version)" > ~/CODE/pubky-phoenix/docs/fixtures/pubky-app-specs/VERSION
+ROOMS=/path/to/pubky-rooms          # this repository
+cd /path/to/pubky-app && npm ls pubky-app-specs
+cp node_modules/pubky-app-specs/validationLimits.json $ROOMS/docs/fixtures/pubky-app-specs/
+node -e "console.log(require('pubky-app-specs/package.json').version)" > $ROOMS/docs/fixtures/pubky-app-specs/VERSION
 
 # 2. regenerate the vectors with the package itself, then paste the output into vectors.json
 node --input-type=module -e "
@@ -74,7 +75,7 @@ console.log(f.meta.id, f.file.toJson().created_at, Object.keys(f.file.toJson()))
 "
 
 # 3. run the conformance test and fix what it names
-cd ~/CODE/pubky-phoenix/pubky_rooms && mix test test/pubky_rooms/spec_mirror_test.exs
+cd pubky_rooms && mix test test/pubky_rooms/spec_mirror_test.exs
 ```
 
 ## History

@@ -1,6 +1,6 @@
 # Pubky App design system — reference data (do NOT copy code)
 
-Extracted from `~/CODE/pubky-app` (Next.js 16, Tailwind v4 CSS-first, shadcn "new-york" atoms, lucide-react, Inter Tight, dark theme only) on 2026-09-10. This file records **tokens and visual specs** so Pubky Rooms looks like the same product. The Phoenix implementation is clean-room (`PubkyRoomsWeb.UI.*`); nothing from the Pubky App codebase is ported as code, CSS hacks, or conventions. The Figma is the primary reference for intent; these production values are the cross-check.
+Extracted from the Pubky App repository (`pubky/pubky-app`: Next.js 16, Tailwind v4 CSS-first, shadcn "new-york" atoms, lucide-react, Inter Tight, dark theme only) on 2026-09-10. This file records **tokens and visual specs** so Pubky Rooms looks like the same product. The Phoenix implementation is clean-room (`PubkyRoomsWeb.UI.*`); nothing from the Pubky App codebase is ported as code, CSS hacks, or conventions. The Figma is the primary reference for intent; these production values are the cross-check.
 
 ## Tokens (`src/app/globals.css`) — single dark theme on `:root`
 ```css
