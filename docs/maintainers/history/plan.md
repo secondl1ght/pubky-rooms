@@ -1,3 +1,7 @@
+# Plan (historical)
+
+> Maintainers' history. This is the plan as it stood at launch (milestones M0–M8, data model, architecture), kept unchanged for the record. The living design is in `docs/notes/`, decisions in `docs/adr/`, the current state in `../STATUS.md`.
+
 # Pubky Rooms — sovereign live chat on Pubky, built with Phoenix
 
 ## Context

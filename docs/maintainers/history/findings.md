@@ -1,3 +1,7 @@
+# QA findings (historical)
+
+> Maintainers' history: the findings log of the QA passes, the reviews and the staging runs, kept unchanged for the record (it was `docs/qa/findings.md`). Open follow-ups from it are listed in `../backlog.md`; new findings are recorded as described in `docs/qa/README.md`.
+
 # QA findings
 
 Seeded on 2026-09-21 from Claude's browser pass over the finish-phase work; the user's manual run-through adds to it.

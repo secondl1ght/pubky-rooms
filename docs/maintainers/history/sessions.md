@@ -1,3 +1,7 @@
+# Sessions (historical)
+
+> Maintainers' history: the milestone checklists, the design backlog table, the launch checklist and the session-by-session handoff notes as they were written during the build, kept unchanged for the record. The open rows of the backlog table now live in `../backlog.md` (to be triaged into GitHub issues); the current state is `../STATUS.md`. "This file" below means this file under its old name, `docs/PROGRESS.md`.
+
 # Progress
 
 Legend: [ ] todo · [~] in progress · [x] done. See `docs/PLAN.md` for the full milestone definitions.
