@@ -22,6 +22,8 @@ Maintainers' living handoff. A maintainers' session starts here, then `git log -
 - Private rooms: all rooms are public in v1; discuss the private homeserver data roadmap with the core team before designing them.
 - Room creation limit: five per hour per user stays for now (raising to ten was considered and left).
 
+- **Chat unification plan** (`BitcoinErrorLog/pubky-chat`, `docs/chat-unification-plan.md` and `docs/chat-decision-brief.md`, 2026-10-02): assigns Rooms the public-rooms-v1 section of spec v3 (phase 1), member-list discovery through their change-feed index (phase 2), abuse reports to the creator as a private message and private rooms in the browser with a `pubky_ex` second implementation (phase 3). The maintainer's response is pending; the assessment recommends saying yes to the public layer (with the namespace and the time-ordered ids settled before production), parking private rooms behind pubky.app's Messages, and link-out for reports.
+
 ## Reminders
 - The staging smoke cookies (`STAGING_SMOKE_ALICE_COOKIE`, `STAGING_SMOKE_BOB_COOKIE`) expire around **2026-10-30**; refresh recipe in `docs/operations.md`. `FLY_API_TOKEN` expires **2027-09-30**.
 - The staging QA harness (two persistent headless Chromium profiles signed in with Ring as `alice` and `bob`, the maintainer's own identity as `owner`, the drive and scenario scripts) lives outside the repository, backed up under the maintainer's `~/.cache/pubky-rooms-qa/`; it holds session cookies and never enters the repository.
