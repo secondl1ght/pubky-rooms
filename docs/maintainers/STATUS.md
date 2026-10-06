@@ -1,6 +1,6 @@
 # Status
 
-Maintainers' living status. Keep it thin: what is deployed, what is next, open questions, reminders, one line per session. How things got here is in `history/` (read-only apart from appending a run row); follow-ups are in `backlog.md` until they are triaged into GitHub issues.
+Maintainers' living status: what is deployed, what is next, open questions, reminders. Follow-ups are in `backlog.md` until they are triaged into GitHub issues.
 
 ## Deployed
 - **Staging**: Fly app `pubky-rooms-staging` (region `fra`, one machine, blue-green), https://pubky-rooms-staging.fly.dev. `deploy.yml` deploys after every green CI run on `main` and ends with the post-deploy smoke (`pubky_rooms/scripts/deploy_smoke.js`). Last code commit deployed: `a098344` (2026-10-01); the docs-only commits since do not start CI. Which commit a node runs is read off `fly releases` against the deploy runs until the "expose the deployed commit" follow-up lands.
@@ -34,16 +34,5 @@ Maintainers' living status. Keep it thin: what is deployed, what is next, open q
 - The 429 on the event-stream connect (backlog, "Upstream and QA").
 - The "8/9" CI display and the deployed-commit visibility (backlog, "Operations and CI").
 
-## Sessions (one line each; the narrative is in `history/sessions.md`)
-- 2026-09-10/11: M0–M6. The `pubky_ex` library (keys, PKARR, resolver, auth, storage, grant flow, events), the app's vertical slice, membership, presence, profiles, history, edits, replies, reactions, moderation, discovery.
-- 2026-09-21: finish phase: tests and CI, polish, telemetry and headers, PWA, README; the QA pause agreed.
-- 2026-09-22: a full run-through as a new visitor (signed-out screens, lobby, `/me`, the Open-a-room dialog); the pubky-app-specs mirror.
-- 2026-09-28: room page polish; a tag-input race fixed.
-- 2026-09-28/29: two-identity live QA of the room page (send, reply, react, edit, delete, typing, mute, leave, ban).
-- 2026-09-29/30: touchbase (the regime, the sequence, review scoping and triage rules); the full checklist on the testnet; fixes.
-- 2026-09-30: scoped review 1 with fixes; staging deployed on Fly; the QA harness; §13 on staging overnight.
-- 2026-09-30/10-01: automation (testnet CI job, deploy workflow with the post-deploy smoke), the VRT suite, scoped review 2, the full regime on staging (two Escape bugs fixed), the phone-pass fixes, demo prep (the Rooms mark, tooltips, the `room` chip, warning toasts, demo rooms), the avatar sync fix, staging shared, the repository made public.
-- 2026-10-01: docs for contributors (this layout: `docs/maintainers/`, `CONTRIBUTING.md`, the docs index, `CLAUDE.md` as conventions only).
-
 ## Keeping this file current
-Update **Deployed**, **Next**, the questions and the session line when they change; append a run row to `history/checklist-runs.md` when the checklist ran; anything new that is not being done now goes into `backlog.md`.
+Update **Deployed**, **Next**, the questions and the reminders when they change; anything new that is not being done now goes into `backlog.md`.
