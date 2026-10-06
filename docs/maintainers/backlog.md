@@ -86,5 +86,5 @@ Done since the lists were written and therefore not here: avatar image ids (fixe
 | Item | Area | Source | Triage |
 |---|---|---|---|
 | Homeserver rate limit on the event-stream connect: one 429 with `Retry-After: 1` per cold bootstrap from a node's address (retried, one warning logged). A node is one IP for all its rooms, so a strict per-IP limit on `/events-stream` would throttle a busy node harder than a browser; raise with the homeserver team if Rooms joins the product lineup | `upstream` | staging run 2026-09-30; decision 2026-10-01 | |
-| Revoke on a real device: the checklist's §13 revoke row is blocked until Ring ships a revoke UI (checked with the Ring team 2026-09-30); the revoked and expired paths are unit-tested | `upstream`, `qa` | checklist | |
+| Revoke on a real device: the checklist's §13 revoke row is blocked until Ring ships a revoke UI; the revoked and expired paths are unit-tested | `upstream`, `qa` | checklist | |
 | Phone pass on iOS (Android done 2026-09-30): the touch icon and status-bar colour, Install, the installed window, Ring's deep link from it | `qa` | launch checklist | |

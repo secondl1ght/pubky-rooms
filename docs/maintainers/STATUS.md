@@ -4,7 +4,7 @@ Maintainers' living status: what is deployed, what is next, open questions, remi
 
 ## Deployed
 - **Staging**: Fly app `pubky-rooms-staging` (region `fra`, one machine, blue-green), https://pubky-rooms-staging.fly.dev. `deploy.yml` deploys after every green CI run on `main` and ends with the post-deploy smoke (`pubky_rooms/scripts/deploy_smoke.js`). Last code commit deployed: `a098344` (2026-10-01); the docs-only commits since do not start CI. Which commit a node runs is read off `fly releases` against the deploy runs until the "expose the deployed commit" follow-up lands.
-- **Production**: none. Deferred (2026-10-01) until the team has tried staging.
+- **Production**: none yet; staging first.
 - **Staging content**: ten demo rooms (Introductions, Pubky Rooms feedback, Pubky builders, Design & UX, Show & tell, Homeserver operators, Keys & identity, Bitcoin, Lightning & payments, Off-topic), the unlisted smoke room the deploy workflow writes to, and the 07:54 "Staging smoke" room from 2026-09-30 (220 messages; keep or close, see the questions). Closed test archives stay in their owners' lobbies until closed rooms expire (90 days).
 - **CI**: all nine jobs green on `main`; the ninth (`deploy_after_dispatch`) is skipped on push runs by design, which shows as "8/9".
 

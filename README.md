@@ -8,7 +8,7 @@ Every message is a file the author writes to their **own homeserver**. This serv
 - `pubky_rooms/` — the Phoenix application.
 - `docs/` — [index](docs/README.md): [protocol notes](docs/notes/pubky-protocol-notes.md), [app design](docs/notes/rooms-app-design.md), [operations](docs/operations.md), [QA](docs/qa/README.md), [design system](docs/design-system.md), [ADRs](docs/adr/).
 
-Status: feature-complete and running on a staging deployment for the team's feedback; production follows. Part of the Pubky Vibes initiative; to be hosted at `rooms.pubky.app` and linked from Pubky App. Contributions: see [CONTRIBUTING.md](CONTRIBUTING.md).
+Status: feature-complete and running on a staging deployment; production follows. Part of the Pubky Vibes initiative; to be hosted at `rooms.pubky.app` and linked from Pubky App. Contributions: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## How it works
 
