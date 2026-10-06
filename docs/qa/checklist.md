@@ -12,8 +12,7 @@ adds the check they wish had been there (in the same commit as the fix, when a
 finding leads to one), removes checks for features that no longer exist, and
 rewrites steps that have drifted from the UI. Anything worth verifying that is
 not on the list yet belongs on it, so the pass gets more complete each time
-rather than more stale. Findings are recorded as described in `README.md`;
-maintainers log each run in `docs/maintainers/history/checklist-runs.md`.
+rather than more stale. Findings are recorded as described in `README.md`.
 
 ## Setup
 

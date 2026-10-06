@@ -1,10 +1,10 @@
 # Backlog (follow-ups awaiting triage)
 
-Maintainers' list of every open follow-up, collected from the design backlog table and the findings log (both now in `history/`) when the repository went public. Rows are triaged here (keep, merge, drop; priority; when) and then become GitHub issues; once an issue exists the row is replaced by its link. A follow-up that is neither here nor an issue does not exist.
+Maintainers' list of every open follow-up, collected from the design backlog table and the findings log when the repository went public. Rows are triaged here (keep, merge, drop; priority; when) and then become GitHub issues; once an issue exists the row is replaced by its link. A follow-up that is neither here nor an issue does not exist.
 
 Columns: **Area** is the label the issue would get; **Source** says where the item came from (the plan's milestone, a review, a QA run, a decision date); **Triage** stays empty until a maintainer fills it in (`issue #n`, `dropped: reason`, `merged into …`).
 
-Done since the lists were written and therefore not here: avatar image ids (fixed 2026-10-01, `a098344`), membership rows for unconfirmed rooms (fixed 2026-09-30, `20a724f`), the static Open Graph image and per-page titles, the seeded demo rooms. Settled decisions (a retry keeps the message id, the pending clock stays, the hooks stay for launch) are recorded in `history/findings.md` and are not follow-ups.
+Done since the lists were written and therefore not here: avatar image ids (fixed 2026-10-01, `a098344`), membership rows for unconfirmed rooms (fixed 2026-09-30, `20a724f`), the static Open Graph image and per-page titles, the seeded demo rooms. Settled decisions (a retry keeps the message id, the pending clock stays, the hooks stay for launch) are not follow-ups.
 
 ## Pubky App integration (plan milestone M8)
 
@@ -77,7 +77,7 @@ Done since the lists were written and therefore not here: avatar image ids (fixe
 | Social specs v1 migration (`pubky/pubky-app-specs#142`): profiles, tags and mutes move from `/pub/pubky.app/` to `/pub/social/v1/`; Rooms reads profiles and mutes and writes tags, so it follows the move (read both paths during the transition); refresh the spec-mirror fixtures. Timing is core's; a couple of months out | `enhancement` | chat plan P23; specs #142 | |
 | Member-list discovery through the chat plan's change-feed index (L3) as a third source beside the two options above and the local directory; the client side once the index protocol exists | `enhancement` | chat plan, phase 2 | |
 | Prototype the change-feed index in Elixir on `pubky_ex` once its protocol is written (reuses the stream pool, cursors, backoff and 429 handling); scale beyond per-user streams needs core's H9 | `idea` | chat plan I1 | |
-| Staging-facts note for the index protocol: the 429 on the event-stream connect, the per-connection user cap (50 per stream, 100 streams), cursor behaviour across restarts and the 7-day cursor sweep; written from `docs/operations.md` and the history findings | `documentation` | chat plan I1 | |
+| Staging-facts note for the index protocol: the 429 on the event-stream connect, the per-connection user cap (50 per stream, 100 streams), cursor behaviour across restarts and the 7-day cursor sweep; written from `docs/operations.md` | `documentation` | chat plan I1 | |
 | Pubky App directory page that opens rooms in Rooms (the M8 rows above) as the alternative to pubky.app rendering rooms natively; if native rendering comes later it takes its live feed from a Rooms node | `pubky-app` | chat plan, phase 1 | |
 | Report-to-creator as a private message sent from Rooms once Rooms has private messaging; bans stay public; no interim button | `enhancement` | chat plan, phase 3 | |
 

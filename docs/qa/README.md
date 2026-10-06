@@ -1,6 +1,6 @@
 # QA
 
-`checklist.md` is the manual pass: every flow, the expected result, which items need two identities, and the **smoke** subset to run before each deploy. It complements the automated layers below rather than repeating them: what needs eyes, a phone or the real Ring stays manual. Maintainers log each run in `docs/maintainers/history/checklist-runs.md`.
+`checklist.md` is the manual pass: every flow, the expected result, which items need two identities, and the **smoke** subset to run before each deploy. It complements the automated layers below rather than repeating them: what needs eyes, a phone or the real Ring stays manual.
 
 ## Recording findings
 A finding is a bug, a polish item, a question or a decision. Bugs and polish items found by a run become GitHub issues, one per finding, with the page or flow, what was expected, what happened and how to reproduce; a fix that a checklist item should have caught adds that item in the same commit. Trivial fixes made on the spot (a spacing tweak, a reworded hint) are not logged; their commit message is the record. Decisions and their reasons go where they belong so they are not re-argued: an ADR for architecture, `docs/design-system.md` for the UI rules, `docs/operations.md` for limits. Maintainers may park follow-ups in `docs/maintainers/backlog.md` until they are triaged into issues.
