@@ -34,9 +34,10 @@ Done since the lists were written and therefore not here: avatar image ids (fixe
 
 | Item | Area | Source | Triage |
 |---|---|---|---|
-| Publish the on-homeserver contract as a spec (`docs/spec.md`: paths, JSON shapes, limits, validation rules, ban and tag semantics, ids) so other clients can interoperate; today it lives in `docs/notes/rooms-app-design.md`. Decided to come last, after the Pubky App integration | `documentation` | plan M7, decision 2026-09-21 | |
+| Publish the on-homeserver contract as a spec (paths, JSON shapes, limits, validation rules, ban and tag semantics, ids) so other clients can interoperate; today it lives in `docs/notes/rooms-app-design.md`. **Now phase 1 of the chat unification plan** ("public rooms v1" in pubky-chat spec v3, with vectors that `pubky_ex` runs in CI); drafted in this repo first, moved into spec v3 when it opens | `documentation` | plan M7; chat plan C1, 2026-10-02 | |
 | Member list discoverable without a Rooms node: (a) the creator's live session writes a `members.json` snapshot to their homeserver when membership changes while they are online (no stored grants, ADR 0005 unchanged, the snapshot may be stale, join markers stay the source of truth), or (b) joining also writes a `member`-labelled universal tag on the room so Nexus's taggers endpoint answers "who is in this room" without a Rooms server. Today's documented v1 limitation: a joiner nobody on this node follows stays unknown until they sign in here. Decide with the spec | `idea` | QA question 2026-09-22 | |
-| Private rooms and private mutes once homeservers expose private directories to apps (Pubky App is moving its mutes there too); discuss the private-data roadmap with the core team before designing anything (all rooms are public in v1) | `idea` | idea; maintainer note 2026-10-01 | |
+| Private rooms as MLS groups under `/pub/chat/v1/` (chat plan E4), in the hybrid shape: the server keeps the directory, presence, typing, live fan-out, paging, the UI and its write grant; the browser holds only the device key and the MLS state through the shared WASM library. Requirements for the spec: join from an invite link while the creator is offline; server-mediated device attestation (browser-generated key shown in Ring, the page verifies the attested key). Waits on the MLS library (C3) and the `att` claim (K5) | `enhancement` | chat plan E4 | |
+| Owner-only data under `/priv/` now (usable before the private-data redesign): move the viewer's mute markers, and add read cursors and drafts, to `/priv/` paths following social specs v1 (`/priv/social/v1/mutes/`); `/priv/` is authorization, not encryption, so nothing shared goes there | `enhancement` | social specs #142 | |
 
 ## Scale and robustness
 
@@ -67,6 +68,18 @@ Done since the lists were written and therefore not here: avatar image ids (fixe
 | CI shows "8/9" on every push run: the `deploy_after_dispatch` job is skipped by design (it runs only when CI was started by hand or by the baselines workflow, whose runs produce no `workflow_run` event). Make the skip read as intended: a job name such as "dispatch the deploy (hand-started runs only)", or move the dispatch into the baselines workflow after a `gh run watch` of the CI run it starts | `ci` | maintainer 2026-10-01 | |
 | Hooks versus LiveView bindings, a simplify pass: the composer's typing throttle could be `phx-keyup` + `phx-throttle="2000"` (about 15 lines of JS fewer); part of the tag input could move to `phx-keydown`/`phx-blur` with a server-side highlight (180 → about 70 lines, but the behaviour splits and arrow highlighting gains a round trip). Decided to keep the hooks for launch | `enhancement` | decision 2026-09-29 | |
 | One intermittent app-suite failure (about one local run in nine on 2026-10-01) was never captured; the two flaky tests found before were assertions racing a confirmed state. If it shows again, record the test name and the assertion | `bug`, `ci` | maintainer 2026-10-01 | |
+
+## Chat unification (items from the ecosystem's chat unification plan, `BitcoinErrorLog/pubky-chat`)
+
+| Item | Area | Source | Triage |
+|---|---|---|---|
+| Namespace rename `/pub/pubky-rooms/` → `/pub/rooms/v1/` (app-neutral, versioned like social specs v1): grant scope, stream filter, directory, spec mirror, docs, tests, the demo rooms re-seeded; every staging user signs in again. **Blocked** on Nexus confirming universal tags under versioned roots (`/pub/<app>/v1/tags/`); do it together with every other breaking change, before production | `enhancement` | chat plan, phase 1 | |
+| Social specs v1 migration (`pubky/pubky-app-specs#142`): profiles, tags and mutes move from `/pub/pubky.app/` to `/pub/social/v1/`; Rooms reads profiles and mutes and writes tags, so it follows the move (read both paths during the transition); refresh the spec-mirror fixtures. Timing is core's; a couple of months out | `enhancement` | chat plan P23; specs #142 | |
+| Member-list discovery through the chat plan's change-feed index (L3) as a third source beside the two options above and the local directory; the client side once the index protocol exists | `enhancement` | chat plan, phase 2 | |
+| Prototype the change-feed index in Elixir on `pubky_ex` once its protocol is written (reuses the stream pool, cursors, backoff and 429 handling); scale beyond per-user streams needs core's H9 | `idea` | chat plan I1 | |
+| Staging-facts note for the index protocol: the 429 on the event-stream connect, the per-connection user cap (50 per stream, 100 streams), cursor behaviour across restarts and the 7-day cursor sweep; written from `docs/operations.md` and the history findings | `documentation` | chat plan I1 | |
+| Pubky App directory page that opens rooms in Rooms (the M8 rows above) as the alternative to pubky.app rendering rooms natively; if native rendering comes later it takes its live feed from a Rooms node | `pubky-app` | chat plan, phase 1 | |
+| Report-to-creator as a private message sent from Rooms once Rooms has private messaging; bans stay public; no interim button | `enhancement` | chat plan, phase 3 | |
 
 ## Upstream and QA
 
