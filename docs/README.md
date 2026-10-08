@@ -21,6 +21,3 @@ The [README](../README.md) explains what Pubky Rooms is, how it works, the trust
 
 ## Test data
 - [`fixtures/`](fixtures/) — captured protocol payloads used by tests: PKARR packets, pubky-app-specs vectors and limits, real Nexus responses. Each directory has its own README.
-
-## Maintainers
-- [`maintainers/`](maintainers/) — the maintainers' working notes.
