@@ -32,7 +32,7 @@ Everything here is one node (no clustering in v1). Costs scale **per room and pe
 | | Staging | Production |
 |---|---|---|
 | Fly app / host / region | `pubky-rooms-staging` → `pubky-rooms-staging.fly.dev` (placeholder), `fra` (next to the staging stack in Zürich) | `pubky-rooms` → `rooms.pubky.app` (custom domain, later), region next to the mainnet homeserver |
-| `PUBKY_NETWORK` | `staging` (public PKARR relays + `httprelay.staging.pubky.app` + `nexus.staging.pubky.app` + the sign-in page's Pubky App link → `https://staging.pubky.app`, password-protected; identities from Pubky App staging live on `homeserver.staging.pubky.app`) | `mainnet` (+ `NEXUS_URL=https://nexus.pubky.app`) |
+| `PUBKY_NETWORK` | `staging` (public PKARR relays + `httprelay.staging.pubky.app` + `nexus.staging.pubky.app` + the sign-in page's Pubky App link → `https://staging.pubky.app`, password-protected; identities from Pubky App staging live on `homeserver.staging.pubky.app`; the sign-in page carries a staging notice, `#staging-notice`, asking for a staging identity because production identities may not work there — `pubky_stack: :staging` in config, nothing else is gated) | `mainnet` (+ `NEXUS_URL=https://nexus.pubky.app`) |
 | `PHX_HOST` | the Fly hostname | `rooms.pubky.app` |
 | `PUBKY_DATA_DIR` | `/data` (a Fly volume; the room directory DETS) | same, its own volume |
 | Secrets | `SECRET_KEY_BASE` only (`mix phx.gen.secret`) | same, its own value |
@@ -51,7 +51,7 @@ docker build -t pubky-rooms:staging .
 docker run --rm -p 127.0.0.1:8080:8080 -e SECRET_KEY_BASE="$(cd pubky_rooms && mix phx.gen.secret)" \
   -e PHX_HOST=localhost -e PORT=8080 -e PUBKY_NETWORK=staging -e PUBKY_DATA_DIR=/data \
   -v pubky-rooms-local-data:/data pubky-rooms:staging
-curl -s http://localhost:8080/healthz      # 200 {"status":"ok",…}; /login shows the staging Pubky App link
+curl -s http://localhost:8080/healthz      # 200 {"status":"ok",…}; /login shows the staging notice and the staging Pubky App link
 ```
 
 `PHX_HOST=localhost` keeps the HTTPS redirect out of the way (`force_ssl` excludes that host); the share image, fonts and `sw.js` are served from their digested paths; the service worker registers in a real browser (headless Chromium is fine; embedded browser panes may refuse workers). Remove the container and the `pubky-rooms-local-data` volume afterwards.

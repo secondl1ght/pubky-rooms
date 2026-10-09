@@ -72,6 +72,7 @@ config :pubky,
   ]
 
 config :pubky_rooms,
+  pubky_stack: stack,
   data_dir: System.get_env("PUBKY_DATA_DIR") || Application.get_env(:pubky_rooms, :data_dir),
   nexus_url: System.get_env("NEXUS_URL") || staging_defaults[:nexus_url],
   nexus_cdn_url: System.get_env("NEXUS_CDN_URL") || staging_defaults[:nexus_cdn_url],

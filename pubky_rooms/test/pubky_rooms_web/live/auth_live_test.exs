@@ -88,6 +88,36 @@ defmodule PubkyRoomsWeb.AuthLiveTest do
     assert wait_for(fn -> render(view) end, &(&1 =~ "relay could not be reached"))
   end
 
+  test "the staging stack carries a notice to sign in with a staging identity", %{conn: conn} do
+    # the default stack (testnet here, mainnet in production) shows no notice
+    {:ok, view, _html} = live(conn, ~p"/login")
+    refute has_element?(view, "#staging-notice")
+
+    stack = Application.get_env(:pubky_rooms, :pubky_stack)
+    app_url = Application.get_env(:pubky_rooms, :pubky_app_url)
+
+    on_exit(fn ->
+      Application.put_env(:pubky_rooms, :pubky_stack, stack)
+      Application.put_env(:pubky_rooms, :pubky_app_url, app_url)
+    end)
+
+    Application.put_env(:pubky_rooms, :pubky_stack, :staging)
+    Application.put_env(:pubky_rooms, :pubky_app_url, "https://staging.pubky.app")
+
+    {:ok, view, _html} = live(conn, ~p"/login")
+    assert has_element?(view, "#staging-notice", "This is the staging deployment.")
+    assert has_element?(view, "#staging-notice", "production identities may not work here")
+
+    assert has_element?(
+             view,
+             ~s(#staging-notice a[href="https://staging.pubky.app"]),
+             "staging.pubky.app"
+           )
+
+    # the onboarding footer stays next to it
+    assert has_element?(view, "#onboarding", "New to Pubky?")
+  end
+
   test "sign-in starts are rate-limited per client (20 per minute)", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/login")
 

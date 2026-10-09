@@ -46,7 +46,11 @@ config :pubky_rooms,
   simulator_url: nil,
   # where /login sends people who have no Pubky identity or homeserver yet
   pubky_app_url: "https://pubky.app",
-  pubky_ring_url: "https://pubkyring.app"
+  pubky_ring_url: "https://pubkyring.app",
+  # which Pubky stack this deployment talks to (:mainnet, :staging or :testnet);
+  # config/runtime.exs sets it from PUBKY_NETWORK. :staging adds a notice to
+  # the sign-in page, because production identities may not work there.
+  pubky_stack: :mainnet
 
 # Pubky client defaults; config/runtime.exs overrides these from the environment.
 config :pubky,

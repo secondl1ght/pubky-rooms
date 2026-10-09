@@ -34,6 +34,7 @@ defmodule PubkyRoomsWeb.AuthLive do
         error: nil,
         no_account: false,
         network: Pubky.Config.get().network,
+        stack: Application.get_env(:pubky_rooms, :pubky_stack),
         simulator_url: Application.get_env(:pubky_rooms, :simulator_url),
         pubky_app_url: Application.get_env(:pubky_rooms, :pubky_app_url),
         pubky_ring_url: Application.get_env(:pubky_rooms, :pubky_ring_url),
@@ -316,6 +317,25 @@ defmodule PubkyRoomsWeb.AuthLive do
                     class="text-brand hover:underline"
                   >Pubky App</a>
                   then come back and scan this code. One identity works in every Pubky client.
+                </p>
+              </div>
+            </.card_footer>
+
+            <.card_footer :if={@stack == :staging}>
+              <div
+                id="staging-notice"
+                class="flex w-full items-start gap-3 rounded-lg bg-warning/10 p-4 text-sm ring-1 ring-warning/40"
+              >
+                <.icon name="lucide-flask-conical" class="mt-0.5 size-4 shrink-0 text-warning" />
+                <p class="text-secondary-foreground">
+                  <span class="font-semibold">This is the staging deployment.</span>
+                  Sign in with a staging identity, created at <a
+                    href={@pubky_app_url}
+                    target="_blank"
+                    rel="noopener"
+                    class="text-brand hover:underline"
+                  >staging.pubky.app</a>:
+                  production identities may not work here.
                 </p>
               </div>
             </.card_footer>
