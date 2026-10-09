@@ -16,6 +16,7 @@ defmodule Pubky.MixProject do
       description:
         "Pure-Elixir client for the Pubky protocol: identity, PKARR discovery, grant auth, homeserver storage, and event streams.",
       source_url: @source_url,
+      package: [licenses: ["MIT"], links: %{"GitHub" => @source_url}],
       docs: [main: "Pubky", extras: ["README.md"]],
       dialyzer: [plt_add_apps: [:mix]]
     ]

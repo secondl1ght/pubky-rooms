@@ -75,3 +75,7 @@ The local testnet: `git clone https://github.com/pubky/pubky-docker && cd pubky-
 - Relays are queried sequentially, never raced (`pkarr.pubky.app` allows 10 requests/minute).
 - `Pubky.Session` is immutable; `Pubky.Session.call/3` refreshes the bearer and returns the session to keep.
 - Event stream cursors are exclusive; a stream deduplicates replays after reconnecting.
+
+## License
+
+MIT, see the repository's [LICENSE](../LICENSE).

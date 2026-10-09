@@ -148,3 +148,7 @@ One Fly.io machine per environment with a volume for the DETS directory. The rel
 ## Decisions
 
 Architecture decision records live in [`docs/adr/`](docs/adr/): server-side grant auth (0001), no database (0002), universal tags for discovery (0003), clean-room UI (0004), credentials live in the browser (0005), telemetry and logging policy (0006).
+
+## License
+
+[MIT](LICENSE).
